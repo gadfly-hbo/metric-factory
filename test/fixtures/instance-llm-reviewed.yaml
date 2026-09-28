@@ -1,0 +1,37 @@
+# 导出测试用实例：基于电商模板的典型微调（删 1 个、改 1 个、手工增 1 个）
+instance:
+  created_at: "2026-09-28T00:00:00.000Z"
+  company: 测试电商公司
+base: ecommerce-marketplace@0.1.0
+answers:
+  revenue_model: 交易抽佣
+  user_structure: 双边市场
+  core_loop: 交易
+  caliber:
+    gmv:
+      include_refund: true
+caliber_switches:
+  gmv:
+    include_refund: true
+removed:
+  - nps
+modified:
+  - name: gmv
+    definition: 支付成功订单的金额合计（含已退款订单，公司财务口径 2026 版）
+    owner_role: CFO 办公室
+added:
+  - name: custom_gmv_excluding_gift
+    display_name: 剔除赠品后的成交总额
+    type: derived
+    definition: GMV 减去赠品订单金额后的成交总额
+    dimensions: [channel]
+    time_grains: [day, month]
+    owner_role: 电商业务负责人
+    caliber_switches: {}
+    provenance:
+      origin: llm
+      model: demo-model
+      prompt_version: p1
+      reviewed_by: 张三
+    review:
+      required: true

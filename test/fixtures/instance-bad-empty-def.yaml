@@ -1,0 +1,24 @@
+# 导出测试用实例：基于电商模板的典型微调（删 1 个、改 1 个、手工增 1 个）
+instance:
+  created_at: "2026-09-28T00:00:00.000Z"
+  company: 测试电商公司
+base: ecommerce-marketplace@0.1.0
+answers:
+  revenue_model: 交易抽佣
+  user_structure: 双边市场
+  core_loop: 交易
+  caliber:
+    gmv:
+      include_refund: true
+caliber_switches: {}
+added:
+  - name: custom_empty_def
+    display_name: 空口径指标
+    type: simple
+    definition: ""
+    dimensions: [channel]
+    time_grains: [day]
+    owner_role: 测试
+    caliber_switches: {}
+    provenance:
+      origin: manual

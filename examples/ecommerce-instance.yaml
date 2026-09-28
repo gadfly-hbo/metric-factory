@@ -1,0 +1,24 @@
+# Metric Factory 企业实例（fork 自 ecommerce-marketplace@0.1.0）
+# 微调方式：编辑 caliber_switches / added / removed / modified，用 validate 校验、diff 查看变更
+instance:
+  created_at: 2026-09-28T14:31:13.484Z
+base: ecommerce-marketplace@0.1.0
+answers:
+  revenue_model: 交易抽佣
+  user_structure: 双边市场
+  core_loop: 交易
+  caliber:
+    gmv:
+      include_refund: true
+      include_shipping: false
+    refund_rate:
+      include_pending_refund: true
+caliber_switches:
+  gmv:
+    include_refund: true
+    include_shipping: false
+  refund_rate:
+    include_pending_refund: true
+added: []
+removed: []
+modified: []

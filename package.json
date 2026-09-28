@@ -1,0 +1,36 @@
+{
+  "name": "metric-factory",
+  "version": "0.1.0",
+  "description": "指标体系设计态工具：业务目标 → 指标树 + 指标字典，导出 dbt MetricFlow / Excel / Mermaid",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "metric-factory": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "npm run build && vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "node dist/cli.js lint templates/ecommerce-marketplace.yaml templates/saas-subscription.yaml",
+    "prelint": "npm run build",
+    "contract-test": "vitest run test/contracts",
+    "precontract-test": "npm run build"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^8.7.2",
+    "commander": "^15.0.0",
+    "exceljs": "^4.4.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "ajv": "^8.20.0",
+    "tsup": "^8.5.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}

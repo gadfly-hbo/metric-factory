@@ -1,0 +1,11 @@
+# 电商交易平台 · 问卷答案示例
+# 问卷维度：收入模式 / 用户结构 / 核心循环；caliber 为口径偏好（按指标覆盖模板默认值）
+revenue_model: 交易抽佣
+user_structure: 双边市场
+core_loop: 交易
+caliber:
+  gmv:
+    include_refund: true       # 财务口径：GMV 含已退款订单
+    include_shipping: false
+  refund_rate:
+    include_pending_refund: true

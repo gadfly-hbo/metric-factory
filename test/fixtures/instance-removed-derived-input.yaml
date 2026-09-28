@@ -1,0 +1,14 @@
+# S1 复现：删除派生指标的输入后，物化 type_params 引用悬空，必须被 validate 拦截
+instance:
+  created_at: "2026-09-28T00:00:00.000Z"
+base: ecommerce-marketplace@0.1.0
+answers:
+  revenue_model: 交易抽佣
+  user_structure: 双边市场
+  core_loop: 交易
+  caliber: {}
+caliber_switches: {}
+removed:
+  - uv
+modified: []
+added: []

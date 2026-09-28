@@ -1,0 +1,689 @@
+# SaaS 订阅 · 行业指标模板
+# 方法论出处：OneData 指标建模（阿里）、北极星框架（Amplitude Playbook）、SaaS Metrics 2.0（David Skok 常用指标集）
+template:
+  id: saas-subscription
+  industry: SaaS
+  business_models: [订阅]
+  version: 0.1.0
+  references:
+    - "OneData 指标建模方法（阿里）"
+    - "北极星指标（Amplitude Playbook）"
+    - "SaaS Metrics 2.0（David Skok / OpenView 常用指标集）"
+
+matching:
+  revenue_models: [订阅]
+  user_structure: [2B]
+  core_loops: [协作]
+
+north_star:
+  candidates:
+    - metric: nrr
+      rationale: 净收入留存是订阅制增长的复利引擎，综合反映留存、扩张与流失
+    - metric: active_subscription_count
+      rationale: 活跃订阅规模，规模型北极星的兜底候选
+  decision_guide: KA / 中大型客户优先 NRR；SMB 自助服务优先活跃订阅数
+
+trees:
+  - id: revenue
+    category: 规模
+    formula: "mrr = new_mrr + expansion_mrr - contraction_mrr - churned_mrr"
+    children: [new_mrr, expansion_mrr, contraction_mrr, churned_mrr]
+  - id: monetization
+    category: 规模
+    formula: "arr = mrr * 12"
+    children: [mrr, arr]
+  - id: accounts
+    category: 规模
+    children: [signup_count, trial_count, new_customer_count, paid_account_count, active_subscription_count, paid_seats_count, mau]
+  - id: retention
+    category: 质量
+    children: [nrr, logo_churn_rate, mrr_churn_rate]
+  - id: quality
+    category: 质量
+    children: [trial_to_paid_rate, activation_rate, csat, nps, first_response_time_minutes, uptime_rate]
+  - id: structure
+    category: 结构
+    children: [enterprise_revenue_share, self_serve_share, top10_customer_arr_share, annual_contract_share]
+  - id: unit_economics
+    category: 效率
+    formula: "ltv_cac_ratio = ltv / cac"
+    children: [ltv, cac, cac_payback_months, arpa]
+  - id: cost_efficiency
+    category: 效率
+    children: [gross_margin_rate, support_cost_per_account, arpu]
+  - id: journey
+    category: 旅程
+    children: [trial_activation_rate, onboarding_completion_rate, license_utilization_rate, login_frequency, sticky_wau_mau]
+
+dimensions: [plan, segment, region, channel, product_line, industry]
+
+metrics:
+  # ============ 规模 ============
+  - name: mrr
+    display_name: 月度经常性收入
+    display_name_en: Monthly Recurring Revenue
+    type: simple
+    definition: 统计周期末所有有效付费订阅按月折算的经常性收入合计；默认不含试用，年费按月分摊
+    dimensions: [plan, segment, region]
+    time_grains: [month]
+    owner_role: 财务负责人
+    caliber_switches:
+      include_trial: false
+      annual_proration: true
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: arr
+    display_name: 年度经常性收入
+    display_name_en: Annual Recurring Revenue
+    type: derived
+    definition: 月度经常性收入 × 12
+    dimensions: [plan, segment, region]
+    time_grains: [month, quarter, year]
+    owner_role: 财务负责人
+    caliber_switches:
+      annual_proration: true
+    type_params:
+      expr: "mrr * 12"
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: new_mrr
+    display_name: 新增 MRR
+    type: simple
+    definition: 统计周期内新客户带来的 MRR 增量
+    dimensions: [segment, channel]
+    time_grains: [month]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: expansion_mrr
+    display_name: 扩张 MRR
+    type: simple
+    definition: 统计周期内存量客户升级 / 加购席位带来的 MRR 增量
+    dimensions: [segment, plan]
+    time_grains: [month]
+    owner_role: 客户成功负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: contraction_mrr
+    display_name: 收缩 MRR
+    type: simple
+    definition: 统计周期内存量客户降级 / 减席位导致的 MRR 减少（非流失）
+    dimensions: [segment, plan]
+    time_grains: [month]
+    owner_role: 客户成功负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: churned_mrr
+    display_name: 流失 MRR
+    type: simple
+    definition: 统计周期内取消订阅客户带走的 MRR
+    dimensions: [segment, plan]
+    time_grains: [month]
+    owner_role: 客户成功负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: nrr
+    display_name: 净收入留存
+    display_name_en: Net Revenue Retention
+    type: ratio
+    definition: (期初 MRR + 新增 + 扩张 − 收缩 − 流失) / 期初 MRR；>100% 表示存量客户仍在净增长
+    dimensions: [segment, plan]
+    time_grains: [month, quarter]
+    owner_role: CEO / 财务负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: active_subscription_count
+    display_name: 活跃订阅数
+    type: simple
+    definition: 统计周期末处于有效付费状态的订阅数（一个客户可有多个订阅）
+    dimensions: [plan, product_line]
+    time_grains: [month]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: paid_account_count
+    display_name: 付费客户数
+    type: simple
+    definition: 统计周期末至少持有一个有效付费订阅的去重客户数
+    dimensions: [segment, region, industry]
+    time_grains: [month]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: paid_seats_count
+    display_name: 付费席位数
+    type: simple
+    definition: 统计周期末所有有效订阅的付费席位合计；默认不含免费席位
+    dimensions: [plan, product_line]
+    time_grains: [month]
+    owner_role: 增长负责人
+    caliber_switches:
+      count_free_seats: false
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: mau
+    display_name: 月活跃用户数
+    display_name_en: Monthly Active Users
+    type: simple
+    definition: 自然月内至少一次有效登录的去重用户数（有效登录 = 会话 ≥60 秒）
+    dimensions: [product_line, segment]
+    time_grains: [month]
+    owner_role: 产品负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: wau
+    display_name: 周活跃用户数
+    display_name_en: Weekly Active Users
+    type: simple
+    definition: 自然周内至少一次有效登录的去重用户数
+    dimensions: [product_line, segment]
+    time_grains: [week]
+    owner_role: 产品负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: signup_count
+    display_name: 注册数
+    type: simple
+    definition: 统计周期内完成注册的去重新用户数（含自助注册与销售录入）
+    dimensions: [channel, segment]
+    time_grains: [day, week, month]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: trial_count
+    display_name: 试用开始数
+    type: simple
+    definition: 统计周期内开始试用（含免费试用与 POC）的客户数
+    dimensions: [channel, segment]
+    time_grains: [week, month]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: new_customer_count
+    display_name: 新客户数
+    type: simple
+    definition: 统计周期内首次转为付费的客户数
+    dimensions: [channel, segment]
+    time_grains: [month]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  # ============ 质量 ============
+  - name: trial_to_paid_rate
+    display_name: 试用转化率
+    type: ratio
+    definition: 统计周期内试用转付费客户数 / 试用开始客户数
+    dimensions: [channel, segment]
+    time_grains: [month]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    type_params:
+      numerator: trial_converted_count
+      denominator: trial_count
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: trial_converted_count
+    display_name: 试用转付费数
+    type: simple
+    definition: 统计周期内试用结束后转为付费的客户数
+    dimensions: [channel, segment]
+    time_grains: [month]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: logo_churn_rate
+    display_name: 客户流失率
+    display_name_en: Logo Churn Rate
+    type: ratio
+    definition: 统计周期内流失客户数 / 期初付费客户数
+    dimensions: [segment, plan]
+    time_grains: [month, quarter]
+    owner_role: 客户成功负责人
+    caliber_switches: {}
+    type_params:
+      numerator: churned_account_count
+      denominator: paid_account_count
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: churned_account_count
+    display_name: 流失客户数
+    type: simple
+    definition: 统计周期内取消全部订阅的客户数
+    dimensions: [segment, plan]
+    time_grains: [month]
+    owner_role: 客户成功负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: mrr_churn_rate
+    display_name: 金额流失率
+    display_name_en: Gross MRR Churn Rate
+    type: ratio
+    definition: 统计周期内流失 MRR / 期初 MRR（不含收缩，收缩单独计 contraction）
+    dimensions: [segment, plan]
+    time_grains: [month, quarter]
+    owner_role: 财务负责人
+    caliber_switches: {}
+    type_params:
+      numerator: churned_mrr
+      denominator: mrr
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: nps
+    display_name: 净推荐值
+    display_name_en: Net Promoter Score
+    type: simple
+    definition: 推荐者占比（9–10 分）− 贬损者占比（0–6 分），基于周期性关系调研
+    dimensions: [segment]
+    time_grains: [quarter]
+    owner_role: 客户成功负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: csat
+    display_name: 支持满意度
+    display_name_en: Customer Satisfaction Score
+    type: simple
+    definition: 工单关闭时的满意评分（1–5）平均值
+    dimensions: [product_line]
+    time_grains: [month]
+    owner_role: 支持负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: first_response_time_minutes
+    display_name: 一线响应时长
+    type: simple
+    definition: 工单从创建到首次人工响应的平均分钟数（中位数口径）
+    dimensions: [product_line, segment]
+    time_grains: [week, month]
+    owner_role: 支持负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: resolution_time_hours
+    display_name: 工单解决时长
+    type: simple
+    definition: 工单从创建到解决的平均小时数（中位数口径，不含待客户回复时间）
+    dimensions: [product_line, segment]
+    time_grains: [month]
+    owner_role: 支持负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: uptime_rate
+    display_name: 服务可用率
+    type: ratio
+    definition: 统计周期内服务可用时间 / 总时间（按 SLA 口径剔除计划内维护）
+    dimensions: [product_line]
+    time_grains: [month]
+    owner_role: 研发负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: incident_count
+    display_name: 故障次数
+    type: simple
+    definition: 统计周期内 P1–P3 级生产故障次数合计
+    dimensions: [product_line]
+    time_grains: [month]
+    owner_role: 研发负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: activation_rate
+    display_name: 新客激活率
+    type: ratio
+    definition: 新付费客户在签约后 30 日内完成关键行为（默认：核心功能被 ≥3 名成员使用）的占比
+    dimensions: [segment]
+    time_grains: [month]
+    owner_role: 客户成功负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  # ============ 结构 ============
+  - name: enterprise_revenue_share
+    display_name: KA 收入占比
+    type: ratio
+    definition: KA（大客户）分层贡献的 ARR / 总 ARR
+    dimensions: [region, product_line]
+    time_grains: [quarter]
+    owner_role: 销售负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: self_serve_share
+    display_name: 自助服务收入占比
+    type: ratio
+    definition: 自助注册付费（无销售介入）的 ARR / 总 ARR
+    dimensions: [product_line]
+    time_grains: [quarter]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: top10_customer_arr_share
+    display_name: 客户集中度
+    type: ratio
+    definition: ARR 前 10 名客户合计 / 总 ARR，衡量收入对头部客户的依赖
+    dimensions: [region]
+    time_grains: [quarter]
+    owner_role: 财务负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: multi_product_share
+    display_name: 多产品客户占比
+    type: ratio
+    definition: 购买 ≥2 条产品线的客户数 / 付费客户数
+    dimensions: [segment]
+    time_grains: [quarter]
+    owner_role: 销售负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: annual_contract_share
+    display_name: 年付占比
+    type: ratio
+    definition: 年付（及以上）合同的 MRR / 总 MRR
+    dimensions: [segment, region]
+    time_grains: [quarter]
+    owner_role: 财务负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: channel_partner_share
+    display_name: 渠道伙伴贡献占比
+    type: ratio
+    definition: 经渠道伙伴成交的 ARR / 总 ARR
+    dimensions: [region]
+    time_grains: [quarter]
+    owner_role: 渠道负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  # ============ 效率 ============
+  - name: arpa
+    display_name: 客户平均收入
+    display_name_en: Average Revenue Per Account
+    type: ratio
+    definition: MRR / 付费客户数
+    dimensions: [segment, plan]
+    time_grains: [month]
+    owner_role: 财务负责人
+    caliber_switches: {}
+    type_params:
+      numerator: mrr
+      denominator: paid_account_count
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: avg_customer_lifetime_months
+    display_name: 平均客户生命周期
+    type: simple
+    definition: 1 / 月度客户流失率（按 12 个月移动平均流失率折算），单位月
+    dimensions: [segment]
+    time_grains: [quarter]
+    owner_role: 客户成功负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: ltv
+    display_name: 客户生命周期价值
+    display_name_en: Lifetime Value
+    type: derived
+    definition: 客户平均收入 × 平均客户生命周期（毛利口径调整由 caliber 开关控制）
+    dimensions: [segment]
+    time_grains: [quarter]
+    owner_role: 财务负责人
+    caliber_switches:
+      apply_gross_margin: false
+    type_params:
+      expr: "arpa * avg_customer_lifetime_months"
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: sales_marketing_spend
+    display_name: 销售营销费用
+    type: simple
+    definition: 统计周期内销售与市场费用合计（人力 + 投放 + 活动分配）
+    dimensions: [channel, segment]
+    time_grains: [month]
+    owner_role: 财务负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: cac
+    display_name: 获客成本
+    display_name_en: Customer Acquisition Cost
+    type: ratio
+    definition: 销售营销费用 / 新客户数
+    dimensions: [channel, segment]
+    time_grains: [month, quarter]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    type_params:
+      numerator: sales_marketing_spend
+      denominator: new_customer_count
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: ltv_cac_ratio
+    display_name: LTV/CAC 比率
+    type: derived
+    definition: 客户生命周期价值 / 获客成本；健康线 ≥3
+    dimensions: [segment]
+    time_grains: [quarter]
+    owner_role: 财务负责人
+    caliber_switches: {}
+    type_params:
+      expr: "ltv / cac"
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: cac_payback_months
+    display_name: CAC 回本周期
+    type: derived
+    definition: 获客成本 / 客户平均收入；健康线 ≤12 个月
+    dimensions: [segment]
+    time_grains: [quarter]
+    owner_role: 财务负责人
+    caliber_switches: {}
+    type_params:
+      expr: "cac / arpa"
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: gross_margin_rate
+    display_name: 毛利率
+    type: ratio
+    definition: (订阅收入 − 直接成本（云资源 + 交付支持成本）) / 订阅收入
+    dimensions: [product_line]
+    time_grains: [month, quarter]
+    owner_role: 财务负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: arpu
+    display_name: 人均月收入
+    display_name_en: Average Revenue Per User
+    type: ratio
+    definition: MRR / 月活跃用户数，衡量产品货币化深度
+    dimensions: [product_line, plan]
+    time_grains: [month]
+    owner_role: 产品负责人
+    caliber_switches: {}
+    type_params:
+      numerator: mrr
+      denominator: mau
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: support_cost_per_account
+    display_name: 单客户支持成本
+    type: ratio
+    definition: 总支持成本（人力 + 工具）/ 付费客户数
+    dimensions: [segment]
+    time_grains: [month]
+    owner_role: 支持负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  # ============ 旅程 ============
+  - name: trial_activation_rate
+    display_name: 试用激活率
+    type: ratio
+    definition: 试用客户在试用期内完成关键行为（默认：邀请 ≥1 名成员 + 使用核心功能 3 次）的占比
+    dimensions: [channel, segment]
+    time_grains: [month]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: onboarding_completion_rate
+    display_name: 引导完成率
+    type: ratio
+    definition: 新客户在 14 日内完成 onboarding 清单全部步骤的占比
+    dimensions: [segment]
+    time_grains: [month]
+    owner_role: 客户成功负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: license_utilization_rate
+    display_name: 席位使用率
+    type: ratio
+    definition: 近 30 日活跃席位 / 付费席位合计，衡量超卖风险与续约健康度
+    dimensions: [plan, product_line]
+    time_grains: [month]
+    owner_role: 客户成功负责人
+    caliber_switches:
+      active_threshold_days: false
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: login_frequency
+    display_name: 周均登录次数
+    type: simple
+    definition: 活跃用户每周平均登录次数（按周去重用户折算）
+    dimensions: [product_line, segment]
+    time_grains: [week, month]
+    owner_role: 产品负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0
+
+  - name: sticky_wau_mau
+    display_name: 用户粘性
+    display_name_en: WAU/MAU Stickiness
+    type: ratio
+    definition: 周活跃用户数 / 月活跃用户数
+    dimensions: [product_line]
+    time_grains: [week, month]
+    owner_role: 产品负责人
+    caliber_switches: {}
+    type_params:
+      numerator: wau
+      denominator: mau
+    provenance:
+      origin: template
+      template_ref: saas-subscription@0.1.0

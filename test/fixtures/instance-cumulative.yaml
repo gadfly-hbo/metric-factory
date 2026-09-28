@@ -1,0 +1,29 @@
+# cumulative 导出分支覆盖用实例
+instance:
+  created_at: "2026-09-28T00:00:00.000Z"
+base: ecommerce-marketplace@0.1.0
+answers:
+  revenue_model: 交易抽佣
+  user_structure: 双边市场
+  core_loop: 交易
+  caliber: {}
+caliber_switches: {}
+removed: []
+modified: []
+added:
+  - name: cumulative_gmv_quarter
+    display_name: 季度累计 GMV
+    type: cumulative
+    definition: 年初至当季末的 GMV 累计值
+    dimensions: [channel]
+    time_grains: [quarter]
+    owner_role: 电商业务负责人
+    caliber_switches: {}
+    type_params:
+      measure: gmv
+      window: 1 year
+    provenance:
+      origin: manual
+      note: 2026-Q3 经营分析会补充
+    review:
+      required: false

@@ -1,0 +1,18 @@
+# Metric Factory 企业实例（fork 自 saas-subscription@0.1.0）
+# 微调方式：编辑 caliber_switches / added / removed / modified，用 validate 校验、diff 查看变更
+instance:
+  created_at: 2026-09-28T14:31:13.676Z
+base: saas-subscription@0.1.0
+answers:
+  revenue_model: 订阅
+  user_structure: 2B
+  core_loop: 协作
+  caliber:
+    mrr:
+      include_trial: false
+caliber_switches:
+  mrr:
+    include_trial: false
+added: []
+removed: []
+modified: []

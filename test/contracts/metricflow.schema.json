@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MetricFlow 导出契约（Metric Factory 占位导出物）",
+  "type": "object",
+  "required": ["semantic_models", "metrics"],
+  "additionalProperties": false,
+  "properties": {
+    "semantic_models": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/semantic_model" }
+    },
+    "metrics": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/metric" }
+    }
+  },
+  "definitions": {
+    "semantic_model": {
+      "type": "object",
+      "required": ["name", "description", "model", "measures", "dimensions"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "description": { "type": "string" },
+        "model": {
+          "type": "object",
+          "required": ["ref"],
+          "additionalProperties": false,
+          "properties": { "ref": { "type": "string", "minLength": 1 } }
+        },
+        "measures": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/measure" }
+        },
+        "dimensions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/dimension" }
+        }
+      }
+    },
+    "measure": {
+      "type": "object",
+      "required": ["name", "agg", "agg_time_dimension", "expr"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "agg": { "enum": ["sum", "count", "min", "max", "avg", "count_distinct", "sum_boolean"] },
+        "agg_time_dimension": { "const": "metric_date" },
+        "expr": { "type": "string", "minLength": 1 }
+      }
+    },
+    "dimension": {
+      "type": "object",
+      "required": ["name", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "type": { "enum": ["categorical", "time"] }
+      }
+    },
+    "metric": {
+      "type": "object",
+      "required": ["name", "description", "label", "type", "type_params"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "description": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["simple", "ratio", "derived", "cumulative"] },
+        "type_params": {
+          "type": "object",
+          "oneOf": [
+            { "required": ["measure"] },
+            { "required": ["numerator", "denominator"] },
+            { "required": ["expr"] }
+          ],
+          "properties": {
+            "measure": {
+              "type": "object",
+              "required": ["name"],
+              "additionalProperties": false,
+              "properties": { "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" } }
+            },
+            "numerator": {
+              "type": "object",
+              "required": ["name"],
+              "additionalProperties": false,
+              "properties": { "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" } }
+            },
+            "denominator": {
+              "type": "object",
+              "required": ["name"],
+              "additionalProperties": false,
+              "properties": { "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" } }
+            },
+            "expr": { "type": "string", "minLength": 1 },
+            "metrics": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["name"],
+                "additionalProperties": false,
+                "properties": { "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" } }
+              }
+            },
+            "window": { "type": "string", "minLength": 1 },
+            "grain_to_date": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  }
+}

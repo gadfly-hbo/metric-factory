@@ -1,0 +1,29 @@
+template:
+  id: bad-fixture
+  industry: 测试
+  business_models: [测试模式]
+  version: 0.1.0
+matching:
+  revenue_models: [交易抽佣]
+  user_structure: [2C]
+  core_loops: [交易]
+north_star:
+  candidates:
+    - metric: gmv
+      rationale: 测试
+  decision_guide: 测试
+trees:
+  - id: revenue
+    children: [gmv]
+dimensions: [channel]
+metrics:
+  - name: gmv
+    display_name: 测试成交额
+    type: simple
+    definition: ""
+    dimensions: [channel]
+    time_grains: [day]
+    owner_role: 测试
+    provenance:
+      origin: template
+      template_ref: bad-fixture@0.1.0

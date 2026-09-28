@@ -1,0 +1,7 @@
+# SaaS 订阅 · 问卷答案示例
+revenue_model: 订阅
+user_structure: 2B
+core_loop: 协作
+caliber:
+  mrr:
+    include_trial: false
