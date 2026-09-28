@@ -1,0 +1,580 @@
+# 数字营销 · 行业指标模板
+# 方法论出处：OneData 指标建模（阿里）、营销漏斗（AIDA）、归因模型实践（7 日点击归因默认）
+template:
+  id: digital-marketing
+  industry: 数字营销
+  business_models: [效果广告投放, 品牌广告, 增长团队]
+  version: 0.1.0
+  references:
+    - "OneData 指标建模方法（阿里）"
+    - "营销漏斗与归因（AIDA / 7 日点击归因通行实践）"
+
+matching:
+  revenue_models: [服务费]
+  user_structure: [2B, 2C]
+  core_loops: [交易]
+
+north_star:
+  candidates:
+    - metric: roas
+      rationale: 广告投入产出的效率总闸，效果营销的最终裁判
+    - metric: lead_count
+      rationale: 线索规模，品牌与 B2B 场景的规模型兜底
+  decision_guide: 效果广告优先 ROAS；品牌/B2B 获客优先合格线索量与CAC
+
+trees:
+  - id: audience
+    category: 规模
+    children: [reach_count, frequency]
+  - id: funnel
+    category: 旅程
+    formula: "漏斗：impression_count -> click_count -> lead_count -> conversion_count"
+    children: [impression_count, click_count, lead_count, conversion_count, ctr, cvr, click_to_lead_rate, landing_page_conversion_rate, form_abandon_rate, lp_load_time_seconds, viewability_rate, attribution_lag_days]
+  - id: leads
+    category: 规模
+    children: [lead_count, mql_count, sql_count, mql_to_sql_rate, lead_to_mql_rate]
+  - id: efficiency
+    category: 效率
+    formula: "roas = converted_revenue / ad_spend"
+    children: [ad_spend, converted_revenue, roas, cpa, cpl, cpc, cpm, cost_per_qualified_lead, cac, budget_utilization_rate, bid_win_rate]
+  - id: quality
+    category: 质量
+    children: [lead_qualified_rate, invalid_click_rate, bounce_rate, brand_safety_violation_rate, engagement_rate, creative_fatigue_rate]
+  - id: structure
+    category: 结构
+    children: [channel_spend_share, search_vs_feed_share, new_vs_retargeting_share, audience_top3_spend_share, creative_type_share]
+
+dimensions: [channel, campaign_type, audience_segment, region, device]
+
+metrics:
+  # ============ 规模 ============
+  - name: ad_spend
+    display_name: 广告消耗
+    type: simple
+    definition: 统计周期内广告实际消耗金额（含媒体 + 代理服务费；默认不含税）
+    dimensions: [channel, campaign_type, region]
+    time_grains: [day, week, month]
+    owner_role: 投放负责人
+    caliber_switches:
+      include_tax: false
+      include_agency_fee: true
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: impression_count
+    display_name: 曝光量
+    type: simple
+    definition: 统计周期内广告有效曝光次数（可见 ≥1 秒）
+    dimensions: [channel, campaign_type]
+    time_grains: [day, week, month]
+    owner_role: 投放负责人
+    caliber_switches:
+      viewability_1s: true
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: click_count
+    display_name: 点击量
+    type: simple
+    definition: 统计周期内广告有效点击次数（剔除误触：点击后停留 <2 秒）
+    dimensions: [channel, campaign_type]
+    time_grains: [day, week, month]
+    owner_role: 投放负责人
+    caliber_switches:
+      exclude_misclick_2s: true
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: reach_count
+    display_name: 触达人数
+    type: simple
+    definition: 统计周期内被广告触达的去重人数
+    dimensions: [channel, audience_segment]
+    time_grains: [week, month]
+    owner_role: 投放负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: frequency
+    display_name: 平均触达频次
+    type: ratio
+    definition: 曝光量 / 触达人数，频控与健康度（信息流健康线 ≤5）
+    dimensions: [channel, audience_segment]
+    time_grains: [week]
+    owner_role: 投放负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: lead_count
+    display_name: 线索量
+    type: simple
+    definition: 统计周期内留资（表单/咨询/注册意向）线索数；默认剔除明显无效线索（测试单、空号）
+    dimensions: [channel, campaign_type]
+    time_grains: [day, week, month]
+    owner_role: 获客负责人
+    caliber_switches:
+      exclude_invalid_leads: true
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: mql_count
+    display_name: 市场合格线索数
+    display_name_en: Marketing Qualified Leads
+    type: simple
+    definition: 通过市场侧评分（画像匹配 + 行为分）的线索数
+    dimensions: [channel, audience_segment]
+    time_grains: [week, month]
+    owner_role: 获客负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: sql_count
+    display_name: 销售合格线索数
+    display_name_en: Sales Qualified Leads
+    type: simple
+    definition: 销售确认可跟进（有效联系方式 + 明确需求）的线索数
+    dimensions: [channel]
+    time_grains: [week, month]
+    owner_role: 销售负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: conversion_count
+    display_name: 转化量
+    type: simple
+    definition: 归因到广告曝光/点击的转化事件数（下单/支付/激活），默认 7 日点击归因
+    dimensions: [channel, campaign_type]
+    time_grains: [day, week, month]
+    owner_role: 投放负责人
+    caliber_switches:
+      attribution_7d_click: true
+      attribution_1d_view: false
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: converted_revenue
+    display_name: 归因收入
+    type: simple
+    definition: 归因到广告的转化订单金额合计（归因口径与转化量一致）
+    dimensions: [channel, campaign_type]
+    time_grains: [day, week, month]
+    owner_role: 投放负责人
+    caliber_switches:
+      attribution_7d_click: true
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  # ============ 质量 ============
+  - name: ctr
+    display_name: 点击率
+    display_name_en: Click-Through Rate
+    type: ratio
+    definition: 有效点击 / 有效曝光，创意与人群匹配度
+    dimensions: [channel, campaign_type]
+    time_grains: [day, week]
+    owner_role: 优化师负责人
+    caliber_switches: {}
+    type_params:
+      numerator: click_count
+      denominator: impression_count
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: cvr
+    display_name: 转化率
+    display_name_en: Conversion Rate
+    type: ratio
+    definition: 转化量 / 有效点击量，承接页与人群精准度
+    dimensions: [channel, campaign_type]
+    time_grains: [day, week]
+    owner_role: 优化师负责人
+    caliber_switches: {}
+    type_params:
+      numerator: conversion_count
+      denominator: click_count
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: lead_qualified_rate
+    display_name: 线索合格率
+    type: ratio
+    definition: MQL 数 / 线索量，流量质量的核心
+    dimensions: [channel, audience_segment]
+    time_grains: [week, month]
+    owner_role: 获客负责人
+    caliber_switches: {}
+    type_params:
+      numerator: mql_count
+      denominator: lead_count
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: mql_to_sql_rate
+    display_name: MQL 到 SQL 转化率
+    type: ratio
+    definition: SQL 数 / MQL 数，市场与销售衔接质量
+    dimensions: [channel]
+    time_grains: [month]
+    owner_role: 销售负责人
+    caliber_switches: {}
+    type_params:
+      numerator: sql_count
+      denominator: mql_count
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: bounce_rate
+    display_name: 落地页跳出率
+    type: ratio
+    definition: 点击后仅浏览落地页即离开的占比（停留 <10 秒且无二次行为）
+    dimensions: [channel, campaign_type]
+    time_grains: [week]
+    owner_role: 落地页负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: invalid_click_rate
+    display_name: 无效点击率
+    type: ratio
+    definition: 被反作弊识别的无效点击（机器/竞对/误触）/ 总点击，流量真实性
+    dimensions: [channel]
+    time_grains: [week, month]
+    owner_role: 反作弊负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: brand_safety_violation_rate
+    display_name: 品牌安全违规率
+    type: ratio
+    definition: 曝露在不合规内容旁的广告曝光占比
+    dimensions: [channel]
+    time_grains: [month]
+    owner_role: 品牌负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: creative_fatigue_rate
+    display_name: 素材疲劳率
+    type: ratio
+    definition: 同一素材对同一用户曝光 ≥3 次的曝光占比，创意衰退预警
+    dimensions: [channel, campaign_type]
+    time_grains: [week]
+    owner_role: 优化师负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: engagement_rate
+    display_name: 互动率
+    type: ratio
+    definition: 广告互动（赞/评/转/收藏）次数 / 有效曝光次数
+    dimensions: [channel, campaign_type]
+    time_grains: [week]
+    owner_role: 优化师负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  # ============ 结构 ============
+  - name: channel_spend_share
+    display_name: 渠道消耗占比
+    type: ratio
+    definition: 单渠道消耗 / 总消耗，预算分配结构
+    dimensions: [region]
+    time_grains: [month]
+    owner_role: 投放负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: search_vs_feed_share
+    display_name: 搜索广告占比
+    type: ratio
+    definition: 搜索渠道消耗 / 总消耗（其余为信息流/视频等主动分发）
+    dimensions: [region]
+    time_grains: [month]
+    owner_role: 投放负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: new_vs_retargeting_share
+    display_name: 再营销预算占比
+    type: ratio
+    definition: 再营销（老客/已互动人群）消耗 / 总消耗
+    dimensions: [campaign_type]
+    time_grains: [month]
+    owner_role: 投放负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: audience_top3_spend_share
+    display_name: TOP3 人群包消耗占比
+    type: ratio
+    definition: 消耗最高三个人群包合计占比，人群集中度
+    dimensions: [channel]
+    time_grains: [month]
+    owner_role: 优化师负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: creative_type_share
+    display_name: 视频素材消耗占比
+    type: ratio
+    definition: 视频类素材消耗 / 总消耗（其余为图文/互动）
+    dimensions: [channel]
+    time_grains: [month]
+    owner_role: 优化师负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  # ============ 效率 ============
+  - name: roas
+    display_name: 广告投资回报率
+    display_name_en: Return on Ad Spend
+    type: derived
+    definition: 归因收入 / 广告消耗；效果投放的总效率（健康线参照行业 2–5）
+    dimensions: [channel, campaign_type]
+    time_grains: [day, week, month]
+    owner_role: 投放负责人
+    caliber_switches: {}
+    type_params:
+      expr: "converted_revenue / ad_spend"
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: cpc
+    display_name: 单次点击成本
+    display_name_en: Cost Per Click
+    type: ratio
+    definition: 广告消耗 / 有效点击量
+    dimensions: [channel, campaign_type]
+    time_grains: [day, week]
+    owner_role: 优化师负责人
+    caliber_switches: {}
+    type_params:
+      numerator: ad_spend
+      denominator: click_count
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: cpm
+    display_name: 千次曝光成本
+    display_name_en: Cost Per Mille
+    type: ratio
+    definition: 广告消耗 × 1000 / 有效曝光量
+    dimensions: [channel, campaign_type]
+    time_grains: [day, week]
+    owner_role: 优化师负责人
+    caliber_switches: {}
+    type_params:
+      numerator: ad_spend
+      denominator: impression_count
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: cpa
+    display_name: 单次转化成本
+    display_name_en: Cost Per Action
+    type: ratio
+    definition: 广告消耗 / 转化量
+    dimensions: [channel, campaign_type]
+    time_grains: [day, week, month]
+    owner_role: 投放负责人
+    caliber_switches: {}
+    type_params:
+      numerator: ad_spend
+      denominator: conversion_count
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: cpl
+    display_name: 单线索成本
+    display_name_en: Cost Per Lead
+    type: ratio
+    definition: 广告消耗 / 线索量
+    dimensions: [channel, campaign_type]
+    time_grains: [week, month]
+    owner_role: 获客负责人
+    caliber_switches: {}
+    type_params:
+      numerator: ad_spend
+      denominator: lead_count
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: cost_per_qualified_lead
+    display_name: 单合格线索成本
+    type: ratio
+    definition: 广告消耗 / MQL 数，流量质量的成本视角
+    dimensions: [channel]
+    time_grains: [month]
+    owner_role: 获客负责人
+    caliber_switches: {}
+    type_params:
+      numerator: ad_spend
+      denominator: mql_count
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: cac
+    display_name: 获客成本
+    display_name_en: Customer Acquisition Cost
+    type: ratio
+    definition: （广告 + 渠道分成）总获客费用 / 新成交客户数
+    dimensions: [channel]
+    time_grains: [month]
+    owner_role: 财务负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: budget_utilization_rate
+    display_name: 预算消耗率
+    type: ratio
+    definition: 实际消耗 / 计划预算，投放执行健康度（健康区间 90–105%）
+    dimensions: [channel, campaign_type]
+    time_grains: [day, week]
+    owner_role: 投放负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: bid_win_rate
+    display_name: 竞价胜出率
+    type: ratio
+    definition: 胜出的竞价次数 / 参与竞价次数
+    dimensions: [channel]
+    time_grains: [day, week]
+    owner_role: 优化师负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  # ============ 旅程 ============
+  - name: viewability_rate
+    display_name: 广告可视率
+    type: ratio
+    definition: 满足可视标准（≥50% 区域 ≥1 秒）的曝光占比
+    dimensions: [channel]
+    time_grains: [week]
+    owner_role: 投放负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: click_to_lead_rate
+    display_name: 点击到线索率
+    type: ratio
+    definition: 线索量 / 有效点击量
+    dimensions: [channel, campaign_type]
+    time_grains: [week]
+    owner_role: 落地页负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: lead_to_mql_rate
+    display_name: 线索到 MQL 率
+    type: ratio
+    definition: MQL 数 / 线索量
+    dimensions: [channel, audience_segment]
+    time_grains: [week]
+    owner_role: 获客负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: landing_page_conversion_rate
+    display_name: 落地页转化率
+    type: ratio
+    definition: 落地页访客中完成目标行为（留资/下单）的占比
+    dimensions: [campaign_type, device]
+    time_grains: [week]
+    owner_role: 落地页负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: form_abandon_rate
+    display_name: 表单放弃率
+    type: ratio
+    definition: 开始填写表单但未提交的占比
+    dimensions: [campaign_type, device]
+    time_grains: [week]
+    owner_role: 落地页负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: attribution_lag_days
+    display_name: 归因滞后天数
+    type: simple
+    definition: 转化事件相对首次广告触达的平均滞后天数
+    dimensions: [channel]
+    time_grains: [month]
+    owner_role: 投放负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0
+
+  - name: lp_load_time_seconds
+    display_name: 落地页加载时长
+    type: simple
+    definition: 落地页首屏完全加载的平均秒数（P75 口径），加载每慢 1 秒转化率显著衰减
+    dimensions: [device, campaign_type]
+    time_grains: [week]
+    owner_role: 落地页负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: digital-marketing@0.1.0

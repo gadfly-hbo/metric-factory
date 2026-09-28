@@ -1,7 +1,5 @@
-import { existsSync } from "node:fs";
 import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { select, confirm } from "@inquirer/prompts";
@@ -11,9 +9,19 @@ import { matchTemplates } from "../engine/match.js";
 import { buildInstance } from "../engine/instantiate.js";
 import { AnswersSchema } from "../schema/answers.js";
 import { InstanceSchema } from "../schema/instance.js";
+import { defaultTemplatesDir } from "../paths.js";
 import { loadInstance } from "../engine/loader.js";
 import { materialize } from "../engine/materialize.js";
 import { validateInstance } from "../engine/validate.js";
+import { findPendingReview, applyApproval, applyRejection } from "../engine/review.js";
+import { auditInstance } from "../engine/audit.js";
+import { buildGeneratePrompt, buildRefinePrompt } from "../llm/prompt.js";
+import { estimateTokens } from "../llm/tokens.js";
+import { createLlmClientFromEnv } from "../llm/index.js";
+import { generateDraft, generateRefineDraft } from "../engine/generate.js";
+import { applyDraft } from "../engine/apply.js";
+import { DraftSchema } from "../schema/draft.js";
+import type { Instance } from "../schema/instance.js";
 import { metricflowExporter } from "../export/metricflow.js";
 import { excelExporter } from "../export/excel.js";
 import { mermaidExporter } from "../export/mermaid.js";
@@ -30,15 +38,7 @@ const exporters: Record<string, Exporter> = {
 
 const program = new Command();
 
-function defaultTemplatesDir(): string {
-  // 兼容 dist 布局（dist/cli.js → ../templates）与 src 布局（src/cli/index.ts → ../../templates）
-  const here = dirname(fileURLToPath(import.meta.url));
-  const candidates = [resolve(here, "../templates"), resolve(here, "../../templates")];
-  for (const c of candidates) {
-    if (existsSync(c)) return c;
-  }
-  return candidates[0]!;
-}
+
 
 async function loadAnswers(path: string): Promise<Answers> {
   const raw = await readFile(path, "utf8");
@@ -301,6 +301,353 @@ program
     console.log(`\n【新增指标】${d.added.length ? "" : "（无）"}`);
     for (const m of d.added) console.log(`  ${m.name}（${m.display_name}）`);
   });
+
+program
+  .command("generate")
+  .description("LLM 在基模板锚定下生成候选指标草案（需先 init 出实例）")
+  .argument("<instance>", "实例 YAML 文件路径")
+  .requiredOption("-d, --describe <text>", "业务描述（自然语言）")
+  .option("--dry-run", "只打印完整 prompt 与 token 估算，不调用模型")
+  .option("--out <path>", "草案输出路径", "draft.yaml")
+  .option("-t, --templates <dir>", "行业模板目录（用于解析实例的基模板）", defaultTemplatesDir())
+  .action(async (instancePath: string, opts: { describe: string; dryRun?: boolean; out: string; templates: string }) => {
+    const loaded = await loadInstance(instancePath);
+    if (!loaded.ok) {
+      for (const e of loaded.errors) {
+        console.error(`ERROR [schema] ${instancePath} ${e.path}: ${e.message}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
+
+    const templates = await discoverTemplates(opts.templates);
+    const baseId = loaded.instance.base.split("@")[0]!;
+    const base = templates.find((t) => t.template.id === baseId);
+    if (!base) {
+      console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const prompt = buildGeneratePrompt(base, loaded.instance, opts.describe);
+
+    if (opts.dryRun) {
+      const sysTokens = estimateTokens(prompt.system);
+      const userTokens = estimateTokens(prompt.user);
+      console.log("===== system =====");
+      console.log(prompt.system);
+      console.log("===== user =====");
+      console.log(prompt.user);
+      console.log("===== token 估算 =====");
+      console.log(`system ≈ ${sysTokens}，user ≈ ${userTokens}，合计 ≈ ${sysTokens + userTokens}（粗估：CJK 1 token/字，其余 4 字符/token）`);
+      return;
+    }
+
+    let client;
+    try {
+      client = createLlmClientFromEnv();
+    } catch (e) {
+      console.error(`ERROR ${(e as Error).message}`);
+      console.error("提示：先用 --dry-run 评估 prompt；测试/演示可用 MF_LLM_BACKEND=faux");
+      process.exit(1);
+    }
+
+    const modelLabel = process.env.MF_LLM_MODEL ?? (process.env.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
+    const result = await generateDraft(client, prompt, opts.describe, modelLabel, new Date().toISOString());
+    if (!result.ok) {
+      console.error(`ERROR 生成失败（阶段：${result.stage}），模型输出整批拒绝，未写入任何文件`);
+      if (result.issues) {
+        for (const i of result.issues) console.error(`  - ${i}`);
+      }
+      console.error("===== 模型原始输出 =====");
+      console.error(result.raw);
+      process.exit(1);
+    }
+
+    await writeFile(opts.out, stringifyYaml(result.draft), "utf8");
+    console.log(`草案已写入：${opts.out}（新增 ${result.draft.added.length} 个候选指标，全部待人工审核）`);
+    for (const m of result.draft.added) {
+      console.log(`  - ${m.name}（${m.display_name}）：${m.definition}`);
+    }
+    console.log("下一步：metric-factory apply <instance> <draft> 合入，然后 review 逐条审核");
+  });
+
+program
+  .command("apply")
+  .description("把 LLM 草案合入实例（validate 全过才写盘，fail-closed）")
+  .argument("<instance>", "实例 YAML 文件路径")
+  .argument("<draft>", "草案 YAML/JSON 文件路径")
+  .option("-t, --templates <dir>", "行业模板目录（用于解析实例的基模板）", defaultTemplatesDir())
+  .action(async (instancePath: string, draftPath: string, opts: { templates: string }) => {
+    const loaded = await loadInstance(instancePath);
+    if (!loaded.ok) {
+      for (const e of loaded.errors) {
+        console.error(`ERROR [schema] ${instancePath} ${e.path}: ${e.message}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
+
+    let draftDoc: unknown;
+    try {
+      draftDoc = parseYaml(await readFile(draftPath, "utf8"));
+    } catch (e) {
+      console.error(`ERROR 无法读取或解析草案 ${draftPath}：${(e as Error).message}`);
+      process.exit(1);
+    }
+    const draftParsed = DraftSchema.safeParse(draftDoc);
+    if (!draftParsed.success) {
+      for (const i of draftParsed.error.issues) {
+        console.error(`ERROR [draft] ${draftPath} ${i.path.join(".")}: ${i.message}`);
+      }
+      process.exit(1);
+    }
+
+    const templates = await discoverTemplates(opts.templates);
+    const baseId = loaded.instance.base.split("@")[0]!;
+    const base = templates.find((t) => t.template.id === baseId);
+    if (!base) {
+      console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
+      process.exit(1);
+    }
+
+    const applied = applyDraft(loaded.instance, draftParsed.data, base);
+    if (!applied.ok) {
+      for (const e of applied.errors) {
+        console.error(`ERROR [${e.rule}] ${draftPath}: ${e.message}`);
+      }
+      console.error("草案未合入（零写盘）");
+      process.exit(1);
+    }
+
+    // 合入后全量校验（跳过审核门：新 LLM 指标必然待审，执法点在 export）；不过不落盘
+    const materialized = materialize(base, applied.instance);
+    const issues = validateInstance(materialized, base, applied.instance, { skipReviewGate: true });
+    if (issues.length > 0) {
+      for (const i of issues) {
+        console.error(`ERROR [${i.rule}] ${instancePath} ${i.path}: ${i.message}`);
+      }
+      console.error("草案合入后校验不通过（零写盘）");
+      process.exit(1);
+    }
+
+    await writeInstanceFile(instancePath, applied.instance);
+    console.log(
+      `已合入：新增 ${draftParsed.data.added.length}、修改 ${draftParsed.data.modified.length}、删除 ${draftParsed.data.removed.length}、口径 ${Object.keys(draftParsed.data.caliber).length} 项`
+    );
+    if (draftParsed.data.added.length > 0) {
+      console.log("LLM 新增指标待审核：metric-factory review <instance>");
+    }
+  });
+
+program
+  .command("refine")
+  .description("LLM 对既有实例产出微调草案（caliber/modified/removed/added）")
+  .argument("<instance>", "实例 YAML 文件路径")
+  .requiredOption("-i, --instruction <text>", "微调指令（自然语言）")
+  .option("--dry-run", "只打印完整 prompt 与 token 估算，不调用模型")
+  .option("--out <path>", "草案输出路径", "draft.yaml")
+  .option("-t, --templates <dir>", "行业模板目录（用于解析实例的基模板）", defaultTemplatesDir())
+  .action(async (instancePath: string, opts: { instruction: string; dryRun?: boolean; out: string; templates: string }) => {
+    const loaded = await loadInstance(instancePath);
+    if (!loaded.ok) {
+      for (const e of loaded.errors) {
+        console.error(`ERROR [schema] ${instancePath} ${e.path}: ${e.message}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
+
+    const templates = await discoverTemplates(opts.templates);
+    const baseId = loaded.instance.base.split("@")[0]!;
+    const base = templates.find((t) => t.template.id === baseId);
+    if (!base) {
+      console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const prompt = buildRefinePrompt(base, loaded.instance, opts.instruction);
+
+    if (opts.dryRun) {
+      const sysTokens = estimateTokens(prompt.system);
+      const userTokens = estimateTokens(prompt.user);
+      console.log("===== system =====");
+      console.log(prompt.system);
+      console.log("===== user =====");
+      console.log(prompt.user);
+      console.log("===== token 估算 =====");
+      console.log(`system ≈ ${sysTokens}，user ≈ ${userTokens}，合计 ≈ ${sysTokens + userTokens}（粗估：CJK 1 token/字，其余 4 字符/token）`);
+      return;
+    }
+
+    let client;
+    try {
+      client = createLlmClientFromEnv();
+    } catch (e) {
+      console.error(`ERROR ${(e as Error).message}`);
+      console.error("提示：先用 --dry-run 评估 prompt；测试/演示可用 MF_LLM_BACKEND=faux");
+      process.exit(1);
+    }
+
+    const modelLabel = process.env.MF_LLM_MODEL ?? (process.env.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
+    const result = await generateRefineDraft(client, prompt, opts.instruction, modelLabel, new Date().toISOString());
+    if (!result.ok) {
+      console.error(`ERROR 微调草案生成失败（阶段：${result.stage}），模型输出整批拒绝，未写入任何文件`);
+      if (result.issues) {
+        for (const i of result.issues) console.error(`  - ${i}`);
+      }
+      console.error("===== 模型原始输出 =====");
+      console.error(result.raw);
+      process.exit(1);
+    }
+
+    await writeFile(opts.out, stringifyYaml(result.draft), "utf8");
+    const d = result.draft;
+    console.log(
+      `草案已写入：${opts.out}（新增 ${d.added.length}、修改 ${d.modified.length}、删除 ${d.removed.length}、口径 ${Object.keys(d.caliber).length} 项）`
+    );
+    for (const m of d.added) {
+      console.log(`  - 新增 ${m.name}（${m.display_name}）：${m.definition}`);
+    }
+    console.log("下一步：metric-factory apply <instance> <draft> 合入；LLM 新增需 review 审核后才能导出");
+  });
+
+program
+  .command("audit")
+  .description("审计实例：口径完整性 / 虚荣指标 / 归口 / 孤儿指标")
+  .argument("<instance>", "实例 YAML 文件路径")
+  .option("-t, --templates <dir>", "行业模板目录（用于解析实例的基模板）", defaultTemplatesDir())
+  .option("--json", "以 JSON 输出结构化结果")
+  .action(async (instancePath: string, opts: { templates: string; json?: boolean }) => {
+    const loaded = await loadInstance(instancePath);
+    if (!loaded.ok) {
+      for (const e of loaded.errors) {
+        console.error(`ERROR [schema] ${instancePath} ${e.path}: ${e.message}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
+
+    const templates = await discoverTemplates(opts.templates);
+    const baseId = loaded.instance.base.split("@")[0]!;
+    const base = templates.find((t) => t.template.id === baseId);
+    if (!base) {
+      console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const materialized = materialize(base, loaded.instance);
+    const findings = auditInstance(materialized, base, loaded.instance);
+
+    if (opts.json) {
+      console.log(JSON.stringify({ findings }, null, 2));
+    } else if (findings.length === 0) {
+      console.log(`PASS ${instancePath}（${materialized.metrics.length} 个指标，审计无发现）`);
+    } else {
+      for (const f of findings) {
+        console.log(`${f.severity} [${f.rule}] ${f.metric}：${f.message}`);
+      }
+      const errors = findings.filter((f) => f.severity === "ERROR").length;
+      console.log(`\n共 ${findings.length} 项发现（ERROR ${errors}，WARN ${findings.length - errors}）`);
+    }
+    if (findings.some((f) => f.severity === "ERROR")) {
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command("mcp")
+  .description("以 MCP stdio server 暴露 generate/audit/refine/validate/diff/export 工具")
+  .action(async () => {
+    const { buildMcpServer } = await import("../mcp/server.js");
+    const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
+    const server = buildMcpServer();
+    await server.connect(new StdioServerTransport());
+  });
+
+program
+  .command("review")
+  .description("人工审核 LLM 生成指标：批准写 reviewed_by，拒绝则移除")
+  .argument("<instance>", "实例 YAML 文件路径")
+  .option("--approve <name>", "非交互：批准指定指标")
+  .option("--reject <name>", "非交互：拒绝（移除）指定指标")
+  .option("--reviewer <name>", "审核人（默认 MF_REVIEWER 或系统用户名）")
+  .action(async (instancePath: string, opts: { approve?: string; reject?: string; reviewer?: string }) => {
+    const loaded = await loadInstance(instancePath);
+    if (!loaded.ok) {
+      for (const e of loaded.errors) {
+        console.error(`ERROR [schema] ${instancePath} ${e.path}: ${e.message}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
+    const inst = loaded.instance;
+    const pending = findPendingReview(inst.added);
+
+    const reviewer = opts.reviewer ?? process.env.MF_REVIEWER ?? process.env.USER ?? "unknown";
+
+    if (opts.approve || opts.reject) {
+      const name = opts.approve ?? opts.reject!;
+      const target = findPendingReview(inst.added).find((m) => m.name === name);
+      if (!target) {
+        const exists = inst.added.some((m) => m.name === name);
+        console.error(
+          exists
+            ? `ERROR ${name} 不在待审列表（已审核过或非 LLM 指标，拒绝改写既有审核记录）`
+            : `ERROR 待审指标不存在：${name}（用无参数 review 查看待审清单）`
+        );
+        process.exitCode = 1;
+        return;
+      }
+      const updated = opts.approve ? applyApproval(inst, name, reviewer) : applyRejection(inst, name);
+      await writeInstanceFile(instancePath, updated);
+      console.log(opts.approve ? `已批准 ${name}（审核人：${reviewer}）` : `已拒绝并移除 ${name}`);
+      return;
+    }
+
+    if (pending.length === 0) {
+      console.log("无待审指标（全部已审核或无 LLM 生成指标）");
+      return;
+    }
+
+    console.log(`待审指标 ${pending.length} 个（origin=llm 且未审核）：`);
+    for (const m of pending) {
+      console.log(`  - ${m.name}（${m.display_name}）：${m.definition}`);
+      console.log(`    出处：LLM 生成（${m.provenance.model}，prompt ${m.provenance.prompt_version}）`);
+    }
+
+    if (process.stdin.isTTY) {
+      const { select } = await import("@inquirer/prompts");
+      let current = inst;
+      for (const m of pending) {
+        const action = await select({
+          message: `指标 ${m.name}（${m.display_name}）`,
+          choices: [
+            { value: "approve" },
+            { value: "reject" },
+            { value: "skip" }
+          ]
+        });
+        if (action === "approve") {
+          current = applyApproval(current, m.name, reviewer);
+          console.log(`已批准 ${m.name}（审核人：${reviewer}）`);
+        } else if (action === "reject") {
+          current = applyRejection(current, m.name);
+          console.log(`已拒绝并移除 ${m.name}`);
+        }
+      }
+      await writeInstanceFile(instancePath, current);
+    } else {
+      console.log("\n非交互环境：使用 --approve <name> / --reject <name> 处理上述指标");
+    }
+  });
+
+async function writeInstanceFile(path: string, inst: Instance): Promise<void> {
+  const header = `# Metric Factory 企业实例（fork 自 ${inst.base}）\n`;
+  await writeFile(path, header + stringifyYaml(inst), "utf8");
+}
 
 program
   .command("export")

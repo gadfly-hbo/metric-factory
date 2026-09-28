@@ -9,10 +9,13 @@ export interface ValidateIssue {
 }
 
 // 实例校验：rebase 基模板后的全量规则（含 patch 目标存在性、fail-closed 镜像、出处一致性）
+// skipReviewGate 用于 apply：新合入的 LLM 指标必然待审（review 在 apply 之后），
+// 「未审核不可导出」的执法点是 export 门与 validate 命令，不在 apply。
 export function validateInstance(
   materialized: MaterializedInstance,
   template: Template,
-  instance: Instance
+  instance: Instance,
+  opts: { skipReviewGate?: boolean } = {}
 ): ValidateIssue[] {
   const issues: ValidateIssue[] = [];
   const knownDims = new Set(template.dimensions);
@@ -36,7 +39,7 @@ export function validateInstance(
         message: `指标 ${m.name} 声称模板出处 ${m.provenance.template_ref}，与实例基模板 ${instance.base} 不一致`
       });
     }
-    if (m.provenance.origin === "llm" && !m.provenance.reviewed_by) {
+    if (!opts.skipReviewGate && m.provenance.origin === "llm" && !m.provenance.reviewed_by) {
       issues.push({
         rule: "llm-unreviewed",
         path: `metrics.${m.name}.provenance.reviewed_by`,

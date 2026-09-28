@@ -78,3 +78,53 @@ npm run contract-test  # MetricFlow 导出契约测试（JSON Schema）
 ```
 
 架构：`src/schema`（Zod 元模型）· `src/engine`（loader / lint / match / instantiate / materialize / validate）· `src/export`（metricflow / excel / mermaid 三导出器 + fail-closed 门）· `src/cli`（commander 命令）· `templates/`（行业模板数据资产）。
+
+## v2 · LLM 设计器
+
+AI 出初稿、人当守门员（工人模式：单次结构化调用 + schema 校验 + fail-closed 门，模型不握方向盘；模型访问统一走 pi-ai 适配层，业务代码零 pi 依赖）。
+
+### 全链路
+
+```bash
+# 1. 生成候选指标草案（模板锚定，先 init 出实例）
+node dist/cli.js generate my-instance/instance.yaml --describe "我们是跨境电商，主打低价秒杀" --out draft.yaml
+node dist/cli.js generate my-instance/instance.yaml --describe "..." --dry-run   # 零 key 评估 prompt 与 token
+
+# 2. 合入草案（validate 全过才写盘；LLM 新增自动带 provenance + 待审标记）
+node dist/cli.js apply my-instance/instance.yaml draft.yaml
+
+# 3. 人工审核（批准写 reviewed_by；未审核导出被硬阻断）
+node dist/cli.js review my-instance/instance.yaml                       # 列出待审
+node dist/cli.js review my-instance/instance.yaml --approve seckill_gmv --reviewer 张三
+node dist/cli.js review my-instance/instance.yaml --reject seckill_gmv
+
+# 4. 微调既有实例（自然语言 → caliber/modified/removed/added 草案，同样走 apply）
+node dist/cli.js refine my-instance/instance.yaml --instruction "GMV 改为含退款；删掉 NPS" --out draft.yaml
+
+# 5. 审计存量指标字典
+node dist/cli.js audit my-instance/instance.yaml        # 口径完整/虚荣指标/归口/孤儿，--json 结构化
+```
+
+### MCP server（agent 一等公民）
+
+```bash
+node dist/cli.js mcp    # stdio 协议；工具：mf_generate / mf_refine / mf_audit / mf_validate / mf_diff / mf_export
+```
+
+工具一律返回草案/结果 JSON **不写盘**——agent 把草案呈现给用户，落盘仍走 CLI apply/review（人审门不可绕过）。
+
+### Provider 配置
+
+| 环境变量 | 作用 |
+|---|---|
+| `MF_LLM_MODEL` | `<provider>/<model-id>`，如 `openai/gpt-4o`、`anthropic/claude-sonnet-4` |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` 等 | pi-ai 供应商目录对应凭证 |
+| `MF_LLM_BASE_URL` | OpenAI 兼容内部网关覆盖 |
+| `MF_LLM_BACKEND=faux` + `MF_FAUX_RESPONSE` | 确定性脚本（测试/演示，零网络） |
+| `MF_REVIEWER` | review 默认审核人 |
+
+真实链路发布前冒烟：`zsh scripts/llm-smoke.sh`（留档模型输出供人工评估口径质量）。
+
+### 行业模板（6 个）
+
+电商交易平台（53）· SaaS 订阅（48）· 内容社区 App（43）· 数字营销（40）· 供应链物流（40）· 云成本 FinOps（40）。贡献新模板见 [CONTRIBUTING.md](./CONTRIBUTING.md)。

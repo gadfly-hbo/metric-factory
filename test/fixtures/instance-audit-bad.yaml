@@ -1,0 +1,49 @@
+# audit 测试用坏实例：虚荣指标（WARN）+ 缺维度（ERROR）+ 口径过短（ERROR）
+instance:
+  created_at: "2026-09-29T00:00:00.000Z"
+base: ecommerce-marketplace@0.1.0
+answers:
+  revenue_model: 交易抽佣
+  user_structure: 双边市场
+  core_loop: 交易
+  caliber: {}
+caliber_switches: {}
+removed: []
+modified: []
+added:
+  - name: ad_click_count
+    display_name: 广告点击量
+    type: simple
+    definition: 统计周期内广告位被点击的次数合计
+    dimensions: [channel]
+    time_grains: [day]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: manual
+    review:
+      required: false
+  - name: no_dim_metric
+    display_name: 无维度指标
+    type: simple
+    definition: 这是一个没有任何维度切分的指标定义
+    dimensions: []
+    time_grains: [day]
+    owner_role: 测试
+    caliber_switches: {}
+    provenance:
+      origin: manual
+    review:
+      required: false
+  - name: short_def_metric
+    display_name: 短口径指标
+    type: simple
+    definition: 短口径
+    dimensions: [channel]
+    time_grains: [day]
+    owner_role: 测试
+    caliber_switches: {}
+    provenance:
+      origin: manual
+    review:
+      required: false

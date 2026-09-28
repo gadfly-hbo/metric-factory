@@ -30,23 +30,23 @@ trees:
     children: [uv, cvr, aov]
   - id: user_scale
     category: 规模
-    children: [signup_count, activation_rate, paid_user_count, app_dau]
+    children: [signup_count, activation_rate, paid_user_count, app_dau, new_listing_count]
   - id: monetization
     category: 效率
     formula: "commission_revenue = gmv * take_rate"
     children: [gmv, take_rate]
   - id: quality
     category: 质量
-    children: [buy_repeat_rate, retention_30d, refund_rate, return_rate, order_cancel_rate, negative_review_rate, fulfillment_ok_rate, deliver_avg_days]
+    children: [buy_repeat_rate, retention_30d, refund_rate, return_rate, order_cancel_rate, negative_review_rate, review_rate, avg_rating, out_of_stock_rate, complaint_rate, nps, fulfillment_ok_rate, deliver_avg_days]
   - id: structure
     category: 结构
-    children: [new_user_gmv_share, category_top3_gmv_share, seller_top10_gmv_share, new_seller_gmv_share, mobile_gmv_share, paid_traffic_share]
+    children: [new_user_gmv_share, category_top3_gmv_share, seller_top10_gmv_share, new_seller_gmv_share, mobile_gmv_share, paid_traffic_share, cross_category_buy_rate]
   - id: efficiency
     category: 效率
-    children: [sell_through_rate, inventory_turnover_days, gmv_per_seller, arpu, marketing_roi, subsidy_rate, logistics_cost_per_order]
+    children: [sell_through_rate, inventory_turnover_days, gmv_per_seller, arpu, marketing_roi, marketing_gmv_share, marketing_spend, subsidy_rate, logistics_cost_per_order, customer_service_cost_per_order]
   - id: journey
     category: 旅程
-    children: [search_uv, search_to_detail_cvr, detail_to_cart_rate, cart_to_order_rate, first_order_within_7d_rate, silent_user_share, comeback_rate]
+    children: [search_uv, search_to_detail_cvr, detail_to_cart_rate, cart_to_order_rate, first_order_within_7d_rate, silent_user_share, comeback_rate, session_avg_duration]
 
 dimensions: [channel, category, region, user_tier, platform, seller_tier]
 

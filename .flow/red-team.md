@@ -1,66 +1,66 @@
-# Red-Team: Metric Factory 指标体系设计工具（MVP：模板 + 向导 + 导出闭环）
+# Red-Team: Metric Factory v2 · LLM 设计器
 
-> 评审对象：`.flow/proposal.md`（PRODUCT_PLAN.md v0.1 草案，2026-09-28）
-> 结论：**go**（无 kill 判据已被满足；风险可测，不构成立即止损理由）
+> 评审对象：`.flow/proposal.md`（v2 flow，2026-09-29）
+> 结论：**go**（无 kill 判据已满足；两项风险需在实现中对冲，一项需发布前人工验证）
 
 ## Top Kill-Assumptions（按 影响 × 错误概率 × 测试便宜度 排序）
 
-### 1. 模板本身就有价值（引擎只是放大器）
+### 1. LLM 生成的口径质量达到「人审可采纳」（采纳率 ≥60% 的根基）
 
-- **Claim**：用户要的是「行业模板 + 微调向导 + 标准格式导出」的闭环，其中模板是价值主体。
-- **Steelman**：Kyligence Zen 把行业模板做成了 onboarding 附属品且仅此一家产品化，说明模板有真实需求；神策免费查询平台的长尾访问说明「抄行业指标清单」是普遍行为。
-- **Fails if**：把两个 MVP 模板以静态 YAML/Excel 发给目标用户，他们不觉得比神策免费库 + 自己改名好用到值得多看一眼——那引擎（校验/向导/导出）就是在给没有需求的基础设施编程。
-- **Evidence to get this week**：将电商交易平台模板手工做成成品（不等引擎），给 3–5 个目标用户（数据负责人 / 独立顾问）看，问「愿不愿意用工具基于它微调出你家的字典」。
-- **Kill criterion**：≤1/5 认为模板达到「可直接微调」深度，且无人愿意试用向导。
-- **Cheapest test**：静态模板走查（零代码），MVP 第一周即可执行。
+- **Claim**：模板锚定（RAG 注入 L2 模板上下文）足以让 LLM 产出「口径正确」的候选指标。
+- **Steelman**：DataLeap 已验证「AI 映射 + 人工 Review」模式可行；生成锚定在专家审校过的模板上，自由生成仅限模板没有的新指标，幻觉空间被结构性压缩。
+- **Fails if**：LLM 生成的指标「听起来对但口径错」（分子分母颠倒、时间窗与业务不符），人审变成逐条挑错的高成本活动，采纳率 <60%，产品口碑变成「AI 瞎编指标」——这正是 proposal §3.2 自认的最大风险点。
+- **Evidence to get this week**：真实模型冒烟——用 3–5 个真实业务描述跑生成（不用 fake provider），人工评每条候选的口径正确性。
+- **Kill criterion**：冒烟中口径错误率 >30%，或人审后采纳率 <40%。
+- **Cheapest test**：发布前内部冒烟（开发期无法替代，fake provider 只能验证管道不能验证质量）。
 
-### 2. 设计环节真的可工具化（而不是纯组织政治活动）
+### 2. 模板全量注入的 token 可行性（RAG 层次选型的硬约束）
 
-- **Claim**：设计态空白是因为没人做，不是因为没有需求；LLM + 模板 RAG 把顾问方法论变成工程问题。
-- **Steelman**：开源草根集群（2025–2026 集中出现、全部 Claude 形态）说明供给侧有人反复尝试；ClearPoint 的 Suggest KPIs 有存活用户。
-- **Fails if**：企业建指标体系的真实瓶颈是跨部门对齐与高层拍板，工具产出的树只是会议的输入材料——用户做完一次就走了（低频一次性），且新用户不认为「用工具」优于「找顾问/抄同行」。开源侧 29★ 的天花板既是空白证据，也同样是需求规模的反面证据。
-- **Evidence to get this week**：访谈 2–3 个做过指标体系项目的人，问「当时卡在哪一步、花了多少钱多少周、如果有个工具会改变什么」。
-- **Kill criterion**：受访者一致表示产出物（树+字典）不是瓶颈，瓶颈在政治/数据质量/平台选型。
-- **Cheapest test**：用户访谈，不写代码。
+- **Claim**：模板 RAG 可行。但 53 指标电商模板全量序列化约 15–20k token，4 个新模板后上下文膨胀。
+- **Steelman**：现代模型 128k+ 上下文放得下单个模板 + 已审核实例；生成场景一次只锚定 1 个基模板。
+- **Fails if**：注入全部指标导致 prompt 超限或注意力稀释，生成质量下降；或按需检索（关键词）召回不足，锚定失效退化为自由生成。
+- **Evidence to get this week**：实现时实测单模板序列化 token 数；若 <25k 则「单模板全量注入」成立，RAG 降级为「模板选择」问题（复用 MVP 匹配内核）。
+- **Kill criterion**：单模板序列化 >50k token 且关键词检索召回在构造测试中 <70%。
+- **Cheapest test**：token 计数脚本 + 检索单测（无网络）。
 
-### 3. 单人能产出「深度优先」的模板（≥40 指标/行业，含完整口径与出处）
+### 3. 真实 LLM provider 路径零测试覆盖（fake provider 的盲区）
 
-- **Claim**：MVP 两个行业模板由（单人 + LLM 初稿）达到专家审校级深度。
-- **Steelman**：OneData / AARRR / Amplitude Playbook 都是公开方法论，电商与 SaaS 是文档最充分的两个域；「LLM 出初稿 + 专家审校」流水线已被 DataLeap 类产品验证。
-- **Fails if**：模板指标看似完整但口径经不起从业者追问（如 GMV 是否含退款在向导里问了、但支付渠道分摊没问），「深度」被识破为清单搬运，产品口碑反转。
-- **Evidence to get this week**：timebox 8 小时手工做一个行业的 40 指标字典（含 caliber_switches 与出处），请一位从业者盲评。
-- **Kill criterion**：盲评结论「不如我们内部已有的 Excel」或关键口径错误率 >10%。
-- **Cheapest test**：单模板 timebox 试产。
+- **Claim**：适配器 + fake provider 能保证真实路径正确。
+- **Steelman**：适配层薄（构造请求 → 解析 JSON 响应），业务逻辑全在 provider 无关层；JSON Schema 校验兜底输出格式。
+- **Fails if**：真实 API 的结构化输出不稳（截断、markdown 包裹、拒绝）、鉴权/网络错误未被正确转化为用户可读信息——用户第一次真实使用就崩。
+- **Evidence to get this week**：真实 provider 冒烟脚本（同 #1 复用）；错误路径（无 key、坏 key、超时）在 CLI 层的可读报错测试。
+- **Kill criterion**：无（工程对冲项，不是战略假设）；但发布前必须留一次真实调用记录。
+- **Cheapest test**：`generate --dry-run`（只打印 prompt 不调用）+ 冒烟脚本。
 
-### 4. CLI + YAML + git 的形态能触达中文目标用户
+### 4. 单人产出 4 个新行业模板（≥40 指标/行业）
 
-- **Claim**：agent 原生、git-native 是被开源侧验证的正确形态。
-- **Steelman**：现存草根集群全是 CLI/skill 形态，说明先动手的建设者在这个形态里；MCP 接口让 Claude 用户零成本调用。
-- **Fails if**：真正的中文受众（企业数据团队）不装 CLI、不 fork 仓库，「生态位」只存在于 agent 极客圈，星标天花板复刻 29★。
-- **Evidence to get this week**：无法廉价预测；可做的替代证据——检查 2–3 个潜在早期采用者是否在日常用 Claude Code / dbt CLI。
-- **Kill criterion**：MVP 发布 4 周内自然获星 <20 且无外部 PR/issue。
-- **Cheapest test**：发布后看早期采用曲线（这属于 MVP 后验证，非本周可测）。
+- **Steelman**：MVP 已交付 2 个深度模板，方法（OneData/北极星公开方法论 + 领域常识 + lint 门）可复制；「LLM 出初稿 + 专家审校」流水线正是本产品自己主张的。
+- **Fails if**：行业领域知识不足导致口径经不起从业者追问（供应链的 OTIF、云成本的摊销口径是专业深水区）。
+- **Evidence to get this week**：timebox 一个最陌生行业（云成本）的 40 指标初稿，请从业者盲评。
+- **Kill criterion**：盲评「不如内部 Excel」或关键口径错误率 >10%。
+- **Cheapest test**：单模板 timebox（MVP 已跑通过 2 次）。
 
-### 5. 上游 schema 契约短期稳定（MetricFlow YAML 可作为导出目标）
+### 5. audit 启发式规则有实际价值
 
-- **Steelman**：MetricFlow 是 dbt Semantic Layer 的现行标准，schema 有版本化语义；plan 已自带对策（导出器插件化 + 契约测试 + 关注 Fusion v2）。
-- **Fails if**：dbt Fusion v2 在 MVP 期内废弃现行 YAML 语法且迁移工具断裂。
-- **判定**：**该风险已被方案自身的对策合理覆盖**，不列为本周行动项；契约测试即可持续监控。
+- **Steelman**：north-star 仓库验证了 audit 需求；「口径缺失/虚荣指标/无归口」三条规则与语义层治理实践对齐。
+- **Fails if**：规则太浅，输出是人人皆知的噪音清单，用户跑一次就不再用。
+- **Evidence to get this week**：对 MVP 两个自带实例跑 audit（应干净），对构造坏实例跑（应分类命中）。
+- **Kill criterion**：对合法实例误报 >10%，或规则覆盖不了最常见的三类真实问题。
+- **Cheapest test**：单测 + 两模板自检（无网络）。
 
 ## What's Well-Reasoned
 
-- **非目标边界锐利**：不做 BI / 存储 / 治理，只做设计态，避免了与成熟红海的正面竞争——这是整份方案最强的决策。
-- **三层模型正确分离了变与不变**：语法通用、模板分叉、实例 fork-diff，与「通用上微调」的正确工程化翻译吻合。
-- **provenance + fail-closed 直接命中最大质量风险**（口径错误比没指标更糟），且照搬了已被火山 DataLeap 验证的「AI 初稿 + 人审门」模式，不是发明新模式。
-- **经济模型诚实**：承认设计是低频高判断活动、拒绝押注 SaaS 订阅，避免了最常见的开源项目商业化幻觉。
-- **站在 MetricFlow / Cube 契约上而非发明新格式**，把生态接口风险降到最低。
+- **四件套顺序对**：先 review 审核流补全 fail-closed 闭环，再做生成器——门先于内容，与「口径可信性是产品本体」一致。
+- **fake provider 隔离**：测试不碰网络是正确的工程纪律；验收明确区分「可执行」与「运行时」指标，不虚报可验证性。
+- **MCP 成本低、下行小**：一个 SDK + 三个工具包装既有引擎能力，即使无人使用也不构成战略损失。
+- **复用 MVP 地基**（provenance schema、fail-closed 门、匹配内核、lint），v2 没有推倒任何已验证的东西。
 
 ## What I Couldn't Assess
 
-- **目标用户画像缺失**：方案从未定义「谁第一时间用」（企业数据负责人？独立顾问？创业公司创始人？）——它决定模板深度标准与分发渠道，PRD 必须补。
-- **分发策略缺位**：除「先赢开源生态位」外无获客动作；中文技术社区（掘金/V2EX/知乎）投放计划不存在。
-- **调研数据不可复核**：star 数、产品功能结论是断言，无法在本评审内验证（2026-09-28 的 gh 检索是自证的）。
-- **MVP 工期与人力预算未声明**：「2 个深度模板 + 引擎 + CI」对单人是一个多大周数的工作量，方案没给数。
+- **Prompt 设计质量**：方案未给出生成 prompt 的结构（角色/上下文/输出契约/few-shot），这直接决定 kill-assumption #1 的成败，PRD 必须定形。
+- **review 命令的交互形态**：逐条 approve/reject 的终端交互 vs 批量文件式（CI/agent 场景需要非交互路径），方案未定。
+- **refine（MCP 微调）与 generate 的边界**：refine 是改口径开关还是改指标集合，工具粒度未定义。
+- **模板 PR 评审流程的落地形态**（文档约定 vs 工具化 checklist）。
 
 ---
-*判定：go。最优先行动项 = kill-assumption #1（静态模板走查，零代码、本周可做、直接验证价值主体）。*
+*判定：go。最优先行动项 = kill-assumption #2 的 token 实测（实现第一天就能做，决定 RAG 层次）与 #1 的真实模型冒烟（发布门槛）。*

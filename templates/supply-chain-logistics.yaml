@@ -1,0 +1,553 @@
+# 供应链物流 · 行业指标模板
+# 方法论出处：OneData 指标建模（阿里）、SCOR 供应链运营参考模型（OTIF/完美订单）、库存管理通行实践
+template:
+  id: supply-chain-logistics
+  industry: 供应链物流
+  business_models: [仓配一体化, 快递网络, 供应链服务]
+  version: 0.1.0
+  references:
+    - "OneData 指标建模方法（阿里）"
+    - "SCOR 供应链运营参考模型（OTIF / 完美订单）"
+
+matching:
+  revenue_models: [服务费, 混合]
+  user_structure: [2B]
+  core_loops: [交易]
+
+north_star:
+  candidates:
+    - metric: otif
+      rationale: 准时足量交付率是履约质量的总闸，客户体验与成本平衡的核心
+    - metric: inventory_turnover_days
+      rationale: 库存周转天数，重资产仓网的资金效率北极星
+  decision_guide: 履约服务质量优先 OTIF；自营重资产仓网优先库存周转
+
+trees:
+  - id: fulfillment
+    category: 质量
+    formula: "perfect_order_rate = on_time_shipment_rate * order_accuracy_rate * (1 - damage_rate)"
+    children: [otif, on_time_shipment_rate, order_accuracy_rate, damage_rate, perfect_order_rate]
+  - id: inventory
+    category: 效率
+    children: [inventory_value, inventory_turnover_days, inventory_turnover_rate, stockout_rate, slow_moving_inventory_share, abc_sku_share]
+  - id: cost
+    category: 效率
+    children: [fulfillment_cost_per_order, logistics_cost_per_order, cost_per_unit_shipped, truck_utilization_rate, warehouse_labor_productivity, invoice_match_rate]
+  - id: network
+    category: 结构
+    children: [active_warehouse_count, region_volume_share, transport_mode_share, supplier_top3_spend_share, capacity_utilization_rate]
+  - id: leadtime
+    category: 旅程
+    children: [order_to_ship_hours, ship_to_deliver_days, order_cycle_time_hours, exception_rate, exception_resolve_hours, rma_processing_days]
+  - id: supply
+    category: 规模
+    children: [order_fulfillment_count, shipment_count, sku_count, supplier_count, forecast_accuracy_rate, return_order_count, return_rate, backorder_rate]
+  - id: inbound
+    category: 旅程
+    children: [inbound_volume, dock_to_stock_hours, supplier_otif_rate]
+
+dimensions: [warehouse, carrier, sku_category, region, order_type]
+
+metrics:
+  # ============ 规模 ============
+  - name: order_fulfillment_count
+    display_name: 履约订单数
+    type: simple
+    definition: 统计周期内完成出库交付的订单数（含当日达与隔日达；不含取消单）
+    dimensions: [warehouse, region, order_type]
+    time_grains: [day, week, month]
+    owner_role: 履约负责人
+    caliber_switches:
+      include_cancelled: false
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: shipment_count
+    display_name: 发运单数
+    type: simple
+    definition: 统计周期内交承运发出的包裹/发运单数（一订单可拆多发运单）
+    dimensions: [warehouse, carrier]
+    time_grains: [day, week, month]
+    owner_role: 物流负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: outbound_volume
+    display_name: 出库件数
+    type: simple
+    definition: 统计周期内出库作业的总件数（SKU 计数）
+    dimensions: [warehouse, sku_category]
+    time_grains: [day, week, month]
+    owner_role: 仓储负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: inbound_volume
+    display_name: 入库件数
+    type: simple
+    definition: 统计周期内收货上架的总件数
+    dimensions: [warehouse, sku_category]
+    time_grains: [day, week, month]
+    owner_role: 仓储负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: inventory_value
+    display_name: 库存金额
+    type: simple
+    definition: 期末在库库存的账面金额（标准成本口径，在途不计）
+    dimensions: [warehouse, sku_category]
+    time_grains: [day, month]
+    owner_role: 库存计划负责人
+    caliber_switches:
+      include_in_transit: false
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: sku_count
+    display_name: 在库 SKU 数
+    type: simple
+    definition: 期末有库存的 SKU 数量
+    dimensions: [warehouse, sku_category]
+    time_grains: [month]
+    owner_role: 库存计划负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: active_warehouse_count
+    display_name: 启用仓数
+    type: simple
+    definition: 期末处于启用运营状态的仓点数
+    dimensions: [region]
+    time_grains: [month]
+    owner_role: 网络规划负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: supplier_count
+    display_name: 活跃供应商数
+    type: simple
+    definition: 统计周期内有实际供货的供应商数
+    dimensions: [sku_category]
+    time_grains: [month, quarter]
+    owner_role: 采购负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: return_order_count
+    display_name: 退货单数
+    type: simple
+    definition: 统计周期内客户发起并受理的退货单数
+    dimensions: [region, order_type]
+    time_grains: [week, month]
+    owner_role: 售后负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: return_rate
+    display_name: 退货率
+    type: ratio
+    definition: 退货单数 / 履约订单数
+    dimensions: [region, sku_category]
+    time_grains: [week, month]
+    owner_role: 售后负责人
+    caliber_switches: {}
+    type_params:
+      numerator: return_order_count
+      denominator: order_fulfillment_count
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  # ============ 质量 ============
+  - name: otif
+    display_name: 准时足量交付率
+    display_name_en: On Time In Full
+    type: ratio
+    definition: 按承诺时间足量签收的订单数 / 应交付订单数，SCOR 履约质量总闸
+    dimensions: [warehouse, carrier, region]
+    time_grains: [day, week, month]
+    owner_role: 履约负责人
+    caliber_switches:
+      measure_by_promise_date: true
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: on_time_shipment_rate
+    display_name: 准时发货率
+    type: ratio
+    definition: 按承诺时效完成发出的发运单数 / 应发运单数
+    dimensions: [warehouse, carrier]
+    time_grains: [day, week]
+    owner_role: 仓储负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: order_accuracy_rate
+    display_name: 订单准确率
+    type: ratio
+    definition: 无错发/漏发/串货的订单数 / 履约订单数
+    dimensions: [warehouse, sku_category]
+    time_grains: [week, month]
+    owner_role: 仓储负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: damage_rate
+    display_name: 破损率
+    type: ratio
+    definition: 运输/仓储环节破损件数 / 出库件数
+    dimensions: [carrier, sku_category]
+    time_grains: [week, month]
+    owner_role: 物流负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: perfect_order_rate
+    display_name: 完美订单率
+    type: derived
+    definition: 准时 × 准确 × 完好的联合概率，SCOR 综合履约质量
+    dimensions: [warehouse, region]
+    time_grains: [month]
+    owner_role: 履约负责人
+    caliber_switches: {}
+    type_params:
+      expr: "on_time_shipment_rate * order_accuracy_rate * (1 - damage_rate)"
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: supplier_otif_rate
+    display_name: 供应商到货准时足量率
+    type: ratio
+    definition: 供应商按约定日期足量到货的订单数 / 采购到货订单数
+    dimensions: [sku_category]
+    time_grains: [month]
+    owner_role: 采购负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: forecast_accuracy_rate
+    display_name: 预测准确率
+    display_name_en: Forecast Accuracy
+    type: ratio
+    definition: 1 − |实际需求 − 预测| / 实际需求（MAPE 反算），需求计划质量
+    dimensions: [sku_category]
+    time_grains: [month]
+    owner_role: 需求计划负责人
+    caliber_switches:
+      mape_cap_100: true
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: stockout_rate
+    display_name: 缺货率
+    type: ratio
+    definition: 因库存不足导致无法履约的订单行数 / 订单总行数
+    dimensions: [warehouse, sku_category]
+    time_grains: [week, month]
+    owner_role: 库存计划负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: backorder_rate
+    display_name: 缺货待补率
+    type: ratio
+    definition: 处于待补货状态的订单行数 / 订单总行数，缺货深度
+    dimensions: [sku_category]
+    time_grains: [week]
+    owner_role: 库存计划负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: invoice_match_rate
+    display_name: 账单匹配率
+    type: ratio
+    definition: 与承运商/供应商账单一次对账一致的费用行占比
+    dimensions: [carrier]
+    time_grains: [month]
+    owner_role: 结算负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  # ============ 结构 ============
+  - name: abc_sku_share
+    display_name: A 类 SKU 占比
+    type: ratio
+    definition: 按 GMV/出库金额累计 80% 的 A 类 SKU 数 / 在库 SKU 数
+    dimensions: [warehouse]
+    time_grains: [month, quarter]
+    owner_role: 库存计划负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: slow_moving_inventory_share
+    display_name: 呆滞库存占比
+    type: ratio
+    definition: 库龄 >90 天无出库动销的库存金额 / 库存金额
+    dimensions: [warehouse, sku_category]
+    time_grains: [month]
+    owner_role: 库存计划负责人
+    caliber_switches:
+      aging_threshold_90d: true
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: supplier_top3_spend_share
+    display_name: 头部供应商集中度
+    type: ratio
+    definition: 采购金额前 3 供应商合计占比，供应风险集中度
+    dimensions: [sku_category]
+    time_grains: [quarter]
+    owner_role: 采购负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: region_volume_share
+    display_name: 区域件量占比
+    type: ratio
+    definition: 单区域出库件数 / 总出库件数，仓网辐射结构
+    dimensions: [warehouse]
+    time_grains: [month]
+    owner_role: 网络规划负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: transport_mode_share
+    display_name: 快运方式占比
+    type: ratio
+    definition: 快运/专线条数占比（其余为快递零担），干线结构
+    dimensions: [region]
+    time_grains: [month]
+    owner_role: 物流负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: capacity_utilization_rate
+    display_name: 仓容利用率
+    type: ratio
+    definition: 在用库容 / 可用库容，仓储产能健康线 70–85%
+    dimensions: [warehouse, region]
+    time_grains: [month]
+    owner_role: 仓储负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  # ============ 效率 ============
+  - name: inventory_turnover_days
+    display_name: 库存周转天数
+    type: simple
+    definition: 平均库存金额 / 日均出库成本，资金占用效率核心
+    dimensions: [warehouse, sku_category]
+    time_grains: [month, quarter]
+    owner_role: 库存计划负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: inventory_turnover_rate
+    display_name: 库存周转次数
+    type: derived
+    definition: 年化周转次数 = 365 / 库存周转天数
+    dimensions: [sku_category]
+    time_grains: [quarter]
+    owner_role: 库存计划负责人
+    caliber_switches: {}
+    type_params:
+      expr: "365 / inventory_turnover_days"
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: fulfillment_cost_per_order
+    display_name: 单均履约成本
+    type: ratio
+    definition: （仓储 + 分拣 + 包装 + 配送）总履约成本 / 履约订单数
+    dimensions: [warehouse, order_type]
+    time_grains: [month]
+    owner_role: 履约负责人
+    caliber_switches:
+      include_return_cost: false
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: logistics_cost_per_order
+    display_name: 单均物流成本
+    type: ratio
+    definition: 干线 + 末端配送成本合计 / 履约订单数
+    dimensions: [carrier, region]
+    time_grains: [month]
+    owner_role: 物流负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: cost_per_unit_shipped
+    display_name: 单件发运成本
+    type: ratio
+    definition: 总发运成本 / 出库件数
+    dimensions: [warehouse, carrier]
+    time_grains: [month]
+    owner_role: 物流负责人
+    caliber_switches: {}
+    type_params:
+      numerator: logistics_cost_per_order
+      denominator: outbound_volume
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: truck_utilization_rate
+    display_name: 车辆装载率
+    type: ratio
+    definition: 干线车辆实际装载体积 / 车厢容积
+    dimensions: [region]
+    time_grains: [week, month]
+    owner_role: 物流负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: warehouse_labor_productivity
+    display_name: 仓储人效
+    type: ratio
+    definition: 出入库总件数 / 仓储人力（人日）
+    dimensions: [warehouse]
+    time_grains: [month]
+    owner_role: 仓储负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: order_cycle_time_hours
+    display_name: 履约周期时长
+    type: simple
+    definition: 订单下达到签收的平均小时数（P50）
+    dimensions: [region, order_type]
+    time_grains: [week, month]
+    owner_role: 履约负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: dock_to_stock_hours
+    display_name: 到货上架时长
+    type: simple
+    definition: 供应商到货到完成上架的可销售状态平均小时数
+    dimensions: [warehouse]
+    time_grains: [week, month]
+    owner_role: 仓储负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  # ============ 旅程 ============
+  - name: order_to_ship_hours
+    display_name: 订单到发货时长
+    type: simple
+    definition: 订单下达到交承运发出的平均小时数（P50）
+    dimensions: [warehouse, order_type]
+    time_grains: [week]
+    owner_role: 仓储负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: ship_to_deliver_days
+    display_name: 发运到签收时长
+    type: simple
+    definition: 发运到客户签收的平均自然日（P50）
+    dimensions: [carrier, region]
+    time_grains: [week, month]
+    owner_role: 物流负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: exception_rate
+    display_name: 异常单占比
+    type: ratio
+    definition: 异常（破损/丢失/拒收/地址错误）发运单数 / 发运单数
+    dimensions: [carrier, region]
+    time_grains: [week, month]
+    owner_role: 物流负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: exception_resolve_hours
+    display_name: 异常处理时长
+    type: simple
+    definition: 异常工单创建到关闭的平均小时数
+    dimensions: [carrier]
+    time_grains: [month]
+    owner_role: 售后负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0
+
+  - name: rma_processing_days
+    display_name: 退货处理时长
+    type: simple
+    definition: 退货受理到完成质检入库/报废的平均天数
+    dimensions: [warehouse]
+    time_grains: [month]
+    owner_role: 售后负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: supply-chain-logistics@0.1.0

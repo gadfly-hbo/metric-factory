@@ -40,10 +40,10 @@ trees:
     children: [nrr, logo_churn_rate, mrr_churn_rate]
   - id: quality
     category: 质量
-    children: [trial_to_paid_rate, activation_rate, csat, nps, first_response_time_minutes, uptime_rate]
+    children: [trial_to_paid_rate, activation_rate, csat, nps, first_response_time_minutes, resolution_time_hours, uptime_rate, incident_count]
   - id: structure
     category: 结构
-    children: [enterprise_revenue_share, self_serve_share, top10_customer_arr_share, annual_contract_share]
+    children: [enterprise_revenue_share, self_serve_share, top10_customer_arr_share, multi_product_share, annual_contract_share, channel_partner_share]
   - id: unit_economics
     category: 效率
     formula: "ltv_cac_ratio = ltv / cac"

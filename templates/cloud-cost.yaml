@@ -1,0 +1,544 @@
+# 云成本 · 行业指标模板（FinOps）
+# 方法论出处：OneData 指标建模（阿里）、FinOps Foundation 框架（Inform/Optimize/Operate）、单位经济学实践
+template:
+  id: cloud-cost
+  industry: 云成本
+  business_models: [FinOps, 平台工程, 技术成本管理]
+  version: 0.1.0
+  references:
+    - "OneData 指标建模方法（阿里）"
+    - "FinOps Foundation 框架（Inform / Optimize / Operate）"
+
+matching:
+  revenue_models: [混合]
+  user_structure: [2B]
+  core_loops: [协作]
+
+north_star:
+  candidates:
+    - metric: cost_efficiency_ratio
+      rationale: 单位业务收入的云成本效率，增长与成本平衡的总闸
+    - metric: budget_variance_rate
+      rationale: 预算偏差率，预算紧缩期的直接目标
+  decision_guide: 增长期业务优先成本效率比；预算紧缩期优先预算偏差率
+
+trees:
+  - id: cost_structure
+    category: 结构
+    children: [compute_cost, storage_cost, network_cost, database_cost, paas_saas_cost, license_cost, cost_by_service_share, cost_by_department_share, prod_vs_nonprod_share, provider_multi_share, cost_per_tb_stored]
+  - id: unit_economics
+    category: 效率
+    formula: "cost_efficiency_ratio = business_revenue / total_cloud_cost"
+    children: [total_cloud_cost, business_revenue, cost_efficiency_ratio, cost_per_transaction, cost_per_customer]
+  - id: commitment
+    category: 效率
+    children: [reserved_coverage_rate, savings_plan_utilization, spot_usage_rate, ondemand_vs_reserved_share, rightsizing_savings_rate, license_utilization_rate, autoscaling_adoption_rate]
+  - id: governance
+    category: 质量
+    children: [untagged_resource_rate, budget_variance_rate, cost_anomaly_count, cost_anomaly_resolve_hours, forecast_accuracy_rate, billing_error_rate, commitment_expiry_risk_count, idle_resource_rate]
+  - id: finops_journey
+    category: 旅程
+    children: [tag_compliance_rate, allocation_coverage_rate, showback_adoption_rate, optimization_cycle_days, chargeback_dispute_rate]
+  - id: operations
+    category: 规模
+    children: [total_cloud_cost, running_instance_count, storage_capacity_tb, data_transfer_volume, business_revenue, transaction_count]
+
+dimensions: [cloud_provider, service_type, department, environment, region]
+
+metrics:
+  # ============ 规模 ============
+  - name: total_cloud_cost
+    display_name: 云成本总额
+    type: simple
+    definition: 统计周期内云厂商账单费用合计（含折扣与承诺抵扣后净额；不含内部人力）
+    dimensions: [cloud_provider, department]
+    time_grains: [day, month]
+    owner_role: FinOps 负责人
+    caliber_switches:
+      net_of_discount: true
+      include_internal_labor: false
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: compute_cost
+    display_name: 计算成本
+    type: simple
+    definition: 云主机/容器/Serverless 计算费用合计
+    dimensions: [cloud_provider, environment, department]
+    time_grains: [day, month]
+    owner_role: 平台工程负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: storage_cost
+    display_name: 存储成本
+    type: simple
+    definition: 对象存储/块存储/备份归档费用合计
+    dimensions: [cloud_provider, environment]
+    time_grains: [day, month]
+    owner_role: 平台工程负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: network_cost
+    display_name: 网络成本
+    type: simple
+    definition: 公网流量/带宽/CDN/跨区传输费用合计
+    dimensions: [cloud_provider, region]
+    time_grains: [day, month]
+    owner_role: 网络负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: database_cost
+    display_name: 数据库成本
+    type: simple
+    definition: 托管数据库（RDS/NoSQL/数仓）费用合计
+    dimensions: [cloud_provider, environment]
+    time_grains: [day, month]
+    owner_role: 数据平台负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: paas_saas_cost
+    display_name: 托管服务成本
+    type: simple
+    definition: 中间件/可观测/AI 服务等 PaaS 与 SaaS 订阅费用
+    dimensions: [cloud_provider, department]
+    time_grains: [month]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: license_cost
+    display_name: 许可成本
+    type: simple
+    definition: 商业软件许可（含云市场订阅）费用
+    dimensions: [department]
+    time_grains: [month, quarter]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: running_instance_count
+    display_name: 运行实例数
+    type: simple
+    definition: 期末处于运行状态的云主机/容器实例数
+    dimensions: [cloud_provider, environment]
+    time_grains: [day]
+    owner_role: 平台工程负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: data_transfer_volume
+    display_name: 传输流量
+    type: simple
+    definition: 统计周期内公网出流量（GB），网络成本驱动因子
+    dimensions: [cloud_provider, region]
+    time_grains: [day, month]
+    owner_role: 网络负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: storage_capacity_tb
+    display_name: 存储容量
+    type: simple
+    definition: 期末占用存储容量（TB），存储成本驱动因子
+    dimensions: [cloud_provider, environment]
+    time_grains: [month]
+    owner_role: 平台工程负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: business_revenue
+    display_name: 业务收入
+    type: simple
+    definition: 统计周期内业务总收入（财务口径），云成本效率的分母锚点
+    dimensions: [department]
+    time_grains: [month]
+    owner_role: 财务负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: transaction_count
+    display_name: 业务交易量
+    type: simple
+    definition: 统计周期内核心业务交易/请求事件数，单位成本的业务量分母
+    dimensions: [department]
+    time_grains: [day, month]
+    owner_role: 业务负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  # ============ 质量 ============
+  - name: budget_variance_rate
+    display_name: 预算偏差率
+    type: ratio
+    definition: （实际云成本 − 预算）/ 预算；健康线 |偏差| ≤5%
+    dimensions: [department]
+    time_grains: [month]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: cost_anomaly_count
+    display_name: 成本异常次数
+    type: simple
+    definition: 统计周期内检测到的成本异常事件数（环比突增 >30% 且超绝对阈值）
+    dimensions: [cloud_provider, department]
+    time_grains: [week, month]
+    owner_role: FinOps 负责人
+    caliber_switches:
+      anomaly_threshold_30pct: true
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: cost_anomaly_resolve_hours
+    display_name: 成本异常处理时长
+    type: simple
+    definition: 异常检测到确认关闭的平均小时数
+    dimensions: [department]
+    time_grains: [month]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: idle_resource_rate
+    display_name: 闲置资源率
+    type: ratio
+    definition: 低利用率资源（CPU <5% 持续 7 天）的费用占比，优化机会清单
+    dimensions: [environment, department]
+    time_grains: [month]
+    owner_role: 平台工程负责人
+    caliber_switches:
+      cpu_threshold_5pct_7d: true
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: untagged_resource_rate
+    display_name: 未打标资源率
+    type: ratio
+    definition: 缺少归属标签的费用占比，分摊与治理的前提
+    dimensions: [cloud_provider]
+    time_grains: [month]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: forecast_accuracy_rate
+    display_name: 成本预测准确率
+    type: ratio
+    definition: 1 − |实际 − 预测| / 实际（月度云成本口径）
+    dimensions: [cloud_provider]
+    time_grains: [month]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: billing_error_rate
+    display_name: 账单错误率
+    type: ratio
+    definition: 复核发现计费错误的账单行占比（承诺抵扣未生效、重复计费等）
+    dimensions: [cloud_provider]
+    time_grains: [month, quarter]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: commitment_expiry_risk_count
+    display_name: 即将到期承诺数
+    type: simple
+    definition: 未来 90 天内到期的预留/节省计划承诺数量，续约风险预警
+    dimensions: [cloud_provider]
+    time_grains: [month]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  # ============ 结构 ============
+  - name: cost_by_service_share
+    display_name: 服务类型成本占比
+    type: ratio
+    definition: 单服务类型（计算/存储/网络/数据库）费用 / 云成本总额
+    dimensions: [cloud_provider]
+    time_grains: [month]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: cost_by_department_share
+    display_name: 部门成本占比
+    type: ratio
+    definition: 已分摊到部门的费用 / 云成本总额（其余为共享未分摊）
+    dimensions: [cloud_provider]
+    time_grains: [month]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: prod_vs_nonprod_share
+    display_name: 非生产环境成本占比
+    type: ratio
+    definition: 测试/开发/预发环境费用 / 云成本总额；健康线 ≤25%
+    dimensions: [cloud_provider]
+    time_grains: [month]
+    owner_role: 平台工程负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: ondemand_vs_reserved_share
+    display_name: 按需付费占比
+    type: ratio
+    definition: 按需计费费用 / 可承诺类（计算/数据库）费用合计，承诺覆盖不足信号
+    dimensions: [cloud_provider]
+    time_grains: [month]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: provider_multi_share
+    display_name: 多云分散度
+    type: ratio
+    definition: 非主力云厂商费用 / 云成本总额，多云策略集中度
+    dimensions: [department]
+    time_grains: [quarter]
+    owner_role: 架构负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  # ============ 效率 ============
+  - name: cost_efficiency_ratio
+    display_name: 成本效率比
+    type: derived
+    definition: 业务收入 / 云成本总额，单位云成本创造的业务价值
+    dimensions: [department]
+    time_grains: [month, quarter]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    type_params:
+      expr: "business_revenue / total_cloud_cost"
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: cost_per_transaction
+    display_name: 单笔交易成本
+    type: ratio
+    definition: 云成本总额 / 业务交易量
+    dimensions: [department]
+    time_grains: [day, month]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    type_params:
+      numerator: total_cloud_cost
+      denominator: transaction_count
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: cost_per_customer
+    display_name: 单客户成本
+    type: ratio
+    definition: 云成本总额 / 活跃客户数，SaaS 单位经济核心
+    dimensions: [department]
+    time_grains: [month]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: reserved_coverage_rate
+    display_name: 预留覆盖率
+    type: ratio
+    definition: 预留实例覆盖的费用 / 可承诺类费用合计；FinOps 基准线 60–80%
+    dimensions: [cloud_provider]
+    time_grains: [month]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: savings_plan_utilization
+    display_name: 节省计划利用率
+    type: ratio
+    definition: 节省计划实际抵扣金额 / 承诺金额，承诺浪费监控
+    dimensions: [cloud_provider]
+    time_grains: [month]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: spot_usage_rate
+    display_name: Spot 使用占比
+    type: ratio
+    definition: 竞价实例费用 / 计算费用合计，可中断负载的成本红利
+    dimensions: [cloud_provider, environment]
+    time_grains: [month]
+    owner_role: 平台工程负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: rightsizing_savings_rate
+    display_name: 规格优化节省率
+    type: ratio
+    definition: 已完成降配/缩容的月度节省 / 优化前基线费用
+    dimensions: [department]
+    time_grains: [month, quarter]
+    owner_role: 平台工程负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: license_utilization_rate
+    display_name: 许可利用率
+    type: ratio
+    definition: 实际使用席位/调用量 / 已购许可容量
+    dimensions: [department]
+    time_grains: [quarter]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: autoscaling_adoption_rate
+    display_name: 弹性伸缩覆盖率
+    type: ratio
+    definition: 接入自动伸缩的计算费用 / 可弹性计算费用合计
+    dimensions: [environment]
+    time_grains: [month]
+    owner_role: 平台工程负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  # ============ 旅程 ============
+  - name: allocation_coverage_rate
+    display_name: 分摊覆盖率
+    type: ratio
+    definition: 已按标签/规则分摊到成本中心的费用 / 云成本总额
+    dimensions: [cloud_provider]
+    time_grains: [month]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: tag_compliance_rate
+    display_name: 打标合规率
+    type: ratio
+    definition: 按标签规范完整打标的资源数 / 应打标资源数
+    dimensions: [cloud_provider]
+    time_grains: [month]
+    owner_role: 平台工程负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: showback_adoption_rate
+    display_name: Showback 采纳率
+    type: ratio
+    definition: 月度查看成本看板的部门数 / 应查看部门数，成本意识普及
+    dimensions: [department]
+    time_grains: [month, quarter]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: optimization_cycle_days
+    display_name: 优化闭环周期
+    type: simple
+    definition: 优化建议产生到确认执行（或否决）的平均天数
+    dimensions: [department]
+    time_grains: [month, quarter]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: chargeback_dispute_rate
+    display_name: 分摊争议率
+    type: ratio
+    definition: 部门对分摊账单提出争议的费用占比
+    dimensions: [department]
+    time_grains: [quarter]
+    owner_role: FinOps 负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0
+
+  - name: cost_per_tb_stored
+    display_name: 单 TB 存储成本
+    type: ratio
+    definition: 存储成本 / 平均存储容量（TB），存储单价效率
+    dimensions: [cloud_provider, environment]
+    time_grains: [month]
+    owner_role: 平台工程负责人
+    caliber_switches: {}
+    type_params:
+      numerator: storage_cost
+      denominator: storage_capacity_tb
+    provenance:
+      origin: template
+      template_ref: cloud-cost@0.1.0

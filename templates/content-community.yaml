@@ -1,0 +1,589 @@
+# 内容社区 App · 行业指标模板
+# 方法论出处：OneData 指标建模（阿里）、北极星框架（Amplitude Playbook）、AARRR
+template:
+  id: content-community
+  industry: 内容社区
+  business_models: [UGC 社区, PGC 平台, 短视频, 资讯聚合]
+  version: 0.1.0
+  references:
+    - "OneData 指标建模方法（阿里）"
+    - "北极星指标（Amplitude Playbook）"
+    - "AARRR / 用户旅程地图（UJM）"
+
+matching:
+  revenue_models: [广告, 混合]
+  user_structure: [2C]
+  core_loops: [内容消费, 创作消费]
+
+north_star:
+  candidates:
+    - metric: dau
+      rationale: 消费规模与广告库存的基础，双端飞轮的引擎
+    - metric: avg_session_duration
+      rationale: 消费深度，广告变现效率与内容质量的领先指标
+  decision_guide: 广告变现优先 DAU×时长；创作者订阅/打赏优先创作者活跃与分成收入
+
+trees:
+  - id: scale
+    category: 规模
+    children: [dau, wau, mau, new_user_count, creator_count, publish_count]
+  - id: monetization
+    category: 效率
+    formula: "ad_revenue = dau * arpu"
+    children: [dau, arpu, ad_impression_count, creator_income]
+  - id: consumption
+    category: 规模
+    children: [total_play_count, session_count, video_avg_play_duration]
+  - id: quality
+    category: 质量
+    children: [next_day_retention, retention_30d, content_completion_rate, interaction_rate, share_rate, content_complaint_rate, creator_retention_90d, creator_active_rate, csat_community]
+  - id: structure
+    category: 结构
+    children: [category_top3_play_share, head_creator_content_share, ugc_pgc_share, new_creator_content_share, recommend_traffic_share, ad_load_rate]
+  - id: efficiency
+    category: 效率
+    children: [arpu, rpm, ecpm, cost_per_dau, creator_income_share, recommend_ctr, content_review_efficiency]
+  - id: journey
+    category: 旅程
+    children: [impression_to_click_rate, click_to_finish_rate, play_to_interact_rate, browse_to_publish_rate, first_publish_within_7d_rate, push_open_rate, search_to_play_rate]
+
+dimensions: [platform, content_category, creator_tier, region, traffic_source]
+
+metrics:
+  # ============ 规模 ============
+  - name: dau
+    display_name: 日活跃用户数
+    type: simple
+    definition: 当日至少一次有效访问（会话 ≥5 秒）的去重用户数；默认剔除机器流量
+    dimensions: [platform, region]
+    time_grains: [day]
+    owner_role: 增长负责人
+    caliber_switches:
+      active_threshold_5s: true
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: wau
+    display_name: 周活跃用户数
+    type: simple
+    definition: 自然周内至少一次有效访问的去重用户数
+    dimensions: [platform, region]
+    time_grains: [week]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: mau
+    display_name: 月活跃用户数
+    type: simple
+    definition: 自然月内至少一次有效访问的去重用户数
+    dimensions: [platform, region]
+    time_grains: [month]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: new_user_count
+    display_name: 新用户数
+    type: simple
+    definition: 统计周期内完成注册（含三方授权）的去重新用户数
+    dimensions: [traffic_source, platform]
+    time_grains: [day, week, month]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: publish_count
+    display_name: 内容发布数
+    type: simple
+    definition: 统计周期内通过审核的 UGC/PGC 内容发布条数
+    dimensions: [content_category, creator_tier]
+    time_grains: [day, week, month]
+    owner_role: 内容运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: creator_count
+    display_name: 活跃创作者数
+    type: simple
+    definition: 统计周期内至少发布 1 条过审内容的去重创作者数
+    dimensions: [creator_tier, content_category]
+    time_grains: [month]
+    owner_role: 创作者运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: total_play_count
+    display_name: 内容播放量
+    type: simple
+    definition: 统计周期内内容（视频/图文）有效播放次数，有效 = 播放 ≥3 秒；默认剔除机器流量
+    dimensions: [content_category, platform]
+    time_grains: [day, week, month]
+    owner_role: 内容运营负责人
+    caliber_switches:
+      valid_play_3s: true
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: interaction_count
+    display_name: 互动量
+    type: simple
+    definition: 统计周期内点赞、评论、收藏、分享行为次数合计
+    dimensions: [content_category, platform]
+    time_grains: [day, week, month]
+    owner_role: 内容运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: ad_impression_count
+    display_name: 广告曝光量
+    type: simple
+    definition: 统计周期内广告有效曝光次数（可见 ≥1 秒）
+    dimensions: [platform, content_category]
+    time_grains: [day, month]
+    owner_role: 商业化负责人
+    caliber_switches:
+      viewability_1s: true
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: ad_revenue
+    display_name: 广告收入
+    type: simple
+    definition: 统计周期内广告收入（按媒体侧口径确认，不含代理商返点）
+    dimensions: [platform, content_category]
+    time_grains: [day, month]
+    owner_role: 商业化负责人
+    caliber_switches:
+      include_agency_rebate: false
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: creator_income
+    display_name: 创作者分成收入
+    type: simple
+    definition: 统计周期内应付给创作者的流量分成 + 打赏 + 付费订阅分成合计
+    dimensions: [creator_tier]
+    time_grains: [month]
+    owner_role: 创作者运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: video_avg_play_duration
+    display_name: 视频人均播放时长
+    type: simple
+    definition: 视频内容的人均单条播放时长（秒），按有效播放折算
+    dimensions: [content_category]
+    time_grains: [week, month]
+    owner_role: 内容运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: session_count
+    display_name: 会话数
+    type: simple
+    definition: 统计周期内有效访问会话次数（间隔 ≥30 分钟切分）
+    dimensions: [platform]
+    time_grains: [day, week, month]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  # ============ 质量 ============
+  - name: next_day_retention
+    display_name: 次日留存率
+    type: ratio
+    definition: 新用户次日再次活跃的占比
+    dimensions: [traffic_source, platform]
+    time_grains: [day]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: retention_30d
+    display_name: 30 日留存率
+    type: ratio
+    definition: 新用户 30 日内再次活跃的占比
+    dimensions: [traffic_source]
+    time_grains: [month]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: avg_session_duration
+    display_name: 人均使用时长
+    type: ratio
+    definition: 总会话时长 / 会话数（秒）
+    dimensions: [platform, content_category]
+    time_grains: [day, week, month]
+    owner_role: 产品负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: content_completion_rate
+    display_name: 内容完播率
+    type: ratio
+    definition: 播放进度 ≥80% 的播放次数 / 有效播放次数（视频类核心质量）
+    dimensions: [content_category]
+    time_grains: [day, week]
+    owner_role: 内容运营负责人
+    caliber_switches:
+      completion_threshold_80: true
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: interaction_rate
+    display_name: 互动率
+    type: ratio
+    definition: 互动量 / 有效播放量
+    dimensions: [content_category, creator_tier]
+    time_grains: [day, week]
+    owner_role: 内容运营负责人
+    caliber_switches: {}
+    type_params:
+      numerator: interaction_count
+      denominator: total_play_count
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: share_rate
+    display_name: 分享率
+    type: ratio
+    definition: 分享次数 / 有效播放次数，衡量内容传播力
+    dimensions: [content_category]
+    time_grains: [week]
+    owner_role: 内容运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: creator_retention_90d
+    display_name: 创作者 90 日留存率
+    type: ratio
+    definition: 首发内容创作者 90 日内再次发布的占比，供给侧健康度核心
+    dimensions: [creator_tier]
+    time_grains: [month, quarter]
+    owner_role: 创作者运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: content_complaint_rate
+    display_name: 内容举报率
+    type: ratio
+    definition: 被举报内容数 / 过审内容数，内容安全与质量底线
+    dimensions: [content_category]
+    time_grains: [day, week]
+    owner_role: 内容安全负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: creator_active_rate
+    display_name: 创作者活跃率
+    type: ratio
+    definition: 统计周期内发布内容的创作者 / 存量注册创作者
+    dimensions: [creator_tier]
+    time_grains: [month]
+    owner_role: 创作者运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: csat_community
+    display_name: 社区满意度
+    type: simple
+    definition: 周期性调研的社区体验满意评分（1–5 均值）
+    dimensions: [platform]
+    time_grains: [quarter]
+    owner_role: 产品负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  # ============ 结构 ============
+  - name: category_top3_play_share
+    display_name: TOP3 品类播放占比
+    type: ratio
+    definition: 播放量最高三个品类的合计占比，衡量内容生态多样性
+    dimensions: [platform]
+    time_grains: [month]
+    owner_role: 内容运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: head_creator_content_share
+    display_name: 头部创作者内容占比
+    type: ratio
+    definition: 头部分层（TOP 5% 创作者）发布内容的播放占比，供给侧集中度
+    dimensions: [content_category]
+    time_grains: [month]
+    owner_role: 创作者运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: ugc_pgc_share
+    display_name: PGC 内容占比
+    type: ratio
+    definition: 机构/专业创作者内容的播放占比（其余为 UGC）
+    dimensions: [content_category]
+    time_grains: [month]
+    owner_role: 内容运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: recommend_traffic_share
+    display_name: 推荐流量占比
+    type: ratio
+    definition: 推荐分发带来的播放量 / 总播放量（其余为搜索、关注、直达）
+    dimensions: [platform]
+    time_grains: [month]
+    owner_role: 推荐负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: new_creator_content_share
+    display_name: 新创作者内容占比
+    type: ratio
+    definition: 注册 90 日内创作者发布内容的播放占比，供给侧新鲜度
+    dimensions: [content_category]
+    time_grains: [month]
+    owner_role: 创作者运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: ad_load_rate
+    display_name: 广告加载率
+    type: ratio
+    definition: 广告曝光次数 / 内容播放次数；用户体验与变现的关键权衡（健康线 ≤15%）
+    dimensions: [platform]
+    time_grains: [week, month]
+    owner_role: 商业化负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  # ============ 效率 ============
+  - name: arpu
+    display_name: 人均收入
+    display_name_en: Average Revenue Per User
+    type: ratio
+    definition: 广告收入 / 日活跃用户数（按日折算）
+    dimensions: [platform]
+    time_grains: [day, month]
+    owner_role: 商业化负责人
+    caliber_switches: {}
+    type_params:
+      numerator: ad_revenue
+      denominator: dau
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: rpm
+    display_name: 千次播放收入
+    type: derived
+    definition: 广告收入 × 1000 / 有效播放量，内容流量的变现效率
+    dimensions: [content_category]
+    time_grains: [day, month]
+    owner_role: 商业化负责人
+    caliber_switches: {}
+    type_params:
+      expr: "ad_revenue * 1000 / total_play_count"
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: ecpm
+    display_name: 广告千次曝光收益
+    display_name_en: effective CPM
+    type: ratio
+    definition: 广告收入 × 1000 / 广告有效曝光量
+    dimensions: [platform, content_category]
+    time_grains: [day, month]
+    owner_role: 商业化负责人
+    caliber_switches: {}
+    type_params:
+      expr: "ad_revenue * 1000 / ad_impression_count"
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: cost_per_dau
+    display_name: 单 DAU 基础成本
+    type: ratio
+    definition: （带宽 + 服务器 + CDN）成本 / 日活跃用户数
+    dimensions: [platform]
+    time_grains: [month]
+    owner_role: 技术负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: creator_income_share
+    display_name: 创作者分成比例
+    type: ratio
+    definition: 创作者分成收入 / 广告收入，供给侧激励投入强度
+    dimensions: [creator_tier]
+    time_grains: [month, quarter]
+    owner_role: 商业化负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: recommend_ctr
+    display_name: 推荐点击率
+    type: ratio
+    definition: 推荐曝光后点击进入内容的次数 / 推荐曝光次数
+    dimensions: [content_category]
+    time_grains: [day, week]
+    owner_role: 推荐负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: content_review_efficiency
+    display_name: 审核人均处理量
+    type: ratio
+    definition: 过审内容数 / 审核人力（人日），内容安全运营效率
+    dimensions: [content_category]
+    time_grains: [month]
+    owner_role: 内容安全负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  # ============ 旅程 ============
+  - name: impression_to_click_rate
+    display_name: 曝光点击率
+    type: ratio
+    definition: 内容曝光后点击进入的次数 / 曝光次数，标题封面吸引力
+    dimensions: [content_category, traffic_source]
+    time_grains: [day, week]
+    owner_role: 推荐负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: click_to_finish_rate
+    display_name: 点击完播率
+    type: ratio
+    definition: 点击进入后完成播放（≥80%）的占比，内容承接力
+    dimensions: [content_category]
+    time_grains: [day, week]
+    owner_role: 内容运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: play_to_interact_rate
+    display_name: 播放互动率
+    type: ratio
+    definition: 产生互动的播放次数 / 有效播放次数
+    dimensions: [content_category]
+    time_grains: [day, week]
+    owner_role: 内容运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: browse_to_publish_rate
+    display_name: 浏览到发布转化率
+    type: ratio
+    definition: 活跃用户中发布内容的占比，消费到创作的转化
+    dimensions: [creator_tier]
+    time_grains: [month]
+    owner_role: 创作者运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: first_publish_within_7d_rate
+    display_name: 新用户 7 日首发率
+    type: ratio
+    definition: 新注册用户 7 日内发布首条内容的占比
+    dimensions: [traffic_source]
+    time_grains: [week, month]
+    owner_role: 创作者运营负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: push_open_rate
+    display_name: 推送打开率
+    type: ratio
+    definition: 推送送达后 24 小时内打开的占比
+    dimensions: [platform]
+    time_grains: [week]
+    owner_role: 增长负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
+
+  - name: search_to_play_rate
+    display_name: 搜索到播放转化率
+    type: ratio
+    definition: 搜索后点击播放的次数 / 搜索次数
+    dimensions: [content_category]
+    time_grains: [week]
+    owner_role: 搜索负责人
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: content-community@0.1.0
