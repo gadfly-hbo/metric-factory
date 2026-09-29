@@ -3,3 +3,4 @@ dist/
 *.log
 .DS_Store
 .flow/state.json
+imports/
