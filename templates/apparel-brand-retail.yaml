@@ -1,0 +1,1591 @@
+# 服饰品牌零售 · 行业指标模板
+# 来源：某服饰品牌企业真实指标字典（944 指标）精选 72 个，口径经脱敏改写；生成脚本为一次性脚手架，本文件为唯一事实源
+template:
+  id: apparel-brand-retail
+  industry: 服饰品牌零售
+  business_models:
+    - 直营零售
+    - 加盟经销
+    - 电商全渠道
+  version: 0.1.0
+  references:
+    - 某服饰品牌企业指标字典（944 指标真实语料，2026-09 导出，脱敏改写）
+    - OneData 指标建模方法（阿里）
+    - 服装商品管理：售罄率 / OTB / 配发方法论
+matching:
+  revenue_models:
+    - 混合
+  user_structure:
+    - 2C
+  core_loops:
+    - 交易
+north_star:
+  candidates:
+    - metric: gmv
+      rationale: 全渠道零售规模，同时牵引直营、加盟、电商三盘生意
+    - metric: sell_through_rate
+      rationale: 商品效率北极星：服装季节性库存的变现速度，库存压力期的首选
+  decision_guide: 成长期品牌以 GMV 为规模北极星；库存与商品效率承压时以售罄率为效率北极星；加盟占比高时辅以经销毛利率观察渠道盈利质量
+trees:
+  - id: retail_scale
+    category: 规模
+    formula: gmv = traffic * conversion_rate * atv
+    children:
+      - gmv
+      - traffic
+      - conversion_rate
+      - atv
+      - terminal_sales
+      - retail_refund_amount
+      - retail_sales
+      - retail_volume
+      - order_count
+      - paid_amount
+      - store_traffic
+      - store_receipts
+      - store_conversion
+      - upt
+      - o2o_sales
+      - live_stream_sales
+      - new_store_count
+      - closed_store_count
+      - new_store_sales
+  - id: store_productivity
+    category: 效率
+    children:
+      - sales_per_sqm
+      - comparable_store_sales
+  - id: product_efficiency
+    category: 效率
+    formula: sell_through_rate = retail_value / (retail_value + inventory_value)
+    children:
+      - sell_through_rate
+      - cumulative_sell_through_rate
+      - inbound_sell_through_rate
+      - otb_sell_through_rate
+      - purchase_sell_through_rate
+      - new_product_sell_through_rate
+      - inventory_turnover_days
+      - coverage_rate
+      - tag_price
+      - retail_value
+      - retail_discount
+      - inventory_value
+      - on_hand_inventory_value
+      - cumulative_retail_value
+      - purchase_inbound_value
+      - allocation_value
+      - net_allocation_value
+  - id: member
+    category: 旅程
+    formula: member_sales_ratio = member_sales / retail_sales
+    children:
+      - member_sales
+      - member_sales_ratio
+      - repurchase_rate
+      - join_rate
+  - id: supply_quality
+    category: 质量
+    children:
+      - batch_achievement_rate
+      - delivery_achievement_rate
+      - launch_achievement_rate
+      - flexible_supply_days
+      - market_return_defect_rate
+      - supplier_return_defect_rate
+      - inbound_pass_rate
+      - final_inspection_pass_rate
+      - dev_effective_rate
+      - cost_deviation_rate
+  - id: logistics
+    category: 效率
+    children:
+      - outbound_pieces
+      - outbound_orders
+      - audit_lead_time
+      - outbound_lead_time
+      - handover_lead_time
+      - ship_lead_time
+      - pickup_lead_time
+      - pickup_sign_lead_time
+      - return_parcel_rate
+  - id: finance
+    formula: gross_margin = gross_profit / operating_revenue
+    children:
+      - operating_revenue
+      - gross_profit
+      - gross_margin
+      - total_profit
+      - profit_margin
+      - expense
+      - expense_ratio
+      - dealership_revenue
+      - dealership_cost
+      - dealership_gross_profit
+      - dealership_gross_margin
+dimensions:
+  - brand
+  - channel
+  - store
+  - region
+  - category
+  - product
+  - product_season
+  - product_year
+  - supplier
+  - warehouse
+  - member_tier
+metrics:
+  - name: gmv
+    display_name: GMV
+    display_name_en: Gross Merchandise Value
+    type: simple
+    definition: |-
+      店铺后台系统销售额统计值及手工录入数据。
+      【业务口径】店铺后台未减退款前销售额统计值，包含直营、加盟、电商等。
+      【关注点】
+      1、直播挂链、官旗O2O业绩归属电商
+      2、统计时间按照订单支付时间计算
+      3、含视同销售的一次性批发业务
+      4、部分特殊渠道（代运营等）的部分店铺用人工维护的方式获取
+      5、特卖渠道存在系数还原的特殊口径
+      6、仅支持店铺维度
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    caliber_switches:
+      deduct_refund: false
+      include_view_as_sale: true
+      include_o2o: true
+      include_live_stream: true
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: terminal_sales
+    display_name: 终端成交额
+    type: simple
+    definition: |-
+      店铺后台系统销售额统计值。
+      【业务口径】店铺后台未减退款前销售额统计值，包含直营、加盟、电商等。
+      【关注点】
+      1、直播挂链、官旗O2O业绩归属电商
+      2、统计时间按照订单支付时间计算
+      3、含视同销售的一次性批发业务
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: retail_refund_amount
+    display_name: 零售退款额
+    type: simple
+    definition: |-
+      店铺退款产生的金额。
+      【业务口径】包含未发货仅退款额、已发货仅退款额、退货退款额、拒收退货退款额、额外退款额。
+      【关注点】
+      1、直播挂链、官旗O2O退货业绩归属电商
+      2、统计时间按照订单支付时间计算
+      3、线下直营/加盟零售的退款归属退货退款
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: retail_sales
+    display_name: 零售额
+    type: derived
+    definition: |-
+      店铺后台系统销售额扣减退款后的实际销售金额。
+      【业务口径】口径与【终端成交额】【零售退款额】一致。
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    type_params:
+      expr: terminal_sales - retail_refund_amount
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: retail_volume
+    display_name: 零售量
+    type: simple
+    definition: |-
+      店铺后台系统销售量扣减退货后的实际销售数量。
+      【业务口径】口径与【终端成交量】【零售退款量】一致。
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: atv
+    display_name: 客单价
+    display_name_en: Average Transaction Value
+    type: ratio
+    definition: 线上：支付金额 / 支付买家数；线下：终端成交额 / 订单数。线上线下口径不同，全域汇总时按渠道分别计算后再加总。
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: order_count
+    display_name: 订单数
+    type: simple
+    definition: |-
+      买家提交的购买需求数，每笔需求里面产品数量不固定。
+      【业务口径】买家下单支付产生的订单数量（剔除退货）。
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: paid_amount
+    display_name: 支付金额
+    type: simple
+    definition: |-
+      买家拍下后通过第三方支付等方式支付的金额。
+      【业务口径】买家拍下后通过第三方支付等方式支付的金额，未剔除事后退款金额。
+      【关注点】
+      1、预售阶段付款在付清当天才计入内；
+      2、货到付款订单确认收货时计入内。
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: traffic
+    display_name: 客流量
+    type: simple
+    definition: |-
+      单位时间进入某个场所的人数。
+      【业务口径】线下：通过客流计数器统计到的进店人次；
+      线上：按日去重的店铺访问人数。
+      【关注点】
+      1、数据中未筛选线上或线下，则为全域客流量，即线上与线下合计数
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: conversion_rate
+    display_name: 客流转化率
+    type: ratio
+    definition: |-
+      进店客流中，最后能成功下单的比例。
+      【业务口径】口径与【订单数】【支付买家数】【客流量】一致。
+      【关注点】
+      1、计算线上客流转化率时，客流量指线上按日去重的店铺访问人数；计算线下客流转化率时，客流量指通过客流计数器统计到的进店人次。
+      2、数据中未筛选线上或线下，则为全域客流量转化率，即（订单数+支付买家数）/（线上客流量+线下客流量）
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: store_traffic
+    display_name: 门店客流量
+    type: simple
+    definition: 门店级：线下有客流计数器且门店转化率在1%到50%之间的门店的客流数；汇总级：预估门店客流量=门店订单数/门店转化率
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: store_receipts
+    display_name: 门店小票数
+    type: simple
+    definition: 销售结构为实体门店的小票数汇总（除去退款及退货交易订单）
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: store_conversion
+    display_name: 门店转化率
+    type: ratio
+    definition: 门店小票数 / 门店客流量
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    type_params:
+      numerator: store_receipts
+      denominator: store_traffic
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: upt
+    display_name: 门店连带率
+    display_name_en: Units Per Transaction
+    type: ratio
+    definition: 门店零售量 / 门店小票数
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    type_params:
+      numerator: retail_volume
+      denominator: store_receipts
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: o2o_sales
+    display_name: O2O零售额
+    type: simple
+    definition: O2O扣减退款后的实际销售金额
+      O2O统计口径：接单店铺的消费者触点为“线上门店”且发货仓库的仓库类型为“门店仓”，定义为O2O备注：1、极速退无发货仓库的订单，非O2O2、零售数据分析场景（常用表举例：HANA的全域零售表，自助分析工具的全域汇总销退），
+      O2O归属接单店铺，零售数量不包含退货数量3、线下门店商品分析场景，为了进销存数据咬合，线下门店的零售数量需要包含O2O；如果门店仓发货后如果出现退货，有2种退货链路：3.1、退回公司总仓：线下门店的零售数量需要包含O2O发货数量3.2、退回门店仓：线下门店的零售数量需要包含O2O零售数量（O2O零售数量
+      = O2O发货数量 - O2O退货数量）
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: live_stream_sales
+    display_name: 直播挂链零售额
+    type: simple
+    definition: 直播挂链扣减退款后的实际销售金额
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: new_store_count
+    display_name: 区间新店数
+    type: simple
+    definition: |-
+      在统计时间区间内新开店的数量。
+      【关注点】：
+      1、新开店定义为门店首次零售时间在统计的时间段内；
+      2、门店数量统计渠道类型仅包含购物中心、街边店、奥莱、百货、超市、母婴、学校
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - month
+      - quarter
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: closed_store_count
+    display_name: 区间闭店数
+    type: simple
+    definition: |-
+      在统计时间区间内新闭店的数量。
+      【关注点】：
+      1、闭店定义为满足以下条件二选一：
+      ①门店最后一次产生销售的时间距离统计结束时间超过2个月，视为关店；
+      ②门店最后一次产生销售时间在近2个月，且主数据关店时间<=统计结束时间，视为关店。
+      2、门店数量统计渠道类型仅包含购物中心、街边店、奥莱、百货、超市、母婴、学校
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - month
+      - quarter
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: new_store_sales
+    display_name: 区间新店零售额
+    type: simple
+    definition: 统计时间区间内新开门店在当前时间区间的零售额。
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - month
+      - quarter
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: sales_per_sqm
+    display_name: 门店平效
+    type: ratio
+    definition: |-
+      门店每平米的销售额（默认年平效）。
+      【业务口径】口径与【零售额】一致
+      【关注点】
+      1、门店的营业面积是门店主数据中记录的面积数。
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - month
+      - quarter
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: comparable_store_sales
+    display_name: 可比店零售额
+    display_name_en: Comparable Store Sales
+    type: simple
+    definition: |-
+      可比门店的零售金额。
+      【业务口径】可比店指按照时间维度对店铺进行（年可比，季可比，月可比，周可比，日可比）打标，并计算对应标签的零售额。
+    dimensions:
+      - brand
+      - channel
+      - store
+      - region
+    time_grains:
+      - day
+      - week
+      - month
+    owner_role: 零售业务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: tag_price
+    display_name: 吊牌价
+    type: simple
+    definition: 商品主数据中记录的吊牌价格（零售标签价），是市值类指标（零售市值、库存市值、配发市值）的计价基准，不含实际成交折扣。
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 商品负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: retail_value
+    display_name: 零售市值
+    type: derived
+    definition: |-
+      店铺后台系统销售量扣减退货后的实际销售商品的市值。
+      【业务口径】口径与【零售量】一致。
+      【关注点】
+      1、商品吊牌价是商品主数据中记录的吊牌价格。
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 商品负责人
+    type_params:
+      expr: retail_volume * tag_price
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: retail_discount
+    display_name: 终端零售折扣
+    type: derived
+    definition: 统计时间内，终端零售额/终端零售市值
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 经营分析
+    type_params:
+      expr: retail_sales / (retail_volume * tag_price)
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: inventory_value
+    display_name: 库存市值
+    type: simple
+    definition: |-
+      所选时间点的在库库存市值。
+      【业务口径】口径与【库存量】一致，即当取加盟库存时限定商品年份>=所选结束年份-2。
+      【关注点】
+      1、商品吊牌价是商品主数据中记录的吊牌价格。
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 商品负责人
+    caliber_switches:
+      include_franchise_inventory: true
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: on_hand_inventory_value
+    display_name: 在手库存市值
+    type: simple
+    definition: |-
+      所选时间点已经在手的存货数市值
+      【业务口径】口径与【在手库存量】一致。
+      【关注点】
+      1、商品吊牌价是商品主数据中记录的吊牌价格
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 商品负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: cumulative_retail_value
+    display_name: 累销市值
+    type: simple
+    definition: 从约定的开始日期到截止日期内，净销量*吊牌价的金额
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 经营分析
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: purchase_inbound_value
+    display_name: 采购入库市值
+    type: simple
+    definition: |-
+      统计周期内，SAP采购入库的货品数量 * 吊牌价
+      【业务口径】统计周期内，采购入库数量*吊牌价
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 经营分析
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: allocation_value
+    display_name: 配发市值
+    type: simple
+    definition: |-
+      总仓对加盟经销商的销售出库的商品市值。
+      【业务口径】口径与【配发量】一致
+      【关注点】
+      1、商品吊牌价是商品主数据中记录的吊牌价格。
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 商品负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: net_allocation_value
+    display_name: 净配发市值
+    type: simple
+    definition: 统计周期内，运营模式为“加盟”的配发市值 - 配发退货数量*吊牌价，注，自助分析工具默认线下全部配发，不限定运营模式
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 经营分析
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: sell_through_rate
+    display_name: 商品售罄率
+    display_name_en: Sell-through Rate
+    type: derived
+    definition: |-
+      商品的零售市值占总进货市值的比例。
+      【业务口径】口径与【零售市值】、【库存市值】一致。
+      【关注点】
+      1、零售市值指所选时间段的零售市值，库存市值指所选时间段期末的库存市值。
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 商品负责人
+    type_params:
+      expr: retail_value / (retail_value + inventory_value)
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: cumulative_sell_through_rate
+    display_name: 累计商品售罄率
+    type: derived
+    definition: |-
+      商品的累计零售市值占总进货市值的比例
+      【业务口径】口径与【累计零售市值】、【门店在手库存市值】、【门店在途库存市值】一致。
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 商品负责人
+    caliber_switches:
+      include_in_transit_inventory: true
+    type_params:
+      expr: cumulative_retail_value / (cumulative_retail_value +
+        on_hand_inventory_value)
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: inbound_sell_through_rate
+    display_name: 入库售罄率
+    type: derived
+    definition: >-
+      单一产品季，累计零售市值占公司累计采购市值的比例。
+
+      【业务口径】口径与【零售市值】【采购入库市值】一致。截止统计结束时间，限定单一产品季使用，通常用于商品维度分析。
+
+      【关注点】
+
+      1、默认累计零售市值，累计采购入库市值；若取某时间段的零售市值，指标名称需增加后缀。例如：入库售罄率(周)=周间零售市值 / 采购入库市值累计值
+      *100%。
+
+      2、由于线下电商仓之间的存在调拨等业务，故此指标不建议区分线下电商使用；若要大致区分线下电商，O2O业绩需算在线下。
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 商品负责人
+    type_params:
+      expr: cumulative_retail_value / purchase_inbound_value
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: otb_sell_through_rate
+    display_name: OTB售罄率
+    type: derived
+    definition: |-
+      新品季，累计零售市值占OTB的比例
+      【业务口径】口径与【零售市值】、【OTB】、【采购入库市值】一致。
+      【关注点】
+      1、限定单一产品季后使用，使用时只需要指定结束日期
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 商品负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: purchase_sell_through_rate
+    display_name: 采购售罄率
+    type: derived
+    definition: |-
+      新品季，累计零售市值占公司累计采购市值的比例
+      【业务口径】口径与【零售市值】、【采购下单市值】、【采购入库市值】一致。
+      【关注点】
+      1、限定单一产品季后使用，使用时只需要指定结束日期
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 商品负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: new_product_sell_through_rate
+    display_name: 新品配发售罄率
+    type: derived
+    definition: 新品零售市值累计值 / 新品净配发市值累计值 *100%
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 商品负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: inventory_turnover_days
+    display_name: 库存周转天数
+    display_name_en: Inventory Turnover Days
+    type: derived
+    definition: >-
+      企业将当前库存全部售出所需要的天数。
+
+      【业务口径】口径与【库存市值】【零售市值】一致。其中12个月零售市值平均值 = SUM(近12个月累计零售市值) /
+      12，不含未结束月；12个月库存市值 平均值= SUM(近12个月的每月期末库存市值 ) / 12。
+
+      【关注点】
+
+      1、计算渠道(电商、加盟、直营)库存周转天数的时候，线下零售市值包含O2O , 电商零售市值不含O2O；
+
+      2、彪马、亚瑟士商品年份的限定条件:商品年份>=所选结束年份-3，其余品牌限定：商品年份 >= 所选结束年份 - 2。
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 商品负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: coverage_rate
+    display_name: 覆盖率
+    type: ratio
+    definition: |-
+      针对单款/款色，覆盖率 = 在手门店数 / 总门店数
+      其中在手门店数：（7天或14天内）有零售或有库存的门店数；
+      总门店数：当前在营的总门店数；
+      【关注点】
+      门店数的统计需满足以下3项：
+      1.消费者触点为线下门店
+      2.运营模式为直营/加盟
+      3.渠道类型在（街边店、购物中心、奥特莱斯、百货、超市、母婴、学校）中的门店
+    dimensions:
+      - brand
+      - product
+      - category
+      - product_season
+      - product_year
+      - store
+    time_grains:
+      - week
+      - month
+    owner_role: 商品负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: member_sales
+    display_name: 会员零售额
+    type: simple
+    definition: |-
+      会员订单净销额
+      【业务口径】统计周期内 统计维度下，会员零售额进行汇总
+    dimensions:
+      - brand
+      - channel
+      - store
+      - member_tier
+      - region
+    time_grains:
+      - month
+      - quarter
+    owner_role: 会员运营负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: member_sales_ratio
+    display_name: 会销比
+    type: ratio
+    definition: |-
+      会员销额与零售额的百分比。
+      【业务口径】口径与【零售额】【会员销额】一致。
+    dimensions:
+      - brand
+      - channel
+      - store
+      - member_tier
+      - region
+    time_grains:
+      - month
+      - quarter
+    owner_role: 会员运营负责人
+    type_params:
+      numerator: member_sales
+      denominator: retail_sales
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: repurchase_rate
+    display_name: 复购率
+    type: ratio
+    definition: |-
+      筛选日期内，购买（天）次数在2次及以上的买家数（去重）占全部买家数（去重）的比例（部分外部平台加密客户数据后无法计算）
+      【业务口径】筛选日期内，购买（天）次数在2次及以上的买家数（去重）占全部买家数（去重）的比例
+    dimensions:
+      - brand
+      - channel
+      - store
+      - member_tier
+      - region
+    time_grains:
+      - month
+      - quarter
+    owner_role: 经营分析
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: join_rate
+    display_name: 入会率
+    type: ratio
+    definition: |-
+      会员开卡人数/(零售小票数-总会员销售订单数+会员开卡人数)
+      【业务口径】会员开卡人数/(非会员订单数+会员开卡人数)
+    dimensions:
+      - brand
+      - channel
+      - store
+      - member_tier
+      - region
+    time_grains:
+      - month
+      - quarter
+    owner_role: 会员运营负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: batch_achievement_rate
+    display_name: 批次达成率
+    type: ratio
+    definition: 按期交货的订单达成率
+    dimensions:
+      - supplier
+      - product
+      - category
+    time_grains:
+      - month
+      - quarter
+    owner_role: 供应链负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: delivery_achievement_rate
+    display_name: 货期达成率
+    type: ratio
+    definition: 产品按合同货期达成的比例；注：单订单前置交付95%以上，（含货期修正过）算批次达成
+    dimensions:
+      - supplier
+      - product
+      - category
+    time_grains:
+      - month
+      - quarter
+    owner_role: 供应链负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: launch_achievement_rate
+    display_name: 上市达成率
+    type: ratio
+    definition: 产品按上市日期达成的比例；注：单订单按期达成95%以上，算批次达成
+    dimensions:
+      - supplier
+      - product
+      - category
+    time_grains:
+      - month
+      - quarter
+    owner_role: 供应链负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: flexible_supply_days
+    display_name: 柔供天数
+    type: simple
+    definition: 柔性订单（生产阶段：加翻单）的平均交付周期
+    dimensions:
+      - supplier
+      - product
+      - category
+    time_grains:
+      - month
+      - quarter
+    owner_role: 供应链负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: market_return_defect_rate
+    display_name: 终端市场退疵率
+    type: ratio
+    definition: 商品售出后由于各种原因被退回的数量与同期发货数量之间的比率，包含FQC、QC、供应商、免检、整体
+    dimensions:
+      - supplier
+      - product
+      - category
+    time_grains:
+      - month
+      - quarter
+    owner_role: 供应链负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: supplier_return_defect_rate
+    display_name: 供应商责任退疵率
+    type: ratio
+    definition: 供应商责任退疵数量占整体配发数量比例
+    dimensions:
+      - supplier
+      - product
+      - category
+    time_grains:
+      - month
+      - quarter
+    owner_role: 供应链负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: inbound_pass_rate
+    display_name: 入仓合格率
+    type: ratio
+    definition: 到货入仓时检验合格数量占入库总数量的比例；与「入仓抽检合格率」（抽检样本口径）、「尾检一次通过率」（成衣尾检批次口径）区分使用。
+    dimensions:
+      - supplier
+      - product
+      - category
+    time_grains:
+      - month
+      - quarter
+    owner_role: 供应链负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: final_inspection_pass_rate
+    display_name: 尾检一次通过率
+    type: ratio
+    definition: 按批次进行尾检，尾检一次通过的合格率
+    dimensions:
+      - supplier
+      - product
+      - category
+    time_grains:
+      - month
+      - quarter
+    owner_role: 供应链负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: dev_effective_rate
+    display_name: 开发有效率
+    type: ratio
+    definition: 在一定时间内开发的产品款数与保留下来的大货产品款数之间的比率
+    dimensions:
+      - supplier
+      - product
+      - category
+    time_grains:
+      - month
+      - quarter
+    owner_role: 商品负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: cost_deviation_rate
+    display_name: 成本偏差率
+    type: ratio
+    definition: 大货采购费用与核价标准成本费用的偏差率
+    dimensions:
+      - supplier
+      - product
+      - category
+    time_grains:
+      - month
+      - quarter
+    owner_role: 供应链负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: outbound_pieces
+    display_name: 出库件数
+    type: simple
+    definition: |-
+      指从仓库中发出的商品数量。
+      【业务口径】筛选条件下，商品件数直接汇总，取已完结的订单
+    dimensions:
+      - warehouse
+      - brand
+      - channel
+    time_grains:
+      - day
+      - week
+    owner_role: 物流负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: outbound_orders
+    display_name: 出库单数
+    type: simple
+    definition: |-
+      指商品从仓库出库的单据数量。每一次商品出库，都需要填写一份出库单，记录商品的名称、数量、出库时间、接收方等信息。出库单数可以反映出仓库的出货量和出货频率。
+      【业务口径】筛选条件下，按WMS单号进行去重
+    dimensions:
+      - warehouse
+      - brand
+      - channel
+    time_grains:
+      - day
+      - week
+    owner_role: 物流负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: audit_lead_time
+    display_name: 审单时效
+    type: simple
+    definition: |-
+      指的是从支付到wms创建所需的时间。
+      【业务口径】WMS【发运订单表】创建时间-支付时间
+    dimensions:
+      - warehouse
+      - brand
+      - channel
+    time_grains:
+      - day
+      - week
+    owner_role: 物流负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: outbound_lead_time
+    display_name: 出库时效
+    type: simple
+    definition: |-
+      指的是从接到订单到商品离开仓库（即完成出库）所需的时间。这个指标反映了仓库处理订单的速度和效率，是衡量物流服务水平的重要指标之一。
+      【业务口径】WMS【发运订单表】发货时间-创建时间
+    dimensions:
+      - warehouse
+      - brand
+      - channel
+    time_grains:
+      - day
+      - week
+    owner_role: 物流负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: handover_lead_time
+    display_name: 交接时效
+    type: simple
+    definition: |-
+      指的是从复核出库到快递交接所需的时间。
+      【业务口径】WMS【发运订单表】快递交接时间-发货时间
+    dimensions:
+      - warehouse
+      - brand
+      - channel
+    time_grains:
+      - day
+      - week
+    owner_role: 物流负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: ship_lead_time
+    display_name: 发货时效
+    type: simple
+    definition: |-
+      指的是从支付到复核出库所需的时间。
+      【业务口径】WMS【发运订单表】发货时间-支付时间
+    dimensions:
+      - warehouse
+      - brand
+      - channel
+    time_grains:
+      - day
+      - week
+    owner_role: 物流负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: pickup_lead_time
+    display_name: 揽收时效
+    type: simple
+    definition: |-
+      指包裹从快递交接到快递公司进行揽收的时长
+      【业务口径】TMS揽收时间-TMS快递交接时间
+    dimensions:
+      - warehouse
+      - brand
+      - channel
+    time_grains:
+      - day
+      - week
+    owner_role: 物流负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: pickup_sign_lead_time
+    display_name: 揽签时效
+    type: simple
+    definition: |-
+      指包裹从快递揽收到签收的时长
+      【业务口径】TMS签收时间-TMS揽收时间
+    dimensions:
+      - warehouse
+      - brand
+      - channel
+    time_grains:
+      - day
+      - week
+    owner_role: 物流负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: return_parcel_rate
+    display_name: 退件率
+    type: ratio
+    definition: |-
+      指的是在所有订单中，完整退款的订单所占的比例。整单退款通常发生在顾客因为某种原因不满意整个订单中的所有商品，并决定将整个订单中的商品全部退回并要求退款。
+      【业务口径】筛选条件范围内的退货件数/出库件数*100%，
+
+      备注：按支付时间来统计
+    dimensions:
+      - warehouse
+      - brand
+      - channel
+    time_grains:
+      - day
+      - week
+    owner_role: 物流负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: operating_revenue
+    display_name: 营业收入
+    type: simple
+    definition: |-
+      营业收入是指在一定时期内，企业从事主营业务或其他业务所取得的货币收入。
+      【业务口径】不同运营模式的不含税收入。加盟店：扣减退货、扣减返利；直营店：零售收入；线上：零售收入；其他业务收入；联营门店收入。
+    dimensions:
+      - brand
+      - channel
+    time_grains:
+      - month
+      - quarter
+    owner_role: 财务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: gross_profit
+    display_name: 毛利额
+    type: simple
+    definition: |-
+      毛利额是指企业销售收入扣除主营业务的直接成本后的利润。
+      【业务口径】营业收入口径同【营业收入】一致。
+      营业成本指销售商品产生收入对应的货品成本，不包括企业的管理费用、财务费用、销售费用、税收等。
+    dimensions:
+      - brand
+      - channel
+    time_grains:
+      - month
+      - quarter
+    owner_role: 财务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: gross_margin
+    display_name: 毛利率
+    type: ratio
+    definition: |-
+      毛利率是财务毛利额占营业收入的百分比，其中财务毛利额是收入和与收入相对应的营业成本之间的差额。
+      【业务口径】口径与【毛利额】【营业收入】一致。
+    dimensions:
+      - brand
+      - channel
+    time_grains:
+      - month
+      - quarter
+    owner_role: 财务负责人
+    type_params:
+      numerator: gross_profit
+      denominator: operating_revenue
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: total_profit
+    display_name: 利润总额
+    type: simple
+    definition: |-
+      企业在一定时期内通过生产经营活动所实现的最终财务成果。
+      【业务口径】指一定会计期间的经营成果，是生产经营过程中各种收入扣除各种耗费后的盈余，反映核算主体在报告期内实现的盈亏总额。
+    dimensions:
+      - brand
+      - channel
+    time_grains:
+      - month
+      - quarter
+    owner_role: 财务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: profit_margin
+    display_name: 利润率
+    type: ratio
+    definition: |-
+      利润总额占营业收入的比例。
+      【业务口径】口径与【利润额】【营业收入】一致。
+    dimensions:
+      - brand
+      - channel
+    time_grains:
+      - month
+      - quarter
+    owner_role: 财务负责人
+    type_params:
+      numerator: total_profit
+      denominator: operating_revenue
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: expense
+    display_name: 费用
+    type: simple
+    definition: |-
+      指企业销售商品、提供劳务的过程中发生的各种费用，以及为组织和管理生产经营活动而发生的各种费用。
+      【业务口径】公司所有系统部门组织的日常运营费用合计，不含财务费用(财务费用包含税金及附加费用，存跌，政府补贴等)。
+    dimensions:
+      - brand
+      - channel
+    time_grains:
+      - month
+      - quarter
+    owner_role: 财务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: expense_ratio
+    display_name: 费用率
+    type: ratio
+    definition: |-
+      费用占营业收入的比例。
+      【业务口径】口径与【费用】【营业收入】一致。
+    dimensions:
+      - brand
+      - channel
+    time_grains:
+      - month
+      - quarter
+    owner_role: 财务负责人
+    type_params:
+      numerator: expense
+      denominator: operating_revenue
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: dealership_revenue
+    display_name: 经销收入
+    type: derived
+    definition: 经销（加盟批发）收入 = 零售额 / 1.13，按 13% 增值税作价税分离（适用于一般纳税人服饰经销场景）；适用税率不同时按实际税率换算。
+    dimensions:
+      - brand
+      - channel
+    time_grains:
+      - month
+      - quarter
+    owner_role: 财务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: dealership_cost
+    display_name: 经销成本
+    type: simple
+    definition: 商品不含税配发单价 * 零售量
+    dimensions:
+      - brand
+      - channel
+    time_grains:
+      - month
+      - quarter
+    owner_role: 财务负责人
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: dealership_gross_profit
+    display_name: 经销毛利额
+    type: derived
+    definition: 经销收入 - 经销成本
+    dimensions:
+      - brand
+      - channel
+    time_grains:
+      - month
+      - quarter
+    owner_role: 财务负责人
+    type_params:
+      expr: dealership_revenue - dealership_cost
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+  - name: dealership_gross_margin
+    display_name: 经销毛利率
+    type: ratio
+    definition: 经销毛利额 / 经销收入
+    dimensions:
+      - brand
+      - channel
+    time_grains:
+      - month
+      - quarter
+    owner_role: 财务负责人
+    type_params:
+      numerator: dealership_gross_profit
+      denominator: dealership_revenue
+    provenance:
+      origin: template
+      template_ref: apparel-brand-retail@0.1.0
+      note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）

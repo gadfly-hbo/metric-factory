@@ -14,7 +14,7 @@
     "build": "tsup",
     "test": "npm run build && vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "node dist/cli.js lint templates/ecommerce-marketplace.yaml templates/saas-subscription.yaml templates/content-community.yaml templates/digital-marketing.yaml templates/supply-chain-logistics.yaml templates/cloud-cost.yaml",
+    "lint": "node dist/cli.js lint templates/ecommerce-marketplace.yaml templates/saas-subscription.yaml templates/content-community.yaml templates/digital-marketing.yaml templates/supply-chain-logistics.yaml templates/cloud-cost.yaml templates/apparel-brand-retail.yaml",
     "prelint": "npm run build",
     "contract-test": "vitest run test/contracts",
     "precontract-test": "npm run build"

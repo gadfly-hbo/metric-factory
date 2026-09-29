@@ -17,7 +17,8 @@ const NEW_TEMPLATES = [
   { file: "content-community.yaml", id: "content-community", ref: "content-community@0.1.0", answers: "content-answers.yaml" },
   { file: "digital-marketing.yaml", id: "digital-marketing", ref: "digital-marketing@0.1.0", answers: "marketing-answers.yaml" },
   { file: "supply-chain-logistics.yaml", id: "supply-chain-logistics", ref: "supply-chain-logistics@0.1.0", answers: "supply-chain-answers.yaml" },
-  { file: "cloud-cost.yaml", id: "cloud-cost", ref: "cloud-cost@0.1.0", answers: "cloud-cost-answers.yaml" }
+  { file: "cloud-cost.yaml", id: "cloud-cost", ref: "cloud-cost@0.1.0", answers: "cloud-cost-answers.yaml" },
+  { file: "apparel-brand-retail.yaml", id: "apparel-brand-retail", ref: "apparel-brand-retail@0.1.0", answers: "apparel-answers.yaml" }
 ] as const;
 
 test.each(NEW_TEMPLATES)("模板质量：$file ≥40 指标且口径完整、引用一致", async ({ file, ref }) => {
