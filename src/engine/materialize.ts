@@ -1,5 +1,6 @@
 import type { Template, Metric } from "../schema/template.js";
 import type { Instance } from "../schema/instance.js";
+import type { MappingEntry } from "../schema/mapping.js";
 
 export interface CaliberChange {
   metric: string;
@@ -24,6 +25,8 @@ export interface MaterializedInstance {
   north_star: Template["north_star"];
   dimensions: string[];
   diff: InstanceDiff;
+  /** 已确认的数仓映射（CLI export 装配；导出器用真实模型/列名替换占位） */
+  mapping?: MappingEntry[];
 }
 
 // fork + diff patch 的物化：模板指标 → 应用删除/修改/口径覆盖 → 追加新增

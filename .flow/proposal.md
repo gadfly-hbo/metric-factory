@@ -1,45 +1,38 @@
-# Metric Factory · v2 方案（LLM 设计器）
+# Metric Factory · v3 方案（落地闭环）
 
-> 本 flow 的规格源。上游根规格：仓库根 PRODUCT_PLAN.md（v0.1）第 5 节 v2 段与第 7 节 v2 验收。
-> MVP（模板 + 向导 + 导出闭环）已于 2026-09-28 交付（commit 0ad90aa），其决策继续有效。
+> 本 flow 的规格源。上游根规格：仓库根 PRODUCT_PLAN.md（v0.1）第 4.2 节 P3 段与第 5 节 v3 段。
+> MVP（commit 0ad90aa）与 v2 LLM 设计器（commit 1e6eda3）已交付，其决策继续有效。
 
 ## 目标
 
-把 PRODUCT_PLAN v2 段落地：**LLM 设计器**——AI 出初稿、人当守门员，四件套：
+把 PRODUCT_PLAN v3 段（落地闭环）落地，三件套：
 
-1. **LLM 生成器**：自然语言描述业务 → 基于「模板 RAG」（锚定 L2 模板与已审核实例）生成候选指标 → 结构化 diff 展示 → 写入实例（added 段，provenance.origin=llm + 模型 + prompt 版本，强制 review.required=true）
-2. **人工审核流（review 命令）**：列出待审 LLM 指标 → 逐条批准（写 reviewed_by）或拒绝（移除）；未审核不可导出（fail-closed，MVP 已有地基，本 flow 补全闭环）
-3. **MCP server**：以 MCP 协议暴露「设计（generate）/ 审计（audit）/ 微调（refine）」能力，Claude 等 agent 一等公民调用
-4. **指标审计命令（audit）**：对实例跑「口径完整性 / 虚荣指标」检查（吸收开源 north-star 的 audit 思路），输出可执行的问题清单
-
-**模板库扩产**：5–6 行业（现 2 个：电商交易平台、SaaS 订阅），候选方向参照 Kyligence Zen 行业带：内容社区/App、数字营销/广告、供应链物流、云成本；每个 ≥40 指标、含完整口径与出处；建立模板 PR 评审流程（lint 门 + 评审清单）。
+1. **数仓反推与字段映射（map 命令族）**：读取 dbt manifest.json（优先；information schema 后置）→ 发现已有模型与字段 → 推荐「指标 → 模型字段」映射（AI 推荐 + 人工 Review 门，与 v2 审核流同构）→ 产出映射文件与「模板指标 vs 企业现状」差距清单（已映射 / 可映射未映射 / 数仓无对应物三类）。映射落定后，**MetricFlow 导出从占位 semantic model 升级为真实模型引用**——补上「设计态 → 定义态」的最后一公里。
+2. **埋点建议与事件 schema 生成（track 命令）**：从实例的旅程类指标 + 维度推导埋点/事件清单与事件 schema（JSON），输出「指标 → 事件 → 字段」的采集建议，与字段映射形成「有数可算」的闭环。
+3. **Web UI（ui 命令，本地优先）**：模板浏览 / 指标树可视化编辑（写回实例 patch）/ 审核流（LLM 待审指标批准拒绝）。定位是「壳不是核」（proposal 3.3）：所有写操作走既有引擎（与 CLI 同一 fail-closed 语义），Web UI 不引入新的业务规则。
 
 ## 验收（可执行部分）
 
-- LLM 生成候选 100% 带 provenance（origin=llm + model + prompt_version），无出处无法写入
-- 未审核 LLM 指标导出被阻断（MVP 已有测试，本 flow 扩展到 review 后放行的全链路）
-- 生成的候选经 schema 校验 + 模板锚定（引用的 type_params/维度在实例域内合法）
-- audit 命令对构造的坏实例输出分类问题清单（口径缺失/虚荣指标/无归口）
-- MCP server 可被标准 MCP 客户端握手并列出工具（测试以 SDK in-process client 验证）
-- 模板新增行业过 lint + 模板质量测试（≥40 指标口径完整）
+- `metric-factory map <instance> --manifest <dbt manifest.json>`：产出映射草案（每指标含推荐模型.字段 + 置信度 + 理由），`--apply` 经确认写映射文件；差距清单三类齐备
+- 映射完成后 `export --format metricflow` 的 semantic model 引用真实 dbt 模型与列名（契约测试升级：导出物 `model.ref` ∈ manifest 模型名集合、measure.expr ∈ 模型列名集合）
+- `metric-factory track <instance>`：产出事件清单（名称/触发时机/属性 schema JSON/对应指标），旅程类指标全覆盖
+- `metric-factory ui`：本地起服务，浏览器可浏览六模板、可视化查看指标树、对待审 LLM 指标执行批准/拒绝（写回实例文件）；树编辑器可增删改实例 patch 并写回
+- 全部写路径复用引擎（validate 门、fail-closed、provenance），Web UI 无旁路
+- 真实 dbt manifest 为夹具驱动（fixture manifest 结构对齐 dbt 1.8+ artifacts schema）；真实数仓连接不在本期
 
-**运行时指标（开发期不可验证，发布后度量）**：LLM 生成指标人工审核采纳率 ≥60%；外部模板 PR ≥3 个。
+**运行时指标（开发期不可验证）**：映射采纳率、UI 周活、埋点建议直接采用率。
 
 ## 约束与既有决策（继续有效）
 
-- 技术栈：TypeScript / Node ≥20 ESM；测试 vitest；不引入网络依赖进测试（LLM 用 faux/fake provider，真实调用由环境变量配置）
-- **agent runtime / 模型访问统一参考** `~/.zcode/workspace/default/juanerai-pi-agent-foundation-plan.md`（用户指令，2026-09-29）：
-  - 模型访问走 pi-ai（`@earendil-works/pi-ai`，公共 npm 0.87.1），全部 pi 依赖收敛到单一适配模块，禁止业务代码直接 import pi 包
-  - v2 所有 LLM 调用为**工人模式**（单次结构化调用 + schema 校验 + fail-closed 门，模型不握方向盘）；不引入 agent 循环（runAgentLoop 属未来「拴绳主导」场景，按参考方案阶段 2 路径再引入）
-  - 测试用 pi-ai faux provider；版本钉死 0.87.x，升级走专项（changelog → 夹具回放全绿 → 统一升）
-- fail-closed 永不放松：任何路径写入的 LLM 指标必须走 provenance + review 门
-- Web UI 仍属 v3，本 flow 不做前端
-- 测试接缝沿用 MVP 确认过的：CLI 进程边界为主接缝 + 纯函数低层（生成器 prompt 构造、审计规则、RAG 检索）
-- 双机同步：origin = github.com/gadfly-hbo/metric-factory.git；sync.targets = macbook:/Users/huangbo/Dev/Projects/metric-factory（已配置；SHIP 时走 commit → push → fail-closed fast-forward 同步）
+- 技术栈：TypeScript / Node ≥20 ESM；测试 vitest；零网络进测试（映射推荐用确定性规则引擎 + 可选 LLM 增强，测试走规则路径）
+- fail-closed 永不放松；provenance 链完整；映射推荐同样走「AI/规则出草案 → 人确认」
+- LLM 访问沿用 v2 的 pi-ai 适配层（src/llm/，业务代码零 pi import）
+- **Web UI 视觉规范**：遵循全局设计规范 `~/.zcode/design/DESIGN.md`（JuanerAI Xanthil 暖灰青工作台设计语言）——动手做 UI 视觉决策前必读；本项目无自己的 DESIGN.md，全局规范为默认基线
+- Web UI 技术形态后置到 GRILL 决议（倾向：无构建步骤的本地服务端渲染 + 渐进增强，服务 node dist/cli.js ui 一条命令启动；不引入重型前端框架）
+- 双机同步：origin = github.com/gadfly-hbo/metric-factory.git；sync.targets = macbook:/Users/huangbo/Dev/Projects/metric-factory
 
-## 开放问题（GRILL 处理）
+## 非目标（本 flow 不做）
 
-- 真实 LLM provider 选型（OpenAI 兼容接口 / Anthropic / 可配置多 provider）
-- RAG 的实现层次（全模板注入上下文 vs 关键词检索；嵌入检索是否引入）
-- audit 的虚荣指标判定规则集
-- 新增 4 个行业模板的优先级排序
+- information schema 直连数仓 / 反向 ETL（PRODUCT_PLAN P3 只说 dbt manifest 优先，直连后置）
+- 多用户 / 权限 / 云端部署（本地单用户工具）
+- 移动端适配

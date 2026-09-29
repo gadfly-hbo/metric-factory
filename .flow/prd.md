@@ -1,110 +1,101 @@
-# Metric Factory v2 · PRD（LLM 设计器）
+# Metric Factory v3 · PRD（落地闭环）
 
 > 规格源：`.flow/proposal.md` + `.flow/red-team.md`（2026-09-29，go）
 > 发布：无 issue tracker，按降级路径落盘 `.flow/prd.md`。
 
 ## Problem Statement
 
-MVP 交付了「模板 + 向导 + 导出」闭环，但企业的个性化指标仍只能手工编辑 YAML patch；「LLM 出初稿、人当守门员」的设计器缺失——这是产品对 Kyligence Zen（平台附属）与开源草根集群（只有提示词没有引擎）的核心差异化。同时 agent 生态（Claude 等）无法一等公民地调用设计能力，存量指标字典也无工具化审计。
+设计与定义态之间仍有手工断层：MetricFlow 导出物是占位 semantic model，要进真实 dbt Semantic Layer 必须人工替换模型引用与字段映射；「模板指标 vs 数仓现状」的差距（哪些有数可算、哪些缺数）无工具盘点；埋点采集与指标体系脱节。同时审核流与指标树查看在终端里效率低（mermaid 只读、review 逐条 TTY），缺少一个本地可视化工作台。
 
 ## Solution
 
-v2 四件套 + 模板扩产：
+三件套：
 
-1. **generate**：自然语言业务描述 → 匹配内核选基模板 → LLM 在模板锚定下生成候选指标草案 → `apply` 合入实例（LLM 新增强制 provenance.origin=llm + review.required=true）→ `review` 人审（批准写 reviewed_by / 拒绝移除）→ fail-closed 拦截未审导出
-2. **refine**：对已有实例的自然语言微调指令 → LLM 产出 patch 草案（caliber/modified/removed/added）→ 同样走 apply + review
-3. **audit**：对实例跑口径完整性、虚荣指标、归口缺失、孤儿指标四类规则，输出分类问题清单
-4. **MCP server**：stdio 协议暴露 generate / audit / refine 三个主工具 + validate / diff / export 辅助工具
-5. **模板库 2 → 6**：内容社区 App、数字营销、供应链物流、云成本四个新行业模板（各 ≥40 指标），配 CONTRIBUTING 模板评审清单
+1. **map 命令族（数仓反推与字段映射）**：`metric-factory map <instance> --manifest manifest.json [--catalog catalog.json]` → 解析 dbt artifacts → 确定性推荐「指标 → 模型.字段」（置信度分档）→ 交互确认/`--draft` 产草案 → `--apply` 写 `instance.mapping.yaml`；差距清单三分类（已映射 / 可映射待确认 / 数仓无对应物）；映射后 export 的 semantic model 引用真实模型与列名
+2. **track 命令（埋点建议）**：`metric-factory track <instance>` → 从旅程类指标与维度推导事件清单（事件名/触发时机/属性 JSON Schema/关联指标），平台无关输出 + 可导入结构
+3. **ui 命令（本地 Web 工作台）**：`metric-factory ui [--port 4173]` → 本地 HTTP 服务，三视图：模板浏览（六模板指标字典）、指标树与实例 patch 编辑（结构化表单写回实例）、审核流（待审 LLM 指标批准/拒绝）；所有写操作调引擎函数，与 CLI 同 fail-closed 语义
 
 ## User Stories
 
-1. 作为数据团队负责人，我想用一段自然语言描述我的业务（「我们是跨境电商平台，主打低价秒杀」），让工具在行业模板锚定下生成个性化候选指标，这样不用从模板 50 个指标里手工挑改。
-2. 作为数据团队负责人，我想在生成后看到结构化 diff（新增了什么、为什么），这样我能判断 AI 建议的质量。
-3. 作为数据团队负责人，我想逐条批准或拒绝 LLM 生成的指标，且批准动作被记录（审核人），这样口径可信性有据可查。
-4. 作为数据团队负责人，我想让未审核的 LLM 指标在任何导出格式下都被硬阻断，这样错误口径不会流出。
-5. 作为数据团队负责人，我想对既有实例下自然语言微调指令（「把 GMV 的退款口径改为包含退款中」），得到 patch 草案而不是直接改文件，这样 AI 不会未经我确认就动口径。
-6. 作为数据团队负责人，我想审计我的指标字典（口径完整性 / 虚荣指标 / 无归口 / 孤儿指标），这样存量问题有清单可治。
-7. 作为 CI 维护者，我想用非交互方式批准/拒绝审核项（--approve / --reject），这样审核流可以进 CI 与 agent 场景。
-8. 作为 agent 用户（Claude / MCP 客户端），我想通过 MCP 协议调用设计、审计、微调与导出能力，这样零 CLI 知识也能用上引擎。
-9. 作为开源贡献者，我想按 CONTRIBUTING 清单提交行业模板 PR 并过 lint 门，这样模板库可持续扩产。
-10. 作为新行业（内容社区/营销/供应链/云成本）从业者，我想直接 fork 深度模板微调，这样起点不是白纸。
-11. 作为无 API key 的试用者，我想用 --dry-run 看到 generate 会发送的完整 prompt，这样能评估 prompt 质量与 token 成本再决定接 provider。
-12. 作为运维者，我想通过环境变量配置 provider（base URL / key / 模型名），这样不改代码切换 OpenAI 兼容 / Anthropic / 内部网关。
+1. 作为数据工程师，我想把 dbt 项目的 manifest（和 docs generate 的 catalog）喂给工具，让它告诉我每个模板指标该落在哪个模型哪个字段，这样不用逐条人肉翻译。
+2. 作为数据工程师，我想看到推荐置信度与理由（匹配了什么名字/同义词），低置信项明确标「待人工」，这样我知道哪些能直接信。
+3. 作为数据工程师，我想在确认后得到一份映射文件（与实例同目录、git 可管），导出的 MetricFlow YAML 直接引用真实 dbt 模型与列名。
+4. 作为数据团队负责人，我想看「模板指标 vs 数仓现状」差距清单（有数可算 / 可映射未映射 / 数仓无对应物），这样数据建设 gap 一目了然。
+5. 作为数据工程师，当 manifest 缺列信息时我想被告知「用 catalog.json 补全」，而不是拿到一份空映射。
+6. 作为埋点工程师，我想从指标体系反推事件清单与属性 schema（JSON），这样采集设计有据可依、不漏旅程指标。
+7. 作为数据团队负责人，我想在浏览器里浏览六个行业模板的全部指标与口径，这样业务方评审不用读 YAML。
+8. 作为数据团队负责人，我想在网页上直接查看我的实例指标树（按分类分色），编辑 patch 四段（口径开关/修改/删除/新增）并写回实例文件，这样不用手改 YAML。
+9. 作为审核人，我想在网页上看待审 LLM 指标列表并逐条批准/拒绝（记录审核人），这样审核效率高于终端。
+10. 作为 agent 用户，UI 不引入新的写路径——所有写操作与 CLI 等价（同一引擎、同一 fail-closed），这样自动化流程与人工流程不会分叉。
+11. 作为本地工具使用者，我想 `metric-factory ui` 一条命令启动、无需 npm build 前端、无需联网，这样开箱即用。
 
 ## Implementation Decisions
 
-- **模型访问层（对齐 JuanerAI agent 底座参考方案）**：统一走 pi-ai（`@earendil-works/pi-ai@0.87.x`，公共 npm 已核验），OpenAI 兼容 / Anthropic / 自定义网关由 pi-ai 供应商目录承载（环境变量配置 base URL / key / 模型名）；**全部 pi 依赖收敛到单一适配模块 `src/llm/`**，业务代码禁止直接 import pi 包（上游 pre-1.0 breaking change 只打一个文件）；测试用 pi-ai faux provider，零网络。版本钉死 0.87.x，升级走专项。无 key 时 generate/refine 明确报错并提示 --dry-run。
-- **模式定位（参考方案 §2.3）**：v2 全部 LLM 调用为**工人模式**——单次结构化调用，模型不握方向盘：输出经 Zod 校验，不合格整批拒绝并报 provider 原文（fail-closed，不做静默修复）；草案-应用-审核三步模型即参考方案的「写确认门」形态。不引入 runAgentLoop（拴绳主导留给未来交互式设计会话，按参考方案阶段 2 路径）。
-- **RAG 层次（红队 #2 决议）**：不做嵌入检索。检索 = MVP 匹配内核按描述选 1 个基模板；上下文 = 该模板全量 YAML + 实例已审核 added 段 + 业务描述。实现首日实测 token，单模板 >50k 才升级检索。
-- **Prompt 契约**：系统角色（指标体系设计师）+ 输出必须是符合指标 JSON Schema 的数组 + few-shot 由基模板自身充当（模板即 few-shot）；输出经 Zod 校验，不合格候选整批拒绝并报 provider 原文（fail-closed，不做静默修复）。
-- **草案-应用-审核三步模型**：generate/refine 产出 `draft.yaml`（含 added/modified/removed/caliber 与 origin=llm provenance），`apply <instance> <draft>` 合入实例文件；LLM 新增指标强制 review.required=true；modified/removed 属 fork patch 直接应用（diff 可见、可回退）。
-- **review 命令**：交互逐条 approve/reject（@inquirer）+ `--approve <name>` / `--reject <name>` 非交互；批准写 `provenance.reviewed_by`（取 `--reviewer` 或 `MF_REVIEWER` 或系统用户名）。
-- **audit 规则集**：①口径缺失（definition/维度/时间粒度任一为空）②无归口（owner_role 缺）③虚荣指标启发式（纯计数类命名黑名单：点击量/曝光量/下载量/注册量 等且无对照比率指标）④孤儿指标（不在任何 tree、非北极星候选、非任何 type_params 引用）。输出分级（ERROR/WARN）+ `--json`。
-- **MCP server**：`metric-factory mcp` 子命令，@modelcontextprotocol/sdk stdio transport；工具：mf_generate / mf_audit / mf_refine / mf_validate / mf_diff / mf_export。
-- **模板扩产顺序**：内容社区 App（复用 AARRR 离电商最近）→ 数字营销 → 供应链物流 → 云成本；每个 ≥40 指标、过 lint + 质量测试；CONTRIBUTING.md 落评审清单。
-- **冒烟脚本**：`scripts/llm-smoke.sh` 真实 provider 各跑一次 generate，输出与耗时留档（发布门槛，不进 CI）。
+- **dbt artifacts 双输入（红队 #1 决议）**：manifest.json 提供模型清单/血缘/已声明列；catalog.json（dbt docs generate 产物）提供全量列与类型。列信息合并优先级：catalog > manifest 声明列。两者皆缺列时该模型标记「列信息缺失」并提示跑 `dbt docs generate`。解析层独立模块（src/warehouse/），fixture 锁定 dbt 1.8+ artifacts 结构。
+- **映射推荐引擎（确定性优先）**：归一化（snake_case 化、去停用词）+ 信号加权（指标名=列名精确命中 > 指标名 ⊂ 列名/模型名 > 同义词表命中（中文 display_name ↔ 英文列名词根，内置常用对照如 成交额→gmv/amount/revenue）> definition 关键词）。综合分 ≥0.6 推荐（附信号明细），<0.6 待人工。LLM 增强本期不进验收（规则路径先证明价值；v2 适配层已就绪可后续接入）。
+- **映射文件 `instance.mapping.yaml`**：`{base, mappings: [{metric, model, column, confidence, signals, confirmed_by, confirmed_at}]}`，Zod schema；`map --apply` 只写入 confirmed 条目；export 优先读映射文件（无映射文件或指标未映射 → 维持占位并在导出摘要标注）。
+- **差距清单**：`map` 默认输出三分类统计 + 明细（--json 支持机器消费）。
+- **track 事件推导**：旅程分类树（trees.category=旅程）的指标 + 北极星 → 事件；事件名 = 指标名动词化规范（view/click/submit…按指标类型映射表）；属性 = 指标 dimensions + 公共维度（timestamp/user_id）；输出 `tracking-plan.yaml`（人读）与 `tracking-plan.schema.json`（机器校验用 JSON Schema 集）。
+- **UI 技术形态（GRILL 预决）**：node 内置 `http` 服务（零新依赖）+ 服务端渲染 HTML（模板字符串）+ 原生 JS 渐进增强（fetch + 表单），无前端构建链。视觉遵循全局设计规范 `~/.zcode/design/DESIGN.md`（JuanerAI Xanthil 暖灰青），实现前必读并取其 token 为默认值。
+- **UI 路由**：`GET /`（工作台首页：实例选择与概览）、`GET /templates`、`GET /templates/:id`、`GET /instance`（树视图 + patch 编辑表单）、`POST /instance/patch`（写回，走引擎 validate）、`GET /review`、`POST /review/:name`（approve/reject，走 review 引擎）。端口默认 4173，仅监听 127.0.0.1。
+- **UI 写路径无旁路**：POST 端点直接调 src/engine 函数（validateInstance/applyApproval 等），错误以同一套 rule/message 返回；UI 不做客户端校验豁免。
+- **导出升级**：metricflow exporter 读映射文件：`model.ref` = 映射模型名；measure `expr` = 映射列名（agg 按 type 映射：simple 计数类 → count_distinct？不——agg 保持 sum 占位默认，映射条目可带 `agg` 覆盖）。契约测试新增断言：映射实例导出物 ref ∈ fixture manifest 模型集、expr ∈ 列集。
 
 ## Testing Decisions
 
-- 主接缝不变：CLI 进程边界（generate --dry-run 产物、apply 合入后实例 diff、review 批准后 fail-closed 放行、audit 分类输出、mcp 以 SDK in-process client 握手并列工具）。
-- 纯函数低层：prompt 构造（含 token 估算）、audit 规则（独立字面量期望）、draft 合并逻辑。
-- pi-ai faux provider 全程注入，测试零网络依赖；真实 provider 只在冒烟脚本触碰（参考方案 §5.3 的回放夹具模式在 v2 单调用场景暂不引入，faux 足够）。
-- 新模板照抄 MVP 模板质量测试（≥40、口径完整、引用一致）。
+- 主接缝扩展：CLI 进程边界（map/track/ui 的 ui 走真实本地 HTTP 端口 fetch 断言 HTML 与 JSON 端点）。
+- 纯函数低层：manifest/catalog 解析合并（四形态 fixture）、推荐引擎打分（独立字面量期望 + 命中率断言 ≥ 规则阈值）、事件推导、映射合并。
+- fixture：`test/fixtures/dbt-manifest.json` + `dbt-catalog.json`（3–4 个模型、含同名命中/同义命中/干扰项/缺列模型）。
+- 契约测试升级：映射导出物 ref/expr 合法性。
+- UI：起真实 server（随机端口）fetch 断言三视图渲染与写端点行为（含 fail-closed 路径：未审核指标导出阻断在 UI 上同样成立——UI 审核端点写 reviewed_by）。
 
 ## Out of Scope
 
-- Web UI（v3）
-- 数仓反推 / 字段映射 / 埋点 schema（v3）
-- 嵌入式 RAG、生成质量调优（运行时迭代，靠采纳率数据驱动）
-- 真实 LLM 输出质量验证（发布门槛，非开发期可验证）
-- LLM 采纳率 ≥60% 与外部 PR ≥3 的达成（运行时生态指标）
+- information schema / 直连数仓 / 反向 ETL
+- 多用户、鉴权、云端部署、HTTPS
+- 拖拽画布式树编辑器（结构化表单即可）
+- LLM 增强映射推荐（规则路径先行，LLM 后续迭代）
+- 移动端适配
+- 真实 dbt 项目端到端 parse（沿用手动冒烟脚本惯例，映射导出物留档供跑）
 
 ## Further Notes
 
-- 红队最优先行动项映射：#2 token 实测 → RAG 决议已内化（全量注入 + 阈值）；#1 真实冒烟 → llm-smoke.sh 作为发布门槛；#4 模板盲评 → 每模板完成后人工盲评（流程外动作）。
-- apply 的 modified/removed 直接应用依据：fork patch 本身可 diff、可回退，且 review 门语义是「AI 新增口径」而非「人确认过的修改」；如实践发现风险，v3 再收紧。
+- 红队最优先工程决策（catalog 双输入）已内化；UI 范围纪律：任一 UI 切片超 2 个实现切片仍不能验收 → 当轮砍掉退回 CLI（记录不阻塞其余交付）。
+- 映射推荐命中率是产品叙事关键：fixture 阈值（≥50% 可映射指标自动推荐）作为验收断言；真实环境采纳率为发布后运行时指标。
 
 ---
 
 ## GRILL 自拷问决议（2026-09-29，按推荐自答）
 
-> 约束：proposal.md（含 pi 底座参考方案约束）不重开；以下仅覆盖其留白处。
+> 约束：proposal.md（含设计规范约束）不重开；以下仅覆盖其留白处。
 
-1. **pi-ai 接入形态（包导出实测，0.87.1）**
-   问：新版 API（createModels/provider 工厂）与 compat 层（旧全局 `complete()`，已标 deprecated）选哪个？
-   答：适配模块自定义 `LlmClient` 接口（`complete({system, user}): Promise<string>`），`src/llm/pi-client.ts` 是**全仓唯一 import pi 包的文件**；实现走 compat 层 `complete()`（最薄、含 env key 注入），pi 升级 / compat 删除时只改这一个文件。测试双轨：引擎级测试注入自定 fake client（快、确定性）；适配器级测试用 `registerFauxProvider` 验证 pi 接线（零网络）。模型解析：`MF_LLM_MODEL` + provider 各自 env（OPENAI_API_KEY 等）。
+1. **UI token 落地（已实读 ~/.zcode/design/DESIGN.md）**
+   CSS 变量直取 token：bg #f7f6f3 / surface #fff / surface-2 #f0efec / border #e2e0db / text 三级 / accent #0f766e 系 / ok-warn-fail-queue 语义色成对（深字+soft 底+line 描边）。外壳：sidebar 248px（导航：工作台首页/模板库/我的实例/审核中心）+ 主区限宽 860 + inspector 300px（选中指标的口径/出处详情页签）。状态 chip 一律色+文字双通道：已审核=ok、待审核=warn、可映射待确认=queue、数仓无对应物=warn、已映射=ok。表格 .tbl 表头 surface-2；空状态虚线框；焦点环 2px accent。边界声明常驻侧栏底部与状态条：「本机运行 · 不联网 · 写操作仅限本地实例文件」。
 
-2. **generate 的作用对象**
-   问：自然语言描述怎么进匹配内核？
-   答：generate 作用于**已有实例**（init 产物），锚定其实例的 base 模板；自然语言描述只驱动生成。PRD 中「匹配内核选基模板」修正为「init 阶段已完成匹配」——从零用户的流程是 `init --answers` → `generate --describe`。理由：结构化问卷匹配已验证确定性，避免为省一步 init 而让 LLM 承担模板选择。
+2. **map 双模式（与 review 同构）**
+   TTY 交互：逐条展示推荐（置信度+信号明细）确认/跳过，会话结束写映射文件；非交互：`--draft` 产 map-draft.yaml，`map --apply <draft> [--reviewer <name>]` 将草案全部标 confirmed 写入（信任草案是人的决定，同 review --approve 语义）。
 
-3. **draft.yaml schema**
-   答：`{ generator: { model, prompt_version, describe, created_at }, added: Metric[], modified: ModifiedMetric[], removed: string[], caliber: 实例口径覆盖 }`，Zod `DraftSchema` 落 `src/schema/draft.ts`；apply 校验后合入。
+3. **映射文件命名与发现**
+   `<实例主名>.mapping.yaml`（instance.yaml → instance.mapping.yaml），与实例同目录、git 可管；export 自动发现默认名，`--mapping <path>` 显式覆盖。
 
-4. **prompt 版本管理**
-   答：`src/llm/prompt.ts` 内嵌 `PROMPT_VERSION`（自 "v2.0.0" 起），prompt 模板与版本号同文件、随 git 演进；写入 draft.generator 与指标 provenance.prompt_version。
+4. **agg 覆盖**
+   mapping 条目可选 `agg`（sum | count_distinct | avg | min | max），默认 sum；工具不猜聚合语义，推荐时可按指标名提示（如含 count → count_distinct）但不自动改。
 
-5. **apply 合并语义（fail-closed 到 apply 层）**
-   答：apply 构造新实例 → 跑 validateInstance → **全过才写盘**，任何错误零改动；added 与实例现有指标同名冲突报错；caliber 覆盖深合并（指标级覆盖）。
+5. **track 事件动词映射表**
+   关键词→动词：login/register/view/search/click/cart/submit/pay/refund/share/publish/interact/return；指标名命中关键词取对应动词（如 first_order_within_7d 含 order→pay 域 → submit_order 事件风格）；无命中 → `track_<metric>`。公共属性：event_name、event_time、user_id、device_id + 指标 dimensions；输出 `tracking-plan.yaml`（人读）+ `tracking-plan.schema.json`（每事件一个 JSON Schema）。
 
-6. **MCP 技术与进程形态**
-   答：`@modelcontextprotocol/sdk@1.30.x`，stdio transport，`metric-factory mcp` 子命令；工具实现进程内直接调引擎函数（不起 CLI 子进程）；**MCP 工具一律返回草案 JSON 不写盘**——agent 场景的「人审」由 agent 会话把草案呈现给用户，落盘仍走 CLI apply/review。
+6. **UI 端口与测试**
+   `--port` 默认 4173，传 0 = 随机端口（测试用）；仅监听 127.0.0.1；测试以真实 server + fetch 断言。
 
-7. **虚荣指标黑名单初始集**
-   答：代码常量起步：点击量、曝光量、下载量、注册量、粉丝数、访问量、页面浏览量、打开量、转发量、点赞数；命中黑名单且实例内无同名对照比率指标 → WARN「虚荣指标风险」。
+7. **UI 写安全边界**
+   本地单用户工具：POST 不做 CSRF（接受，写操作仅限本地实例/映射文件）；UI 不发起任何外部网络请求；无凭据处理。
 
-8. **模板扩产数量弹性**
-   答：目标 +4（总数 6），验收下限 +3（总数 5，满足 proposal「5–6」区间下限）；顺序内容社区 → 数字营销 → 供应链物流 → 云成本。预算吃紧时砍尾部不砍深度。
+8. **UI 渐进增强原则**
+   服务端渲染完整可用（原生 form POST），JS 仅增强体验（fetch 提交 + toast 反馈 + inspector 切换）；禁用 JS 时三视图仍可完成全部操作。
 
-9. **npm 发布不在本 flow**
-   答：SHIP 只做 commit → push → 双机同步；npm publish（含查名）是用户手动决策的独立动作。
+## v3 REVIEW 第 1 轮决议（2026-09-29）
 
-10. **refine 与 generate 的边界**
-    答：同一管线的两个入口——generate 只产 added（新指标），refine 产 caliber/modified/removed（改存量）+ added；两者都出 draft.yaml、都走 apply + review。MCP 的 mf_refine 即 refine 的进程内版。
-
-## v2 REVIEW 第 1 轮决议（2026-09-29）
-
-- 已修复：MCP dist 模板目录 BLOCKER（共享 src/paths.ts + dist 形态 stdio 回归测试）、S2 注释措辞、S3 payload 负向用例、S4 approve 待审校验、S5 mf_export 补 validateInstance 同门。
-- 记录：S1 audit no-owner/orphan 实例层结构性不可达（结论落 tasks.md）。
-- **边界声明**：draft.yaml 是可编辑文件，其 provenance 以文件自述为准——手改 origin=manual 绕过 review 门与手改实例 YAML 属同一信任边界（本地文件信任域）；工具产物路径（generate/refine/MCP）的组装层强制注入 llm provenance 不变。
+- 已修复（阻断）：map TTY 交互确认（与 review 同构）、track 纳入北极星候选、README fixture 演示路径、同义词测试真实化（0.7 档覆盖 + 并列取序断言）、UI 非待审 422 测试。
+- 已修复（建议）：measureRefs 死变量、显式 --mapping 坏文件 fail-closed 报错、chip 双通道真断言、track 全覆盖数量断言、UI 插值统一 escapeHtml、writeInstanceFile 提取共享（engine/io.ts）、坏 manifest ERROR 包装、比率类包含命中降档（*_share/_rate → 0.5 待人工）。
+- **降级记录（S7）**：inspector 页签与 fetch/toast 渐进增强未实现——当前为零 JS 的纯服务端表单（禁用 JS 全功能可用，符合规范底线）；增强层后续迭代，GRILL #1 的 inspector 布局简化为树卡片内嵌详情。
+- **信任边界裁定**：caliber 开关 key 未转义进 radio name（模板/实例为本地自写文件，同 draft 文件信任域）；表单 added 段为合并语义（移除走审核中心/YAML），已在表单 label 声明。

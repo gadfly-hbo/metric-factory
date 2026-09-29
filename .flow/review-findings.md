@@ -1,33 +1,36 @@
-# v2 REVIEW · 审查报告
+# v3 REVIEW · 审查报告
 
 ## 第 1 轮（2026-09-29）
 
-> 审查者：code-reviewer 子代理（全新上下文）。固定点：0ad90aa。
-> **Verdict: FAIL（REQUEST_CHANGES）** — 整体实现质量高、规格兑现度高、VERIFY 复跑一致；但存在 1 个生产级阻断缺陷。
+> 审查者：code-reviewer 子代理（全新上下文）。固定点：1e6eda3。
+> **Verdict: FAIL（REQUEST_CHANGES）** — VERIFY 复跑一致、核心链路正确；但 5 项验收/决议未兑现而任务已勾选，4 处测试完整性问题。
 
 ### BLOCKER
-- **[src/mcp/server.ts:21] dist 布局下 MCP server 模板目录解析错误，六工具全部不可用**
-  tsup 把 server 拆为 dist 根部 chunk，`here=dist` 时 `../../templates` 逃出仓库。stdio 探针实测：握手与 listTools 正常，mf_audit 对任何实例返回「找不到基模板 …/Projects/templates」。README 教用户跑的正是 `node dist/cli.js mcp`。测试盲区：test/mcp 从 src 导入（src 布局恰好命中），dist 下 mcp 无覆盖。
-  复检标准：`node dist/cli.js mcp` 起 stdio server 后 mf_audit 返回 findings 而非「找不到基模板」。
+1. map TTY 交互确认模式缺失（GRILL #2「与 review 同构」半兑现，仅有 --draft/--apply）
+2. track 未纳入北极星指标（PRD 明写「旅程树 + 北极星」；gmv/paid_user_count 均不在旅程树 → 零事件）
+3. README/tasks #8 验收不实：fixture manifest 路径未给、examples 无产物说明
+4. recommend 同义词测试名不副实（display_name「成交总额」不含 SYNONYMS 键「成交额」，0.7 分支零覆盖）
+5. UI 非待审 review 422 分支无测试（测试名宣称但无断言）
 
 ### SUGGESTION
-- S1 audit「四类规则逐一命中」验收未兑现：no-owner（CLI 结构性不可达，schema 先挡）与 orphan（实例层不可构造，added 豁免 + trees 来自模板）无用例 → 补用例或记录结构性结论
-- S2 「全仓唯一 import pi 的文件」注释失实（index.ts/faux.ts 也 import）→ 措辞改「收敛于 src/llm 模块（3 文件）」
-- S3 LLM payload 阶段拒绝无负向用例（仅测 parse 阶段）→ 补合法 JSON 坏字段用例
-- S4 review --approve 对非待审指标静默成功并可覆盖已有审核记录 → approve 前校验 pending 命中
-- S5 mf_export 与 CLI export 门不一致（mf_export 只走审核门不跑 validateInstance）→ 补齐或明示
+S1 metricflow measureRefs 死变量；S2 loadMapping 对显式 --mapping 坏文件静默退化（违背 fail-closed 精神）；S3 server.test 恒真断言（/模板/ 必然命中 statusInfo）；S4 track 数量断言弱化；S5 包含命中假阳性面（_share/_rate 指标映射到绝对值列，10/14 语义可疑；干扰列 fixture 未建）；S6 500 页/404/layout desc 未 escapeHtml；S7 inspector 与 fetch/toast 渐进增强缺位（零 script）；S8 writeInstanceFile 双份重复。
 
-### 待确认（协调方裁定）
-- 手改 draft 的 provenance.origin=manual 可绕过 review 门：与手改实例 YAML 同一信任边界，**接受**（PRD 补边界声明）；组装层强制覆盖工具产物路径已实现
-- apply 的 skipReviewGate 设计：**成立**（代码注释依据 + export 双执法点 + e2e 全链路）
-- llm-smoke.sh 真实 provider 未执行：PRD 明示发布门槛，开发期 out of scope
+### UNVERIFIED→协调方裁定
+- caliber key 未转义进 radio name：本地自写文件信任边界，**接受**（记录）
+- 表单无法删除已合入 added 指标：**有意取舍**（合并语义已在 label 声明，补一句移除指引）
+- map 坏 manifest 裸 stack：包 ERROR 文案（采纳）
 
 ### 覆盖确认
-VERIFY 复跑一致；src/llm 7 文件 + engine 7 模块 + mcp + cli + 三导出器逐行；pi 边界 guard 真实；四新模板抽查 15+ 指标口径无误；16 模板测试断言真实性核实；MCP 零写盘成立；无超范围实现。
+四门重跑一致；warehouse/map/export-mapping/track/ui 无旁路/设计 token/向后兼容逐项核查无发现；v1/v2 测试零改动全过；超范围未出现。
 
 ## 第 2 轮（2026-09-29，终审）
 
-> **Verdict: PASS（APPROVE）** — 6 项增量全部如实完整修复且带真实回归测试；VERIFY 复跑与冻结证据逐字一致；BLOCKER 复检标准经审查者独立手写 JSON-RPC stdio 探针实证达成（dist 形态 mf_audit 返回 findings、六工具可用）。第 1 轮确认点抽验无破坏（pi 边界 guard、fail-closed 链、四新模板测试）。
+> **Verdict: PASS（APPROVE）** — 5 项 BLOCKER 与全部修复项逐条兑现且测试真实；VERIFY 四门独立复跑全绿（123/123 + contract 1/1）；第 1 轮确认点（catalog 四形态 / map 幂等 / export 向后兼容 / UI 无旁路 / 设计 token）抽验无破坏。
 >
-> **残留（非阻塞，记录不动）**：[src/llm/types.ts:6] 注释仍写「pi-ai 只在 pi-client.ts 出现」，实际三文件 import（pi-client/index/faux）——与 S2 同主题的一行注释残留，后续顺手修正。
-> **UNVERIFIED 维持**：真实 provider 冒烟为发布门槛（PRD out of scope）；新模板 163 指标口径人工盲评（第 1 轮抽查 15+ 无误）。
+> **残留（非阻塞，记录不动）**：
+> 1. map TTY 路径写入条目带冗余 score 键（与 --apply 路径产物不一致；Zod strip 读回无功能影响）
+> 2. 比率降档仅覆盖包含通道，同义词通道仍可能把 *_rate 推到 ID/绝对值列（order_cancel_rate → order_id 0.7 实证；人审门兜底）
+> 3. track 测试 expected.delete("nps") 为 no-op 且注释误导（nps 本不在旅程+北极星并集）
+> 4. UI 404 页 path 未 escape（URL percent-encoding 兜底，后果为零）
+>
+> **UNVERIFIED 维持**：TTY 交互实机行为（代码级审查通过：数据流正确、幂等、三分支互斥）；真实 dbt 产物解析（规格后置）。

@@ -128,3 +128,41 @@ node dist/cli.js mcp    # stdio 协议；工具：mf_generate / mf_refine / mf_a
 ### 行业模板（6 个）
 
 电商交易平台（53）· SaaS 订阅（48）· 内容社区 App（43）· 数字营销（40）· 供应链物流（40）· 云成本 FinOps（40）。贡献新模板见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+
+## v3 · 落地闭环
+
+### 数仓映射（dbt manifest 反推）
+
+```bash
+# 1. 反推：manifest（必须）+ catalog（强烈建议，dbt docs generate 产物，提供全量列）
+node dist/cli.js map my-instance/instance.yaml \
+  --manifest path/to/manifest.json --catalog path/to/catalog.json --draft map-draft.yaml
+
+# 零数仓试跑（仓库自带演示 fixture）：
+node dist/cli.js map examples/ecommerce-instance.yaml \
+  --manifest test/fixtures/dbt-manifest.json --catalog test/fixtures/dbt-catalog.json --draft map-draft.yaml
+
+# 2. 确认草案（全部条目标 confirmed 写入 instance.mapping.yaml，幂等）
+node dist/cli.js map my-instance/instance.yaml --apply map-draft.yaml --reviewer 张三
+
+# 3. 导出自动读取映射：model.ref 与 measure.expr 变成真实 dbt 模型与列名
+node dist/cli.js export my-instance/instance.yaml --format metricflow --out out
+```
+
+差距清单三分类（已映射 / 可映射待确认 / 待人工）随 map 输出；推荐带置信度与信号明细（精确命中 / 包含 / 中英同义词 / 口径关键词）；比率/占比类指标（`*_share`/`*_rate`）的包含命中自动降档，防映射到绝对值列。红队提示：dbt manifest 的列信息常为空，**务必同时提供 catalog.json**。examples/ 目录含各行业问卷答案与实例样例；map 演示用 `test/fixtures/dbt-*.json`（见上方命令）。
+
+### 埋点建议
+
+```bash
+node dist/cli.js track my-instance/instance.yaml --out out
+# 产出 out/tracking-plan.yaml（事件/触发时机/属性/关联指标）+ out/tracking-plan.schema.json（每事件一份 JSON Schema）
+```
+
+### Web 工作台
+
+```bash
+node dist/cli.js ui --instance my-instance/instance.yaml --port 4173
+# 打开 http://127.0.0.1:4173 —— 模板浏览 / 实例指标树与微调表单 / LLM 审核中心
+```
+
+本地单用户：仅监听 127.0.0.1、不发起外部请求、写操作仅限本地实例与映射文件且全部走引擎校验（与 CLI 同 fail-closed 语义）。界面遵循 JuanerAI Xanthil 暖灰青工作台设计语言。

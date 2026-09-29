@@ -14,13 +14,19 @@ import { loadInstance } from "../engine/loader.js";
 import { materialize } from "../engine/materialize.js";
 import { validateInstance } from "../engine/validate.js";
 import { findPendingReview, applyApproval, applyRejection } from "../engine/review.js";
+import { writeInstanceFile } from "../engine/io.js";
 import { auditInstance } from "../engine/audit.js";
+import { deriveTrackingPlan, toJsonSchemas } from "../engine/tracking.js";
 import { buildGeneratePrompt, buildRefinePrompt } from "../llm/prompt.js";
 import { estimateTokens } from "../llm/tokens.js";
 import { createLlmClientFromEnv } from "../llm/index.js";
 import { generateDraft, generateRefineDraft } from "../engine/generate.js";
 import { applyDraft } from "../engine/apply.js";
 import { DraftSchema } from "../schema/draft.js";
+import { MapDraftSchema, MappingSchema } from "../schema/mapping.js";
+import type { Mapping, MapDraft } from "../schema/mapping.js";
+import { parseDbtArtifacts } from "../warehouse/parse.js";
+import { recommendMappings } from "../warehouse/recommend.js";
 import type { Instance } from "../schema/instance.js";
 import { metricflowExporter } from "../export/metricflow.js";
 import { excelExporter } from "../export/excel.js";
@@ -29,6 +35,35 @@ import { ExportBlockedError } from "../export/gate.js";
 import type { Exporter } from "../export/types.js";
 import type { Template } from "../schema/template.js";
 import type { Answers } from "../schema/answers.js";
+
+
+function defaultMappingPath(instancePath: string): string {
+  return instancePath.replace(/\.yaml$/, ".mapping.yaml");
+}
+
+async function loadMapping(path: string, opts: { required?: boolean } = {}): Promise<Mapping> {
+  let doc: unknown;
+  try {
+    doc = parseYaml(await readFile(path, "utf8"));
+  } catch (e) {
+    if (opts.required) {
+      console.error(`ERROR 无法读取映射文件 ${path}：${(e as Error).message}`);
+      process.exit(1);
+    }
+    return { base: "", mappings: [] };
+  }
+  const parsed = MappingSchema.safeParse(doc);
+  if (!parsed.success) {
+    if (opts.required) {
+      for (const i of parsed.error.issues) {
+        console.error(`ERROR [mapping] ${path} ${i.path.join(".")}: ${i.message}`);
+      }
+      process.exit(1);
+    }
+    // 自动发现的默认名映射文件损坏 → 静默视为无映射（不阻断既有导出流程）
+  }
+  return parsed.success ? parsed.data : { base: "", mappings: [] };
+}
 
 const exporters: Record<string, Exporter> = {
   metricflow: metricflowExporter,
@@ -568,6 +603,207 @@ program
   });
 
 program
+  .command("map")
+  .description("数仓反推：dbt manifest/catalog → 指标到模型字段映射推荐（规则出草案，人确认）")
+  .argument("<instance>", "实例 YAML 文件路径")
+  .option("--manifest <path>", "dbt manifest.json 路径（--apply 之外的路径必填）")
+  .option("--catalog <path>", "dbt catalog.json 路径（dbt docs generate 产物，提供全量列；强烈建议提供）")
+  .option("--draft <path>", "非交互：输出映射草案文件（不写映射）")
+  .option("--apply <path>", "非交互：确认草案全部条目并写映射文件")
+  .option("--reviewer <name>", "确认人（--apply 用，默认 MF_REVIEWER 或系统用户名）")
+  .option("--json", "差距清单以 JSON 输出")
+  .option("-t, --templates <dir>", "行业模板目录", defaultTemplatesDir())
+  .action(async (instancePath: string, opts: { manifest: string; catalog?: string; draft?: string; apply?: string; reviewer?: string; json?: boolean; templates: string }) => {
+    const loaded = await loadInstance(instancePath);
+    if (!loaded.ok) {
+      for (const e of loaded.errors) {
+        console.error(`ERROR [schema] ${instancePath} ${e.path}: ${e.message}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
+
+    const mappingPath = defaultMappingPath(instancePath);
+
+    if (opts.apply) {
+      let draftDoc: unknown;
+      try {
+        draftDoc = parseYaml(await readFile(opts.apply, "utf8"));
+      } catch (e) {
+        console.error(`ERROR 无法读取草案 ${opts.apply}：${(e as Error).message}`);
+        process.exit(1);
+      }
+      const draft = MapDraftSchema.safeParse(draftDoc);
+      if (!draft.success) {
+        for (const i of draft.error.issues) {
+          console.error(`ERROR [draft] ${opts.apply} ${i.path.join(".")}: ${i.message}`);
+        }
+        process.exit(1);
+      }
+      const reviewer = opts.reviewer ?? process.env.MF_REVIEWER ?? process.env.USER ?? "unknown";
+      const now = new Date().toISOString();
+      const existing = await loadMapping(mappingPath);
+      const byMetric = new Map(existing.mappings.map((m) => [m.metric, m]));
+      let added = 0;
+      for (const rec of draft.data.recommendations) {
+        if (byMetric.has(rec.metric)) continue;
+        byMetric.set(rec.metric, { ...rec, confirmed_by: reviewer, confirmed_at: now });
+        added++;
+      }
+      const merged: Mapping = { base: loaded.instance.base, mappings: [...byMetric.values()] };
+      await writeFile(mappingPath, stringifyYaml(merged), "utf8");
+      console.log(`映射已写入：${mappingPath}（新增确认 ${added} 条，审核人：${reviewer}）`);
+      return;
+    }
+
+    if (!opts.manifest) {
+      console.error("ERROR 缺少 --manifest <path>（dbt manifest.json 路径；建议同时提供 --catalog 获得全量列）");
+      process.exit(1);
+    }
+
+    const templates = await discoverTemplates(opts.templates);
+    const baseId = loaded.instance.base.split("@")[0]!;
+    const base = templates.find((t) => t.template.id === baseId);
+    if (!base) {
+      console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
+      process.exit(1);
+    }
+
+    let warehouse;
+    try {
+      warehouse = await parseDbtArtifacts(opts.manifest, opts.catalog);
+    } catch (e) {
+      console.error(`ERROR ${(e as Error).message}`);
+      console.error("提示：manifest.json 由 dbt compile/parse 产出；catalog.json 由 dbt docs generate 产出（含全量列，强烈建议提供）");
+      process.exit(1);
+    }
+    const materialized = materialize(base, loaded.instance);
+    const { recommended, needsManual } = recommendMappings(materialized.metrics, warehouse);
+    const existing = await loadMapping(mappingPath);
+    const mappedMetrics = new Set(existing.mappings.map((m) => m.metric));
+    const pending = recommended.filter((r) => !mappedMetrics.has(r.metric));
+
+    if (opts.draft) {
+      const draft: MapDraft = {
+        generated_at: new Date().toISOString(),
+        recommendations: pending.map((r) => ({
+          metric: r.metric,
+          model: r.model,
+          column: r.column,
+          confidence: r.score,
+          signals: r.signals
+        })),
+        needsManual
+      };
+      await writeFile(opts.draft, stringifyYaml(draft), "utf8");
+    }
+
+    const gap = {
+      mapped: mappedMetrics.size,
+      recommended: pending.length,
+      needsManual: needsManual.filter((n) => !mappedMetrics.has(n)).length
+    };
+    if (opts.json) {
+      console.log(JSON.stringify({ ...gap, recommendations: pending, needsManualMetrics: needsManual.filter((n) => !mappedMetrics.has(n)) }, null, 2));
+      return;
+    }
+
+    const missingCol = warehouse.models.filter((m) => m.missingColumns).length;
+    console.log(`基模板 ${loaded.instance.base} · 数仓模型 ${warehouse.models.length} 个（缺列模型 ${missingCol} 个，建议跑 dbt docs generate 补 catalog）`);
+    console.log(`差距清单：已映射 ${gap.mapped} · 可映射待确认 ${gap.recommended} · 待人工（无 ≥0.6 推荐）${gap.needsManual}`);
+    for (const r of pending.slice(0, 10)) {
+      console.log(`  推荐 ${r.metric} → ${r.model}.${r.column}（${r.score.toFixed(1)}，${r.signals[0]}）`);
+    }
+    if (pending.length > 10) console.log(`  … 其余 ${pending.length - 10} 条见 --draft / --json`);
+
+    if (opts.draft) {
+      console.log(`\n草案已写入：${opts.draft}；确认：metric-factory map <instance> --apply ${opts.draft} --reviewer <name>`);
+      return;
+    }
+
+    if (process.stdin.isTTY && pending.length > 0) {
+      const { select } = await import("@inquirer/prompts");
+      const reviewer = process.env.MF_REVIEWER ?? process.env.USER ?? "unknown";
+      const now = new Date().toISOString();
+      const existing = await loadMapping(mappingPath);
+      const byMetric = new Map(existing.mappings.map((m) => [m.metric, m]));
+      let confirmed = 0;
+      for (const r of pending) {
+        console.log(`\n${r.metric} → ${r.model}.${r.column}（置信 ${r.score.toFixed(1)}）`);
+        for (const sig of r.signals) console.log(`  - ${sig}`);
+        const action = await select({
+          message: `确认映射 ${r.metric}？`,
+          choices: [
+            { value: "confirm" },
+            { value: "skip" }
+          ]
+        });
+        if (action === "confirm") {
+          byMetric.set(r.metric, { ...r, confidence: r.score, confirmed_by: reviewer, confirmed_at: now });
+          confirmed++;
+        }
+      }
+      const merged: Mapping = { base: loaded.instance.base, mappings: [...byMetric.values()] };
+      await writeFile(mappingPath, stringifyYaml(merged), "utf8");
+      console.log(`\n映射已写入：${mappingPath}（本轮确认 ${confirmed} 条，审核人：${reviewer}）`);
+    }
+  });
+
+program
+  .command("track")
+  .description("从指标体系推导埋点事件清单与事件 schema（平台无关建议）")
+  .argument("<instance>", "实例 YAML 文件路径")
+  .option("--out <dir>", "输出目录（默认当前目录）", ".")
+  .option("-t, --templates <dir>", "行业模板目录", defaultTemplatesDir())
+  .action(async (instancePath: string, opts: { out: string; templates: string }) => {
+    const loaded = await loadInstance(instancePath);
+    if (!loaded.ok) {
+      for (const e of loaded.errors) {
+        console.error(`ERROR [schema] ${instancePath} ${e.path}: ${e.message}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
+    const templates = await discoverTemplates(opts.templates);
+    const baseId = loaded.instance.base.split("@")[0]!;
+    const base = templates.find((t) => t.template.id === baseId);
+    if (!base) {
+      console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const materialized = materialize(base, loaded.instance);
+    const events = deriveTrackingPlan(materialized);
+    if (events.length === 0) {
+      console.log("无旅程类指标（基模板 trees 无 category=旅程），未生成埋点建议");
+      return;
+    }
+
+    await mkdir(opts.out, { recursive: true });
+    const planPath = join(opts.out, "tracking-plan.yaml");
+    const schemaPath = join(opts.out, "tracking-plan.schema.json");
+    await writeFile(planPath, stringifyYaml({ events }), "utf8");
+    await writeFile(schemaPath, JSON.stringify(toJsonSchemas(events), null, 2), "utf8");
+    console.log(`埋点建议已写入：${planPath}（${events.length} 个事件，覆盖旅程树全部指标）`);
+    console.log(`事件 schema：${schemaPath}（每事件一份 JSON Schema，属性类型按真实采集端补齐）`);
+  });
+
+program
+  .command("ui")
+  .description("启动本地 Web 工作台（模板浏览 / 实例编辑 / 审核流；仅监听 127.0.0.1）")
+  .option("-p, --port <port>", "端口（默认 4173，传 0 随机）", "4173")
+  .option("-i, --instance <path>", "工作台操作的实例文件路径")
+  .option("-t, --templates <dir>", "行业模板目录", defaultTemplatesDir())
+  .action(async (opts: { port: string; instance?: string; templates: string }) => {
+    const { createUiServer, listenUi } = await import("../ui/server.js");
+    const server = createUiServer({ instancePath: opts.instance, templatesDir: opts.templates });
+    const port = await listenUi(server, Number(opts.port));
+    console.log(`Metric Factory 工作台已启动：http://127.0.0.1:${port}（Ctrl+C 停止）`);
+    console.log("本机运行 · 不联网 · 写操作仅限本地实例与映射文件");
+  });
+
+program
   .command("review")
   .description("人工审核 LLM 生成指标：批准写 reviewed_by，拒绝则移除")
   .argument("<instance>", "实例 YAML 文件路径")
@@ -644,11 +880,6 @@ program
     }
   });
 
-async function writeInstanceFile(path: string, inst: Instance): Promise<void> {
-  const header = `# Metric Factory 企业实例（fork 自 ${inst.base}）\n`;
-  await writeFile(path, header + stringifyYaml(inst), "utf8");
-}
-
 program
   .command("export")
   .description("导出实例：--format metricflow | excel | mermaid")
@@ -656,7 +887,8 @@ program
   .option("-f, --format <format>", "导出格式", "metricflow")
   .option("-t, --templates <dir>", "行业模板目录（用于解析实例的基模板）", defaultTemplatesDir())
   .option("-o, --out <dir>", "导出输出目录", ".")
-  .action(async (instancePath: string, opts: { format: string; templates: string; out: string }) => {
+  .option("--mapping <path>", "映射文件路径（默认自动发现 <实例名>.mapping.yaml）")
+  .action(async (instancePath: string, opts: { format: string; templates: string; out: string; mapping?: string }) => {
     const exporter = exporters[opts.format];
     if (!exporter) {
       console.error(`ERROR 不支持的导出格式 "${opts.format}"（可选：${Object.keys(exporters).join(" | ")}）`);
@@ -680,6 +912,14 @@ program
     }
 
     const materialized = materialize(base, loaded.instance);
+
+    // 数仓映射装配：显式 --mapping 或同目录自动发现；只取当前实例存在的指标
+    const mappingPath = opts.mapping ?? defaultMappingPath(instancePath);
+    const mappingFile = await loadMapping(mappingPath, { required: Boolean(opts.mapping) });
+    if (mappingFile.mappings.length > 0) {
+      const names = new Set(materialized.metrics.map((m) => m.name));
+      materialized.mapping = mappingFile.mappings.filter((m) => names.has(m.metric));
+    }
 
     // 导出前全量校验（fail-closed 门之外的第二道门：坏实例不导出，PRD story 7）
     const issues = validateInstance(materialized, base, loaded.instance);

@@ -1,0 +1,34 @@
+{
+  "nodes": {
+    "model.demo.fct_payments": {
+      "metadata": {
+        "type": "BASE TABLE"
+      },
+      "columns": {
+        "pay_amount": {
+          "name": "pay_amount",
+          "type": "double precision"
+        }
+      }
+    },
+    "model.demo.fct_orders": {
+      "metadata": {
+        "type": "BASE TABLE"
+      },
+      "columns": {
+        "gmv": {
+          "name": "gmv",
+          "type": "double precision"
+        },
+        "order_count": {
+          "name": "order_count",
+          "type": "bigint"
+        },
+        "aov": {
+          "name": "aov",
+          "type": "double precision"
+        }
+      }
+    }
+  }
+}
