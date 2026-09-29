@@ -13,8 +13,9 @@ if [ ! -d node_modules ]; then
   echo "[首次运行] 安装依赖…"
   npm install --no-audit --no-fund
 fi
-if [ ! -f dist/cli.js ]; then
-  echo "[首次运行] 构建引擎与 UI…"
+# 构建判定：产物缺失，或 src/templates/package.json 比产物新（拉取新代码后自动重建）
+if [ ! -f dist/cli.js ] || [ -n "$(find src templates package.json -newer dist/cli.js -print -quit 2>/dev/null)" ]; then
+  echo "[构建] 引擎与 UI（源码比产物新或缺产物）…"
   npm run build
 fi
 
