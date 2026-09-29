@@ -69,3 +69,36 @@ test("仅监听 127.0.0.1", async () => {
   expect((addr as { address: string }).address).toBe("127.0.0.1");
   server.close();
 });
+
+test("杜邦树：公式算符、北极星与模块分组（模板页）", async () => {
+  const { server, base } = await startUi();
+  const res = await fetch(`${base}/templates/ecommerce-marketplace`);
+  const html = await res.text();
+  // gmv = uv × cvr × aov → 两个乘法算符徽标
+  expect((html.match(/data-op="×"/g) ?? []).length).toBeGreaterThanOrEqual(2);
+  // 北极星徽标与决策指引
+  expect(html).toContain("北极星候选");
+  expect(html).toContain("交易平台优先 GMV");
+  // 分模块折叠区
+  expect(html).toContain("棵分解树");
+  for (const cat of ["规模", "质量", "结构", "效率", "旅程"]) {
+    expect(html).toContain(cat);
+  }
+  // 指标级公式 chip（ltv 不在电商；用 take_rate 分子分母在 saas——电商用 gmv 树根公式）
+  expect(html).toContain("gmv = uv × cvr × aov");
+  server.close();
+});
+
+test("杜邦树：实例页勾稽徽标（已修改/待审核/未入树）", async () => {
+  const server = createUiServer({ templatesDir: "templates", instancePath: "test/fixtures/instance-ecommerce.yaml" });
+  const port = await listenUi(server, 0);
+  const base = `http://127.0.0.1:${port}`;
+  const html = await (await fetch(`${base}/instance`)).text();
+  // fixture 修改了 gmv 口径 → 已修改徽标；删除了 nps → 树中无该节点
+  expect(html).toContain("已修改");
+  expect(html).not.toMatch(/t-id">nps</);
+  // added 指标入「未入树」区
+  expect(html).toContain("新增指标（未入树）");
+  expect(html).toContain("custom_gmv_excluding_gift");
+  server.close();
+});

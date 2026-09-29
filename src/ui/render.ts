@@ -63,6 +63,40 @@ body { background: var(--bg); color: var(--text); font: 400 13px/1.55 var(--font
 a { color: var(--accent-strong); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .num { font-variant-numeric: tabular-nums; }
+
+/* 杜邦式指标树（分模块 + 公式勾稽） */
+.module { margin-bottom: 14px; }
+.module > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--rounded-sm); font-weight: 600; font-size: 13.5px; }
+.module > summary::-webkit-details-marker { display: none; }
+.module > summary .cat-dot { width: 8px; height: 8px; border-radius: 999px; }
+.module > summary .tree-count { color: var(--text-3); font-weight: 400; font-size: 11.5px; }
+.cat-scale .cat-dot { background: var(--accent); }
+.cat-quality .cat-dot { background: var(--ok); }
+.cat-structure .cat-dot { background: var(--warn); }
+.cat-efficiency .cat-dot { background: var(--queue); }
+.cat-journey .cat-dot { background: var(--text-3); }
+.tree { padding: 14px 6px 4px; overflow-x: auto; }
+.tree ul { display: flex; justify-content: center; padding-top: 18px; position: relative; list-style: none; }
+.tree li { display: flex; flex-direction: column; align-items: center; padding: 18px 6px 0; position: relative; }
+.tree li::before, .tree li::after { content: ""; position: absolute; top: 0; width: 50%; height: 18px; border-top: 1px solid var(--border-strong); }
+.tree li::before { left: 0; border-right: 1px solid var(--border-strong); border-radius: 0 6px 0 0; }
+.tree li::after { right: 0; }
+.tree li:only-child::before, .tree li:only-child::after { display: none; }
+.tree li:only-child { padding-top: 14px; }
+.tree li:first-child::before, .tree li:last-child::after { border: 0 none; }
+.tree li:last-child::before { border-right: 0 none; border-radius: 0; }
+.tree ul ul::before { content: ""; position: absolute; top: 0; left: 50%; width: 1px; height: 18px; background: var(--border-strong); }
+.tnode { background: var(--surface); border: 1px solid var(--border); border-left-width: 3px; border-radius: var(--rounded-sm); padding: 6px 10px; min-width: 96px; max-width: 190px; text-align: center; position: relative; }
+.tnode .t-name { font-size: 12.5px; font-weight: 500; }
+.tnode .t-id { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); }
+.tnode .t-expr { font-family: var(--mono); font-size: 10px; color: var(--accent-strong); background: var(--accent-soft); border-radius: 4px; padding: 0 4px; margin-top: 3px; display: inline-block; }
+.tnode-root { border-left-color: var(--accent); background: var(--accent-soft); }
+.tnode-llm { border-color: var(--warn-line); background: var(--warn-soft); }
+.tnode-modified { border-color: var(--accent-line); }
+.op { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 999px; font-size: 11px; color: var(--text-2); padding: 0 6px; z-index: 1; }
+.ns-head { display: flex; gap: 10px; align-items: flex-start; }
+.ns-badge { background: var(--accent-soft); color: var(--accent-strong); border: 1px solid var(--accent-line); border-radius: var(--rounded-sm); padding: 6px 10px; font-size: 12px; }
+.loose-nodes { display: flex; flex-wrap: wrap; gap: 6px; }
 `;
 
 export type NavKey = "home" | "templates" | "instance" | "review";
@@ -117,18 +151,7 @@ export function templatesPage(templates: Template[]): string {
 }
 
 export function templateDetailPage(t: Template): string {
-  const ns = t.north_star.candidates
-    .map((c) => `<li><span class="mono">${escapeHtml(c.metric)}</span> — ${escapeHtml(c.rationale)}</li>`)
-    .join("");
-  const trees = t.trees
-    .map(
-      (tree) => `<div class="card">
-      <div class="card-h">${escapeHtml(tree.id)}${tree.category ? ` · ${escapeHtml(tree.category)}` : ""}</div>
-      ${tree.formula ? `<p class="mono" style="color:var(--text-2);margin-bottom:6px">${escapeHtml(tree.formula)}</p>` : ""}
-      <div class="tree-children">${tree.children.map((c) => `<span class="tree-child mono">${escapeHtml(c)}</span>`).join("")}</div>
-    </div>`
-    )
-    .join("");
+  const treeViz = dupontTree(t.trees, t.metrics, { northStar: t.north_star });
   const rows = t.metrics
     .map(
       (m) => `<tr>
@@ -143,9 +166,8 @@ export function templateDetailPage(t: Template): string {
     )
     .join("");
   return `
-  <div class="card"><div class="card-h">北极星候选</div><ul style="padding-left:18px;line-height:1.8">${ns}</ul>
-  <p style="margin-top:8px;color:var(--text-2)">决策指引：${escapeHtml(t.north_star.decision_guide)}</p></div>
-  <div class="view-title">指标树（${t.trees.length}）</div>${trees}
+  <div class="view-title">指标树 · 杜邦式分解（${t.trees.length} 棵，按模块分组）</div>
+  ${treeViz}
   <div class="view-title">指标字典（${t.metrics.length}）</div>
   <div class="card" style="padding:0;overflow-x:auto"><table class="tbl">
     <thead><tr><th>指标名</th><th>展示名</th><th>类型</th><th>口径</th><th>维度</th><th>归口</th><th>出处</th></tr></thead>
@@ -169,20 +191,14 @@ export function instancePage(materialized: MaterializedInstance, instance: Insta
     <p style="margin-top:8px"><a class="btn" href="/review">前往审核中心</a></p>
   </div>`;
 
-  const trees = materialized.trees
-    .map(
-      (tree) => `<div class="card">
-      <div class="card-h">${escapeHtml(tree.id)}${tree.category ? ` · ${escapeHtml(tree.category)}` : ""}</div>
-      ${tree.formula ? `<p class="mono" style="color:var(--text-2);margin-bottom:6px">${escapeHtml(tree.formula)}</p>` : ""}
-      <div class="tree-children">${tree.children
-        .map((c) => {
-          const m = materialized.metrics.find((x) => x.name === c);
-          return `<span class="tree-child">${escapeHtml(m?.display_name ?? c)} <span class="mono">${escapeHtml(c)}</span></span>`;
-        })
-        .join("")}</div>
-    </div>`
-    )
-    .join("");
+  const pendingNames = new Set(findPendingReview(instance.added).map((m) => m.name));
+  const modifiedNames = new Set(instance.modified.map((m) => m.name));
+  const trees = dupontTree(materialized.trees, materialized.metrics, {
+    northStar: materialized.north_star,
+    pendingNames,
+    modifiedNames,
+    looseMetrics: instance.added
+  });
 
   // 口径开关三态（不变/开/关），只列模板声明了开关的指标
   const switchRows: string[] = [];
@@ -213,7 +229,7 @@ export function instancePage(materialized: MaterializedInstance, instance: Insta
     </div>
   </form>`;
 
-  return `${summary}<div class="view-title">指标树</div>${trees}${form}`;
+  return `${summary}<div class="view-title">指标树 · 杜邦式分解（按模块分组，× ÷ 为公式算符）</div>${trees}${form}`;
 }
 
 export function reviewPage(instance: Instance, instancePath: string): string {
@@ -243,4 +259,124 @@ export function formErrorPage(title: string, errors: string[]): string {
   return `<div class="card"><div class="card-h" style="color:var(--fail)">${escapeHtml(title)}</div>
   <ul class="error-list">${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join("")}</ul>
   <a class="btn" href="javascript:history.back()">返回修改</a></div>`;
+}
+
+// ===== 杜邦式指标树（分模块 + 公式勾稽）=====
+
+const CATEGORY_CLASS: Record<string, string> = {
+  规模: "cat-scale",
+  质量: "cat-quality",
+  结构: "cat-structure",
+  效率: "cat-efficiency",
+  旅程: "cat-journey"
+};
+
+function prettyFormula(f: string): string {
+  return f.replace(/\*/g, "×").replace(/\//g, "÷");
+}
+
+// 公式 "gmv = uv * cvr * aov" → 子节点顺序对应的算符（["×","×"]），子节点数不匹配时返回 null
+function formulaOps(formula: string | undefined, children: string[]): string[] | null {
+  if (!formula) return null;
+  const eq = formula.split("=");
+  if (eq.length !== 2) return null;
+  const tokens = eq[1]!.match(/[A-Za-z_][A-Za-z0-9_]*|[+\-*/×÷]/g) ?? [];
+  const ids = tokens.filter((t) => /^[A-Za-z_]/.test(t));
+  const ops = tokens.filter((t) => /^[+\-*/×÷]$/.test(t)).map((o) => prettyFormula(o));
+  if (ids.length === children.length && children.every((c, i) => ids[i] === c)) {
+    return ops;
+  }
+  return null;
+}
+
+interface TreeNodeBadges {
+  llmPending?: boolean;
+  modified?: boolean;
+}
+
+function tNode(metric: { name: string; display_name: string; type_params?: { expr?: string } } | undefined, rawName: string, badges: TreeNodeBadges = {}, isRoot = false): string {
+  const cls = ["tnode", isRoot ? "tnode-root" : "", badges.llmPending ? "tnode-llm" : "", badges.modified ? "tnode-modified" : ""].filter(Boolean).join(" ");
+  const expr = metric?.type_params?.expr;
+  return `<div class="${cls}">
+    <div class="t-name">${escapeHtml(metric?.display_name ?? rawName)}</div>
+    <div class="t-id">${escapeHtml(rawName)}</div>
+    ${expr ? `<span class="t-expr" title="指标级公式">${escapeHtml(prettyFormula(expr))}</span>` : ""}
+    ${badges.llmPending ? `<span class="chip chip-warn">待审核</span>` : ""}
+    ${badges.modified ? `<span class="chip chip-accent">已修改</span>` : ""}
+  </div>`;
+}
+
+function treeList(
+  tree: { id: string; category?: string; formula?: string; children: string[] },
+  ctx: { metricByName: Map<string, { name: string; display_name: string; type_params?: { expr?: string } }>; pendingNames?: Set<string>; modifiedNames?: Set<string> }
+): string {
+  const rootBadges: TreeNodeBadges = {
+    llmPending: ctx.pendingNames?.has(tree.id),
+    modified: ctx.modifiedNames?.has(tree.id)
+  };
+  const isMetricRoot = ctx.metricByName.has(tree.id);
+  const rootHtml = isMetricRoot
+    ? tNode(ctx.metricByName.get(tree.id), tree.id, rootBadges, true)
+    : `<div class="tnode tnode-root"><div class="t-name">${escapeHtml(tree.id)}</div>${tree.formula ? `<span class="t-expr">${escapeHtml(prettyFormula(tree.formula))}</span>` : ""}</div>`;
+
+  if (tree.children.length === 0) return rootHtml;
+
+  const ops = formulaOps(tree.formula, tree.children);
+  const children = tree.children
+    .map((c, i) => {
+      const op = ops && i > 0 ? `<span class="op" data-op="${ops[i - 1]}">${ops[i - 1]}</span>` : "";
+      const badges: TreeNodeBadges = {
+        llmPending: ctx.pendingNames?.has(c),
+        modified: ctx.modifiedNames?.has(c)
+      };
+      const child = ctx.metricByName.get(c);
+      if (!child) return "";
+      return `<li>${op}${tNode(child, c, badges)}${child ? "" : ""}</li>`;
+    })
+    .join("");
+  return `${rootHtml}<ul>${children}</ul>`;
+}
+
+export function dupontTree(
+  trees: { id: string; category?: string; formula?: string; children: string[] }[],
+  metrics: { name: string; display_name: string; type_params?: { expr?: string } }[],
+  opts: { northStar?: { candidates: { metric: string; rationale: string }[]; decision_guide: string }; pendingNames?: Set<string>; modifiedNames?: Set<string>; looseMetrics?: { name: string; display_name: string }[] } = {}
+): string {
+  const metricByName = new Map(metrics.map((m) => [m.name, m]));
+  const ctx = { metricByName, pendingNames: opts.pendingNames, modifiedNames: opts.modifiedNames };
+
+  const ns = opts.northStar
+    ? `<div class="card"><div class="card-h">🎯 北极星候选</div>
+      <div class="ns-head">${opts.northStar.candidates
+        .map((c) => {
+          const m = metricByName.get(c.metric);
+          return `<div class="ns-badge">${escapeHtml(m?.display_name ?? c.metric)} <span class="mono">${escapeHtml(c.metric)}</span></div>`;
+        })
+        .join("")}</div>
+      <p style="margin-top:8px;color:var(--text-2);font-size:12px">决策指引：${escapeHtml(opts.northStar.decision_guide)}</p></div>`
+    : "";
+
+  const byCategory = new Map<string, typeof trees>();
+  for (const t of trees) {
+    const cat = t.category ?? "结构";
+    byCategory.set(cat, [...(byCategory.get(cat) ?? []), t]);
+  }
+  const modules = [...byCategory.entries()]
+    .map(([cat, group]) => {
+      const treesHtml = group
+        .map((t) => `<div class="tree"><ul><li>${treeList(t, ctx)}</li></ul></div>`)
+        .join("");
+      return `<details class="module ${CATEGORY_CLASS[cat] ?? ""}" open>
+        <summary><span class="cat-dot"></span>${escapeHtml(cat)}<span class="tree-count">${group.length} 棵分解树</span></summary>
+        ${treesHtml}
+      </details>`;
+    })
+    .join("");
+
+  const loose = opts.looseMetrics && opts.looseMetrics.length > 0
+    ? `<details class="module" open><summary><span class="cat-dot" style="background:var(--warn)"></span>新增指标（未入树）<span class="tree-count">${opts.looseMetrics.length} 个待审/自增</span></summary>
+      <div class="loose-nodes" style="padding:12px">${opts.looseMetrics.map((m) => tNode(m as never, m.name, { llmPending: opts.pendingNames?.has(m.name) })).join("")}</div></details>`
+    : "";
+
+  return `${ns}${modules}${loose}`;
 }
