@@ -165,4 +165,4 @@ node dist/cli.js ui --instance my-instance/instance.yaml --port 4173
 # 打开 http://127.0.0.1:4173 —— 模板浏览 / 实例指标树与微调表单 / LLM 审核中心
 ```
 
-本地单用户：仅监听 127.0.0.1、不发起外部请求、写操作仅限本地实例与映射文件且全部走引擎校验（与 CLI 同 fail-closed 语义）。界面遵循 JuanerAI Xanthil 暖灰青工作台设计语言。
+本地单用户：仅监听 127.0.0.1、不发起外部请求、写操作仅限本地实例与映射文件且全部走引擎校验（与 CLI 同 fail-closed 语义）。界面对齐 JuanerAI 最新 UI 标准（2026-09-28 Case 助手增量契约：品牌栏 + 待采纳草案卡 + 橘 accent 视觉）。

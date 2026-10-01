@@ -1,6 +1,7 @@
 import { createServer, type Server } from "node:http";
-import { readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir, readFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadTemplate } from "../engine/loader.js";
 import { layout, templatesPage, templateDetailPage, instancePage, reviewPage, formErrorPage, escapeHtml } from "./render.js";
 import { loadInstance } from "../engine/loader.js";
@@ -239,6 +240,20 @@ export function createUiServer(opts: UiOptions): Server {
         }
         await writeInstanceFile(ctx.instancePath, updated);
         res.writeHead(303, { location: "/review" }).end();
+        return;
+      }
+
+      // 品牌资产（JuanerAI logo，09-28 契约 UI-00；src 运行与 dist 打包两种布局兼容）
+      if (path === "/assets/juanerai-logo-slogan.png") {
+        const here = dirname(fileURLToPath(import.meta.url));
+        for (const dir of [resolve(here, "../../assets"), resolve(here, "../assets")]) {
+          try {
+            const png = await readFile(join(dir, "juanerai-logo-slogan.png"));
+            res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=86400" }).end(png);
+            return;
+          } catch { /* 尝试下一个候选目录 */ }
+        }
+        res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("logo asset missing");
         return;
       }
 

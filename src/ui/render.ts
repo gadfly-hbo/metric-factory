@@ -4,37 +4,40 @@ export function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-// Xanthil 暖灰青工作台 token（~/.zcode/design/DESIGN.md，alpha 版直取）
+// JuanerAI UI 标准（2026-09-28 Case 助手增量契约 dist token 直取：橘 accent + 藏青 + Inter；
+// 经用户指令采用，取代 09-23 全局 DESIGN.md 的青色版——冲突已明示）
 const CSS = `
 :root {
-  --bg: #f7f6f3; --surface: #ffffff; --surface-2: #f0efec;
-  --border: #e2e0db; --border-strong: #cfcdc6;
-  --text: #1f1e1b; --text-2: #5b5952; --text-3: #8a877e;
-  --accent: #0f766e; --accent-strong: #0b5c55; --accent-soft: #e6f4f2; --accent-line: #bfe3de;
-  --ok: #166534; --ok-soft: #e7f4ea; --ok-line: #cbe6d2;
-  --warn: #92400e; --warn-soft: #fdf1e2; --warn-line: #f0dfc2;
-  --fail: #b91c1c; --fail-soft: #fbeaea; --fail-line: #f3caca;
+  --bg: #eceae5; --surface: #ffffff; --surface-2: #f4f3ef; --soft: #f7f6f2;
+  --border: #e5e2dc; --border-strong: #d8d3cb;
+  --text: #1d2027; --text-2: #6f7480; --text-3: #8a8076;
+  --accent: #e8643a; --accent-strong: #bf4927; --accent-soft: #fff1e8; --accent-line: #e8c1b4;
+  --navy: #263442;
+  --ok: #176247; --ok-soft: #def3e9; --ok-line: #bfddcf;
+  --warn: #855211; --warn-soft: #fff1d6; --warn-line: #f0dfc2;
+  --fail: #952f2f; --fail-soft: #ffe5e5; --fail-line: #f3caca;
   --queue: #6d5bd0; --queue-ink: #5b48c0; --queue-soft: #efecfb; --queue-line: #d9d2f5;
-  --rounded-base: 10px; --rounded-sm: 6px;
-  --font: -apple-system, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --rounded-base: 12px; --rounded-sm: 8px;
+  --shadow-card: 0 3px 12px rgba(40,36,30,.04); --shadow-float: 0 18px 48px rgba(35,35,30,.12);
+  --font: Inter, ui-sans-serif, -apple-system, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: var(--bg); color: var(--text); font: 400 13px/1.55 var(--font); }
-.app { display: flex; min-height: 100vh; }
-.sidebar { width: 248px; background: var(--surface-2); border-right: 1px solid var(--border); padding: 14px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 0; height: 100vh; }
-.brand { font-weight: 700; font-size: 14px; color: var(--accent-strong); padding: 6px 4px; }
+.topbar { position: sticky; top: 0; z-index: 20; height: 64px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 18px; background: rgba(255,255,255,.96); border-bottom: 1px solid var(--border); }
+.app { display: flex; min-height: calc(100vh - 64px); }
+.sidebar { width: 248px; background: var(--surface-2); border-right: 1px solid var(--border); padding: 16px 14px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 64px; height: calc(100vh - 64px); }
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav a { display: block; padding: 7px 10px; border-radius: var(--rounded-sm); color: var(--text-2); text-decoration: none; font-size: 13px; }
 .nav a:hover { background: var(--surface); }
 .nav a.active { background: var(--accent-soft); color: var(--accent-strong); font-weight: 500; }
 .boundary { margin-top: auto; padding: 10px; border: 1px dashed var(--border-strong); border-radius: var(--rounded-sm); color: var(--text-3); font-size: 11.5px; line-height: 1.6; }
-.main { flex: 1; padding: 22px; max-width: 860px; margin: 0 auto; }
+.main { flex: 1; padding: 22px; max-width: 1000px; margin: 0 auto; }
 .statusbar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 6px 14px; font-size: 10.5px; color: var(--text-3); display: flex; gap: 14px; z-index: 10; }
-.page-title { font-size: 22px; font-weight: 600; line-height: 1.3; margin-bottom: 6px; }
+.page-title { font-size: 22px; font-weight: 600; line-height: 1.3; margin-bottom: 6px; letter-spacing: -.01em; }
 .view-title { font-size: 17px; font-weight: 600; line-height: 1.4; margin: 18px 0 10px; }
 .page-desc { color: var(--text-2); font-size: 13px; margin-bottom: 16px; }
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rounded-base); padding: 14px 16px; margin-bottom: 14px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-card); padding: 14px 16px; margin-bottom: 14px; }
 .card-h { font-size: 13.5px; font-weight: 600; margin-bottom: 8px; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -46,10 +49,11 @@ body { background: var(--bg); color: var(--text); font: 400 13px/1.55 var(--font
 .chip-warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-line); }
 .chip-queue { background: var(--queue-soft); color: var(--queue-ink); border-color: var(--queue-line); }
 .chip-accent { background: var(--accent-soft); color: var(--accent-strong); border-color: var(--accent-line); }
-.btn { display: inline-block; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: var(--rounded-sm); padding: 5px 12px; font-size: 13px; cursor: pointer; text-decoration: none; }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn:hover { border-color: var(--border-strong); }
+.btn { display: inline-block; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); border-radius: var(--rounded-sm); padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; }
+.btn-primary { background: var(--accent); border-color: var(--accent-strong); color: #fff; }
+.btn:hover { border-color: var(--text-3); }
 .btn-primary:hover { background: var(--accent-strong); }
+.btn-danger { border-color: var(--fail-line); background: #fffafa; color: var(--fail); }
 .fld { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .fld label { font-size: 12px; color: var(--text-2); font-weight: 500; }
 .fld input[type=text], .fld select, .fld textarea { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rounded-sm); padding: 6px 8px; font: 400 13px var(--font); width: 100%; }
@@ -61,8 +65,41 @@ body { background: var(--bg); color: var(--text); font: 400 13px/1.55 var(--font
 .tree-children { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .tree-child { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--rounded-sm); padding: 3px 8px; font-size: 12px; }
 a { color: var(--accent-strong); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+:focus-visible { outline: 3px solid rgba(232,100,58,.28); outline-offset: 2px; }
 .num { font-variant-numeric: tabular-nums; }
+
+/* 顶部品牌栏（09-28 契约 UI-00：logo 裁切显示 + 完整品牌名与 slogan + 产品名） */
+.brand { display: flex; gap: 8px; align-items: center; font-weight: 700; letter-spacing: -.01em; }
+.brand-mark { position: relative; display: block; width: 36px; height: 36px; overflow: hidden; border-radius: 9px; background: #fff; border: 1px solid var(--border); }
+.brand-mark img { position: absolute; width: 90px; height: 90px; max-width: none; left: -22px; top: -10px; object-fit: cover; object-position: top center; }
+.brand-copy { display: flex; flex-direction: column; line-height: 1.05; }
+.brand-copy strong { font-size: 13px; color: var(--text); }
+.brand-copy small { margin-top: 4px; color: #5c655d; font-size: 8px; letter-spacing: .14em; white-space: nowrap; }
+.product-name { margin-left: 4px; padding-left: 9px; border-left: 1px solid var(--border); color: var(--text-2); font-size: 10px; white-space: nowrap; }
+.top-actions { justify-self: end; display: flex; gap: 10px; align-items: center; }
+.badge-local { padding: 5px 9px; border: 1px solid var(--accent-line); border-radius: 999px; color: var(--accent-strong); background: var(--accent-soft); font-size: 11px; font-weight: 600; }
+.avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: #fff; background: #746a60; font-size: 11px; font-weight: 700; }
+
+/* 待采纳草案卡（09-28 契约 UI-11 范式：eyebrow + 标题 + 状态徽 + 字段 dl + 动作区） */
+.draft-card { background: var(--surface); border: 1px solid #dfd9cf; border-radius: 14px; box-shadow: var(--shadow-float); padding: 18px; margin: 0 auto 22px; max-width: 820px; }
+.eyebrow { margin: 0 0 5px; color: var(--text-3); font-size: 10px; letter-spacing: .13em; font-weight: 700; }
+.draft-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.draft-heading h3 { font-size: 17px; letter-spacing: -.01em; }
+.draft-heading .draft-src { margin: 4px 0 0; color: var(--text-2); font-size: 11px; }
+.state-badge { border-radius: 999px; padding: 5px 8px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.state-badge.amber { color: var(--warn); background: var(--warn-soft); }
+.state-badge.green { color: var(--ok); background: var(--ok-soft); }
+.state-badge.red { color: var(--fail); background: var(--fail-soft); }
+.draft-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+.draft-section { padding: 13px; border-radius: 10px; background: var(--soft); }
+.draft-section h4 { margin: 0 0 9px; font-size: 12px; }
+.kv { margin: 0; }
+.kv > div { display: grid; grid-template-columns: 82px 1fr; gap: 8px; padding: 7px 0; border-top: 1px solid #e4e0d9; }
+.kv dt { color: var(--text-2); font-size: 10px; }
+.kv dd { margin: 0; font-size: 11.5px; line-height: 1.45; }
+.draft-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; align-items: center; flex-wrap: wrap; }
+.draft-actions input[type=text] { border: 1px solid var(--border); border-radius: var(--rounded-sm); padding: 6px 8px; font: inherit; width: 220px; }
+.composer-note { text-align: center; color: var(--text-2); font-size: 10.5px; margin-top: 4px; }
 
 /* 杜邦式指标树（分模块 + 公式勾稽） */
 .module { margin-bottom: 14px; }
@@ -76,7 +113,8 @@ a { color: var(--accent-strong); }
 .cat-efficiency .cat-dot { background: var(--queue); }
 .cat-journey .cat-dot { background: var(--text-3); }
 .tree { padding: 14px 6px 4px; overflow-x: auto; }
-.tree ul { display: flex; justify-content: center; padding-top: 18px; position: relative; list-style: none; }
+/* 超宽树防裁切：ul 宽度取内容宽，窄时 margin auto 居中、宽时贴左可滚动（justify-content:center 会让左溢出不可达） */
+.tree ul { display: flex; width: max-content; margin-left: auto; margin-right: auto; padding-top: 18px; position: relative; list-style: none; }
 .tree li { display: flex; flex-direction: column; align-items: center; padding: 18px 6px 0; position: relative; }
 .tree li::before, .tree li::after { content: ""; position: absolute; top: 0; width: 50%; height: 18px; border-top: 1px solid var(--border-strong); }
 .tree li::before { left: 0; border-right: 1px solid var(--border-strong); border-radius: 0 6px 0 0; }
@@ -88,7 +126,7 @@ a { color: var(--accent-strong); }
 .tree ul ul::before { content: ""; position: absolute; top: 0; left: 50%; width: 1px; height: 18px; background: var(--border-strong); }
 .tnode { background: var(--surface); border: 1px solid var(--border); border-left-width: 3px; border-radius: var(--rounded-sm); padding: 6px 10px; min-width: 96px; max-width: 190px; text-align: center; position: relative; }
 .tnode .t-name { font-size: 12.5px; font-weight: 500; }
-.tnode .t-id { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); }
+.tnode .t-id { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); overflow-wrap: anywhere; }
 .tnode .t-expr { font-family: var(--mono); font-size: 10px; color: var(--accent-strong); background: var(--accent-soft); border-radius: 4px; padding: 0 4px; margin-top: 3px; display: inline-block; }
 .tnode-root { border-left-color: var(--accent); background: var(--accent-soft); }
 .tnode-llm { border-color: var(--warn-line); background: var(--warn-soft); }
@@ -116,11 +154,22 @@ export function layout(active: NavKey, title: string, desc: string, content: str
 <html lang="zh-CN">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(title)} · Metric Factory</title><style>${CSS}</style></head>
 <body>
+<header class="topbar">
+  <div class="brand" aria-label="JuanerAI，持续做出更好的决策；Metric Factory">
+    <span class="brand-mark"><img src="/assets/juanerai-logo-slogan.png" alt=""></span>
+    <span class="brand-copy"><strong>JuanerAI</strong><small>持续做出更好的决策</small></span>
+    <span class="product-name">Metric Factory</span>
+  </div>
+  <div></div>
+  <div class="top-actions">
+    <span class="badge-local">本机运行 · 不联网 · 不处理凭据</span>
+    <div class="avatar" aria-label="本地用户">MF</div>
+  </div>
+</header>
 <div class="app">
   <aside class="sidebar">
-    <div class="brand">Metric Factory</div>
     <nav class="nav">${nav}</nav>
-    <div class="boundary">本机运行 · 不联网 · 不处理凭据<br>写操作仅限本地实例与映射文件</div>
+    <div class="boundary">写操作仅限本地实例与映射文件<br>页面无脚本 · 纯服务端表单</div>
   </aside>
   <main class="main">
     <h1 class="page-title">${escapeHtml(title)}</h1>
@@ -161,7 +210,7 @@ export function templateDetailPage(t: Template): string {
       <td>${escapeHtml(m.definition)}</td>
       <td>${escapeHtml(m.dimensions.join("、"))}</td>
       <td>${escapeHtml(m.owner_role)}</td>
-      <td>${chip("ok", "模板出处")}</td>
+      <td>${chip("ok", "正式 · 模板出处")}</td>
     </tr>`
     )
     .join("");
@@ -239,20 +288,46 @@ export function reviewPage(instance: Instance, instancePath: string): string {
   }
   const cards = pending
     .map(
-      (m) => `<div class="card">
-      <div class="card-h">${escapeHtml(m.display_name)} <span class="mono">${escapeHtml(m.name)}</span> ${chip("warn", "待审核")}</div>
-      <p>${escapeHtml(m.definition)}</p>
-      <p style="margin-top:6px;color:var(--text-2);font-size:12px">出处：LLM 生成（${escapeHtml(m.provenance.model ?? "")}，prompt ${escapeHtml(m.provenance.prompt_version ?? "")}）</p>
-      <form action="/review/${escapeHtml(m.name)}" method="post" style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input type="text" name="reviewer" placeholder="审核人（默认 MF_REVIEWER）" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font:inherit;width:200px">
-        <button class="btn btn-primary" name="action" value="approve" type="submit">批准</button>
-        <button class="btn" name="action" value="reject" type="submit">拒绝（移除）</button>
+      (m) => `<article class="draft-card">
+      <div class="draft-heading">
+        <div>
+          <p class="eyebrow">PENDING METRIC DRAFT</p>
+          <h3>${escapeHtml(m.display_name)} <span class="mono" style="font-size:11px;color:var(--text-2)">${escapeHtml(m.name)}</span></h3>
+          <p class="draft-src">草案来源：LLM 生成（${escapeHtml(m.provenance.model ?? "")} · prompt ${escapeHtml(m.provenance.prompt_version ?? "")}）</p>
+        </div>
+        <span class="state-badge amber">待审核 · 无业务写入</span>
+      </div>
+      <div class="draft-grid">
+        <div class="draft-section">
+          <h4>指标定义</h4>
+          <dl class="kv">
+            <div><dt>类型</dt><dd>${escapeHtml(m.type)}</dd></div>
+            <div><dt>口径</dt><dd>${escapeHtml(m.definition)}</dd></div>
+            <div><dt>维度</dt><dd>${m.dimensions.length ? escapeHtml(m.dimensions.join("、")) : "（未登记）"}</dd></div>
+            <div><dt>时间粒度</dt><dd>${m.time_grains.join("、")}</dd></div>
+            <div><dt>归口角色</dt><dd>${escapeHtml(m.owner_role)}</dd></div>
+          </dl>
+        </div>
+        <div class="draft-section">
+          <h4>出处与边界</h4>
+          <dl class="kv">
+            <div><dt>出处</dt><dd>LLM 生成（origin=llm）</dd></div>
+            <div><dt>模型</dt><dd class="mono">${escapeHtml(m.provenance.model ?? "")}</dd></div>
+            <div><dt>Prompt</dt><dd class="mono">${escapeHtml(m.provenance.prompt_version ?? "")}</dd></div>
+            <div><dt>导出</dt><dd>fail-closed：批准前导出被硬阻断</dd></div>
+          </dl>
+        </div>
+      </div>
+      <form action="/review/${escapeHtml(m.name)}" method="post" class="draft-actions">
+        <input type="text" name="reviewer" placeholder="审核人（默认 MF_REVIEWER）">
+        <button class="btn btn-danger" name="action" value="reject" type="submit">拒绝（移除草案）</button>
+        <button class="btn btn-primary" name="action" value="approve" type="submit">批准为正式指标</button>
       </form>
-    </div>`
+    </article>`
     )
     .join("");
   void instancePath;
-  return `<p style="color:var(--text-2);margin-bottom:12px">以下 ${pending.length} 个指标为 LLM 生成且未经人工审核——批准后才可导出（fail-closed）。</p>${cards}`;
+  return `<p style="color:var(--text-2);margin-bottom:12px">以下 ${pending.length} 个指标为 LLM 生成且未经人工审核——批准后才可导出（fail-closed）。</p>${cards}<p class="composer-note">Agent 只能提交待采纳草案。正式指标必须由你批准。</p>`;
 }
 
 export function formErrorPage(title: string, errors: string[]): string {

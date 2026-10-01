@@ -46,19 +46,21 @@ test("GET /templates/:id：指标字典表格与口径列", async () => {
   expect(html).toContain("53");
   // 语义 chip 双通道：chip 类名与状态文字成对出现（type 值的 accent chip）
   expect(html).toContain('chip chip-accent">simple</span>');
-  expect(html).toContain('chip chip-ok">模板出处</span>');
+  expect(html).toContain('chip chip-ok">正式 · 模板出处</span>');
   const res404 = await fetch(`${base}/templates/nope`);
   expect(res404.status).toBe(404);
   server.close();
 });
 
-test("设计 token 落地：Xanthil 色板进入 CSS 变量", async () => {
+test("设计 token 落地：JuanerAI 09-28 契约色板进入 CSS 变量", async () => {
   const { server, base } = await startUi();
   const res = await fetch(`${base}/`);
   const html = await res.text();
-  expect(html).toContain("#0f766e"); // accent
-  expect(html).toContain("#f7f6f3"); // bg
-  expect(html).toContain("#1f1e1b"); // text
+  expect(html).toContain("#e8643a"); // accent（橘，09-28 契约 dist）
+  expect(html).toContain("#263442"); // navy
+  expect(html).toContain("#eceae5"); // 页面底
+  expect(html).toContain("#1d2027"); // text
+  expect(html).toContain("持续做出更好的决策"); // 品牌栏 slogan（UI-00）
   server.close();
 });
 
