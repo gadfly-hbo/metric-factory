@@ -135,24 +135,39 @@ a { color: var(--accent-strong); }
 .ns-head { display: flex; gap: 10px; align-items: flex-start; }
 .ns-badge { background: var(--accent-soft); color: var(--accent-strong); border: 1px solid var(--accent-line); border-radius: var(--rounded-sm); padding: 6px 10px; font-size: 12px; }
 .loose-nodes { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Web 闭环增量：向导 / 工作流引导 / 草案进度（零脚本，纯服务端表单） */
+.fld input[type=password] { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rounded-sm); padding: 6px 8px; font: 400 13px var(--font); width: 100%; }
+.radio-line { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 4px 0; }
+.radio-line label { font-weight: 400; font-size: 13px; color: var(--text); display: inline-flex; gap: 5px; align-items: center; }
+.flow-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.flow-step { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+.flow-step .step-no { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-strong); border: 1px solid var(--accent-line); font-size: 11px; font-weight: 700; margin-bottom: 6px; }
+.flow-step h4 { font-size: 12.5px; margin-bottom: 3px; }
+.flow-step p { color: var(--text-2); font-size: 11.5px; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pulse-dot { width: 9px; height: 9px; border-radius: 999px; background: var(--accent); display: inline-block; animation: mf-pulse 1.2s ease-in-out infinite; margin-right: 8px; vertical-align: middle; }
+@keyframes mf-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 `;
 
-export type NavKey = "home" | "templates" | "instance" | "review";
+export type NavKey = "home" | "templates" | "instance" | "drafts" | "review" | "settings";
 
 const NAV: [NavKey, string, string][] = [
   ["home", "/", "工作台"],
   ["templates", "/templates", "模板库"],
   ["instance", "/instance", "我的实例"],
-  ["review", "/review", "审核中心"]
+  ["drafts", "/drafts", "AI 草案"],
+  ["review", "/review", "审核中心"],
+  ["settings", "/settings", "设置"]
 ];
 
-export function layout(active: NavKey, title: string, desc: string, content: string, statusInfo: string): string {
+export function layout(active: NavKey, title: string, desc: string, content: string, statusInfo: string, extraHead = ""): string {
   const nav = NAV.map(
     ([key, href, label]) => `<a href="${href}" class="${key === active ? "active" : ""}">${label}</a>`
   ).join("");
   return `<!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(title)} · Metric Factory</title><style>${CSS}</style></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(title)} · Metric Factory</title>${extraHead}<style>${CSS}</style></head>
 <body>
 <header class="topbar">
   <div class="brand" aria-label="JuanerAI，持续做出更好的决策；Metric Factory">
@@ -162,7 +177,7 @@ export function layout(active: NavKey, title: string, desc: string, content: str
   </div>
   <div></div>
   <div class="top-actions">
-    <span class="badge-local">本机运行 · 不联网 · 不处理凭据</span>
+    <span class="badge-local">本机运行 · 凭据仅存本机</span>
     <div class="avatar" aria-label="本地用户">MF</div>
   </div>
 </header>
@@ -237,8 +252,34 @@ export function instancePage(materialized: MaterializedInstance, instance: Insta
     <p>基模板 <span class="mono">${escapeHtml(instance.base)}</span> · 有效指标 <span class="num">${materialized.metrics.length}</span> 个
     · 口径调整 ${d.caliber.length} · 字段修改 ${d.modified.length} · 删除 ${d.removed.length} · 新增 ${d.added.length}
     · ${pending.length > 0 ? chip("warn", `待审核 ${pending.length}`) : chip("ok", "无待审核")}</p>
-    <p style="margin-top:8px"><a class="btn" href="/review">前往审核中心</a></p>
+    <p style="margin-top:8px" class="btn-row">
+      <a class="btn" href="/review">审核中心</a>
+      <a class="btn btn-primary" href="/instance/export/metricflow">导出 MetricFlow YAML</a>
+      <a class="btn" href="/instance/export/excel">导出 Excel 字典</a>
+      <a class="btn" href="/instance/export/mermaid">导出 Mermaid 指标树</a>
+    </p>
   </div>`;
+
+  // 相对模板的变更明细（fork diff：永远可以回答「我们改了什么」）
+  const diffRows: string[] = [];
+  for (const c of d.caliber) {
+    diffRows.push(`<tr><td>口径</td><td class="mono">${escapeHtml(c.metric)}.${escapeHtml(c.key)}</td><td>${c.from ? "开" : "关"} → <strong>${c.to ? "开" : "关"}</strong></td></tr>`);
+  }
+  for (const m of d.modified) {
+    diffRows.push(`<tr><td>修改</td><td class="mono">${escapeHtml(m.name)}</td><td>${escapeHtml(m.fields.join("、"))}</td></tr>`);
+  }
+  for (const r of d.removed) {
+    diffRows.push(`<tr><td>删除</td><td class="mono">${escapeHtml(r)}</td><td>—</td></tr>`);
+  }
+  for (const a of d.added) {
+    diffRows.push(`<tr><td>新增</td><td class="mono">${escapeHtml(a.name)}</td><td>${escapeHtml(a.display_name)}（${a.provenance.origin}${a.provenance.reviewed_by ? " · 已审核" : ""}）</td></tr>`);
+  }
+  const diffBlock = `<div class="view-title">相对模板的变更（fork diff）</div>
+    ${diffRows.length > 0
+      ? `<div class="card" style="padding:0;overflow-x:auto"><table class="tbl">
+        <thead><tr><th>类型</th><th>对象</th><th>明细</th></tr></thead>
+        <tbody>${diffRows.join("")}</tbody></table></div>`
+      : `<div class="card"><p style="color:var(--text-3)">与基模板完全一致，尚无变更。</p></div>`}`;
 
   const pendingNames = new Set(findPendingReview(instance.added).map((m) => m.name));
   const modifiedNames = new Set(instance.modified.map((m) => m.name));
@@ -278,7 +319,7 @@ export function instancePage(materialized: MaterializedInstance, instance: Insta
     </div>
   </form>`;
 
-  return `${summary}<div class="view-title">指标树 · 杜邦式分解（按模块分组，× ÷ 为公式算符）</div>${trees}${form}`;
+  return `${summary}${diffBlock}<div class="view-title">指标树 · 杜邦式分解（按模块分组，× ÷ 为公式算符）</div>${trees}${form}`;
 }
 
 export function reviewPage(instance: Instance, instancePath: string): string {

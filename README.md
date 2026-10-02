@@ -162,7 +162,14 @@ node dist/cli.js track my-instance/instance.yaml --out out
 
 ```bash
 node dist/cli.js ui --instance my-instance/instance.yaml --port 4173
-# 打开 http://127.0.0.1:4173 —— 模板浏览 / 实例指标树与微调表单 / LLM 审核中心
+# 或双击仓库根目录「启动工作台.command」/ zsh scripts/start-ui.sh（自动装依赖、构建、开浏览器）
 ```
 
-本地单用户：仅监听 127.0.0.1、不发起外部请求、写操作仅限本地实例与映射文件且全部走引擎校验（与 CLI 同 fail-closed 语义）。界面对齐 JuanerAI 最新 UI 标准（2026-09-28 Case 助手增量契约：品牌栏 + 待采纳草案卡 + 橘 accent 视觉）。
+打开 http://127.0.0.1:4173 —— **业务人员全程浏览器闭环，无需终端**：
+
+1. **创建实例**：首页「创建实例」问卷向导（三问 → 匹配行业模板 → 命名生成），或打开工作区已有实例
+2. **微调**：实例页改口径开关 / 增删改指标（写回前全量校验，失败零写盘），内嵌「相对模板的变更」fork diff 对比
+3. **AI 草案**（可选）：设置页配置模型（存仓库根 `.env.local`，已 gitignore，页面打码不回显）；草案工坊填业务描述或自然语言微调指令 → 进度页自动刷新 → 待采纳草案卡预览 → 采纳合入（引擎校验）/ 丢弃
+4. **审核与导出**：审核中心批准 LLM 指标（fail-closed：未批准导出被硬阻断）；实例页一键下载 MetricFlow YAML / Excel 字典 / Mermaid 指标树（与 CLI export 同语义：mapping 自动发现 + 导出前全量校验）
+
+本地单用户：仅监听 127.0.0.1；写操作仅限工作区实例、`draft.pending.yaml` 草案与 `.env.local`（均过引擎校验）；实例打开限工作区扫描白名单。界面对齐 JuanerAI 最新 UI 标准（2026-09-28 Case 助手增量契约：品牌栏 + 待采纳草案卡 + 橘 accent 视觉），零客户端脚本、纯服务端表单。

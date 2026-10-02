@@ -20,7 +20,8 @@ test("GET /：工作台首页含模板入口与边界声明", async () => {
   const html = await res.text();
   expect(html).toContain("模板库");
   expect(html).toContain("本机运行");
-  expect(html).toContain("不联网");
+  expect(html).toContain("凭据仅存本机");
+  expect(html).toContain("创建实例"); // 工作流引导（Web 闭环）
   server.close();
 });
 

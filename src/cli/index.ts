@@ -791,7 +791,7 @@ program
 
 program
   .command("ui")
-  .description("启动本地 Web 工作台（模板浏览 / 实例编辑 / 审核流；仅监听 127.0.0.1）")
+  .description("启动本地 Web 工作台（问卷向导 / 实例编辑 / AI 草案 / 审核与导出；仅监听 127.0.0.1）")
   .option("-p, --port <port>", "端口（默认 4173，传 0 随机）", "4173")
   .option("-i, --instance <path>", "工作台操作的实例文件路径")
   .option("-t, --templates <dir>", "行业模板目录", defaultTemplatesDir())
@@ -800,7 +800,7 @@ program
     const server = createUiServer({ instancePath: opts.instance, templatesDir: opts.templates });
     const port = await listenUi(server, Number(opts.port));
     console.log(`Metric Factory 工作台已启动：http://127.0.0.1:${port}（Ctrl+C 停止）`);
-    console.log("本机运行 · 不联网 · 写操作仅限本地实例与映射文件");
+    console.log("本机运行 · 凭据仅存本机 · AI 草案在设置页配置模型");
   });
 
 program

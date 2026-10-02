@@ -2,11 +2,18 @@
 # 一键启动 Metric Factory 工作台（双端通用：Mac mini / MacBook）
 # 参考 deep-research 的 启动深度研究.command 模式：
 #   依赖缺失自动安装 → 构建产物缺失自动构建 → 起本机服务 → 健康检查 → 打开浏览器。
-# 本机单用户：仅监听 127.0.0.1，不联网，不处理凭据。
+# 本机单用户：仅监听 127.0.0.1；AI 调用使用 .env.local 里的模型配置（凭据仅存本机）。
 # 端口默认 4173（被占用时自动顺延到 4174）；MF_UI_PORT 可覆盖。
 # 测试/无浏览器环境：MF_UI_NO_OPEN=1 跳过 open。
 set -e
 cd "$(dirname "$0")/.."
+
+# 工作台设置页写入的模型配置（CLI 链路共用；UI 运行时也会自行读取该文件）
+if [ -f .env.local ]; then
+  set -a
+  . ./.env.local
+  set +a
+fi
 
 echo "== Metric Factory 工作台 =="
 if [ ! -d node_modules ]; then
