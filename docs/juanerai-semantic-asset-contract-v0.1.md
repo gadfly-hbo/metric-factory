@@ -5,7 +5,7 @@
 | 版本 | `v0.1`（冻结） / 2026-10-08；评审与修订历史 draft.1–draft.4 见文末变更记录 |
 | 状态 | **已冻结 v0.1**（用户批准 2026-10-08；readiness review 两轮 PASS）；不授权任何代码修改、依赖安装或跨仓写入，首个实现批次另行批准 |
 | 供应方 | metric-factory（独立开源，Apache-2.0，仓库 `/Users/huangbo/Dev/Projects/metric-factory`） |
-| 消费方 | JuanerAI（`/Users/huangbo/JuanerAI`，现行基线：白皮书 v4.0 + Blueprint v4.1，v4.2 待确认） |
+| 消费方 | JuanerAI（`/Users/huangbo/JuanerAI`，现行基线：白皮书 v4.0 + **Blueprint v4.2（已生效 2026-10-04，批准记录为状态权威，main 已发布）**；勘误 2026-10-08，见变更记录） |
 | 用户已裁决 | ①《分析体系工作台方案 v1.0》（JA-ABS-PRD-001）**有效**，且 metric-factory 即「分析体系工作台」的产品名，范围 = 分析体系设计 + 指标体系建设，不再维护两个重叠工具；②先评审后实施；③metric-factory 保持独立开源，未来作为平台插件接入；④三方关系按本文 §2.2 统一理解（正式蓝图命名与范围同步后置） |
 | 本文性质 | 纯静态契约草案；不构成实现声明、验收证据或工程授权 |
 
@@ -175,7 +175,7 @@ concept_refs:
 2. **v4 批次**：metric-factory schema 对齐 L1 指标契约字段（汇总规则、统计对象、口径类型）+ `concept_refs` 进入实例数据。
 3. **v5 批次**：场景编辑器落地，`scenarios` 结构冻结；模板升级为 Domain Pack 候选格式（对齐 `packages/domain-pack-sdk`，若其已可用）。
 4. **v6 批次**：消费方 A-02/N04 有真实实现后，修订 `executable` 状态语义与导入触发方式。
-5. **跟踪项**：Blueprint v4.1/v4.2 正文未含 metric-factory/SAP；正式蓝图命名与范围同步须在 v4 批次前完成，本契约在此之前以头部用户裁决为基线。
+5. **跟踪项**：Blueprint v4.2 正文未含 metric-factory/SAP（批准记录为状态权威，正文头部保留草案期冻结字节）；正式蓝图命名与范围同步须以 v4.2 为基线另行完成（v4 实现批次已按契约推进，不再以该同步为前置），本契约在此之前以头部用户裁决为基线。
 
 ## 8. 开放问题处置（2026-10-08 用户批准：一次性给方向，细节随实现批次冻结）
 
@@ -219,3 +219,4 @@ concept_refs:
 | v0.1-draft.3 | 2026-10-08 | 按 readiness review 第 1 轮（NEEDS_CLARIFICATION）material correction：①§3.5 冻结阻断半径=整批拒绝，并明确 SAP 导出门复用 metric-factory export gate（导入侧校验为手工构造包纵深防御）；②§3.6 冻结 `runtime_state ≠ design_only` 即拒绝（fail-closed）；③§3.2 dimensions 改为字符串数组透传承诺、维度字典标预留，L0 补 display_name_en/definition_en；④§4 补指纹失配拒绝语义与重复 `id@version` 双向拒绝；⑤§3.3 source 冻结为非空不透明字符串；⑥§7 加蓝图同步跟踪项；⑦§8 三问转已裁决（序列化=YAML 1.2、source 最小约束、重复身份语义），开放问题重编为 4–8；⑧自检附录与 §9 更新评审状态 |
 | v0.1-draft.4 | 2026-10-08 | 第 2 轮 readiness review 结论 **PASS**（新鲜 Reviewer，七项独立评审）；按评审 §6 五项非语义文本加固：①§2.1 修正措辞为「同谱系 ID、版本递增」（与 §4 谱系语义一致）；②§3 加占位符说明（`kind` 为格式占位不影响校验语义；未知 `sap` 版本拒绝）；③§6 `validate_import` 拒绝清单补「未知 `sap` 合同版本」；④§4 加跨包依赖机制注记（v0.1 不含）与指纹自引用决策项；⑤§9 与自检附录更新两轮评审状态。**冻结语义零变更**，无需再评审 |
 | **v0.1（冻结）** | 2026-10-08 | 用户批准冻结为正式 v0.1。§8 五问一次性给方向（用户批准「方向已定，细节随实现批次冻结」）：Q4 命名空间→前缀约定（包级 namespace 字段，零中心化服务）；Q5 导入触发→手动文件导入（git 引用/包登记留 v6 窗口）；Q6 source 格式→平面定位符「发布方标识+条目 ID@version」，对接时点=v6 窗口；Q7 scenarios 冻结=v5 批次随场景编辑器；Q8 L1 最小集=三件套（aggregation / statistic_object / caliber_type）进 v0.2，细节随 v4 批次 |
+| v0.1-errata.1 | 2026-10-08 | **事实勘误（无语义变更）**：消费方基线更正为 Blueprint v4.2 已生效（用户确认 2026-10-08，GitHub main 已核对；批准记录 `blueprint-v4.2-approval-and-rule-integration.md` 为状态权威，v4.2 正文头部保留草案期冻结字节）；§7 跟踪项同步改写（v4 实现批次不再以蓝图同步为前置，同步以 v4.2 为基线另行完成） |
