@@ -30,3 +30,9 @@
 
 - N1 半兑现（测试已钉实际页标题；ui-contract S1-3 文档描述未修——`.flow/` 不在代码评审面，维持记录）。
 - N2–N5 维持原样（记录不动）。
+
+---
+
+# 收尾批次（2026-10-08，commit 0600d79）
+
+N1（文档侧双门修正）、N2（tsup define 注入，实测 generator 含 +7a47de7）、N3（头注改实）、N4（bindings/unreviewed 收紧 + 负例）、N5（packageIdFromInstancePath 共享）全部清零；新增 examples/ecommerce-instance.sap.yaml golden artifact（53 指标）。203/203 + contract 1/1 全绿后提交。
