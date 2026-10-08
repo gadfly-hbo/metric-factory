@@ -31,7 +31,7 @@ import type { Instance } from "../schema/instance.js";
 import { metricflowExporter } from "../export/metricflow.js";
 import { excelExporter } from "../export/excel.js";
 import { mermaidExporter } from "../export/mermaid.js";
-import { createSapExporter, SapExportValidationError, slugifyPackageId } from "../export/sap.js";
+import { createSapExporter, SapExportValidationError, packageIdFromInstancePath } from "../export/sap.js";
 import { SapAssemblyError } from "../sap/assemble.js";
 import { ExportBlockedError } from "../export/gate.js";
 import type { Exporter } from "../export/types.js";
@@ -916,7 +916,7 @@ program
     }
 
     // 实例名 = 输入文件名去 .yaml 后缀（D2）；slugify 是包 id 约束 ^[a-z][a-z0-9-]*$ 的推论
-    const instanceSlug = slugifyPackageId(basename(instancePath).replace(/\.yaml$/, ""));
+    const instanceSlug = packageIdFromInstancePath(instancePath);
     const exporter: Exporter =
       opts.format === "sap"
         ? createSapExporter({ template: base, packageId: instanceSlug, instanceConceptRefs: loaded.instance.concept_refs })

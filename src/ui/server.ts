@@ -30,7 +30,7 @@ import { draftsPage, jobRunningPage, jobErrorPage, type DraftLoad } from "./rend
 import { metricflowExporter } from "../export/metricflow.js";
 import { excelExporter } from "../export/excel.js";
 import { mermaidExporter } from "../export/mermaid.js";
-import { createSapExporter, slugifyPackageId, SapExportValidationError } from "../export/sap.js";
+import { createSapExporter, packageIdFromInstancePath, SapExportValidationError } from "../export/sap.js";
 import { SapAssemblyError } from "../sap/assemble.js";
 import { ExportBlockedError } from "../export/gate.js";
 import type { Exporter } from "../export/types.js";
@@ -443,7 +443,7 @@ export function createUiServer(opts: UiOptions): Server {
             format === "sap"
               ? createSapExporter({
                   template: ctx.base,
-                  packageId: slugifyPackageId(basename(ctx.instancePath).replace(/\.yaml$/, "")),
+                  packageId: packageIdFromInstancePath(ctx.instancePath),
                   instanceConceptRefs: ctx.instance.concept_refs
                 })
               : exporters[format]!;

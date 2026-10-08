@@ -1,10 +1,12 @@
-// SAP 0.1 消费侧校验器（契约 §6 validate_import 供应侧镜像；PRD「校验器双面共用」）
+// SAP 0.1 消费侧校验器（契约 §6 validate_import 的供应侧镜像 minus LLM 规则——
+// 未审核 LLM 条目由 export gate 执法（契约 §3.5），装配产物正常路径不可达，v6 消费侧重用时补此规则）。
 // 规则集：structure（zod 全段，含未知 sap 版本）/ runtime-state / fingerprint-mismatch /
 // duplicate-identity（指标重名、concept_refs 重复键）；任一命中即 issues 非空，导出器据非空 throw。
 import { z } from "zod";
 import { packageFingerprint, type SapPackage } from "./canonical.js";
 import { conceptRefKey } from "./assemble.js";
 import { MetricSchema, ConceptRefSchema } from "../schema/template.js";
+import { MappingEntrySchema } from "../schema/mapping.js";
 import type { ValidateIssue } from "../engine/validate.js";
 
 // 契约 §3 全段：sap 字面 0.1、runtime_state 字面 design_only、必填段存在、
@@ -24,11 +26,11 @@ export const SapPackageSchema = z.object({
   metrics: z.array(MetricSchema),
   dimensions: z.array(z.string().min(1)),
   concept_refs: z.array(ConceptRefSchema),
-  bindings: z.array(z.unknown()),
+  bindings: z.array(MappingEntrySchema),
   review: z.object({
     gate: z.string().min(1),
     exported_at: z.string().min(1),
-    unreviewed: z.array(z.unknown())
+    unreviewed: z.array(z.string())
   }),
   runtime_state: z.literal("design_only")
 });

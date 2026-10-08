@@ -151,3 +151,11 @@ test("structure：必填段缺失（review 整段删除）拒绝", () => {
     { rule: "structure", path: "review", message: expect.any(String) }
   ]);
 });
+
+test("structure：bindings 条目不合 MappingEntry 形状（缺 model/column）拒绝", () => {
+  const bad = { ...validPackage(), bindings: [{ metric: "gmv", confidence: 0.9 }] };
+  const issues = validateSapPackage(bad);
+  expect(issues.length).toBeGreaterThan(0);
+  expect(issues[0]!.rule).toBe("structure");
+  expect(issues[0]!.path).toMatch(/^bindings/);
+});

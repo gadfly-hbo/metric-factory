@@ -60,7 +60,7 @@
 |---|---|---|---|
 | S1-1 默认态（含待审核>0 变体） | GET `/instance` 200 | 按钮组 5 项；概览卡 chip 按 `findPendingReview` 显示「待审核 N」（warn）或「无待审核」（ok），chip 必带文字 | `render.ts:254`、`server.ts:383-397` |
 | S1-2 下载成功态 | 点击 SAP 项 → GET `/instance/export/sap` | HTTP 200，`content-type: text/yaml; charset=utf-8`，`content-disposition: attachment; filename="<实例名>.sap.yaml"`；**页面本体不变，无 toast/无弹层/无 spinner**（与既有三格式同一交互模式：浏览器下载器承接全部反馈） | `server.ts:446-450` 管线复用；US17 |
-| S1-3 阻断态 | 点击任一导出项且实例含未审核 LLM 指标 | 跳转 S2-1 页（HTTP 422） | `server.ts:452-460`；US16 |
+| S1-3 阻断态 | 点击任一导出项且实例含未审核 LLM 指标 | 经 `validateInstance` 的 `llm-unreviewed` 规则拦截，渲染 **S2-2「导出前校验未通过」页**（HTTP 422）。注：实现为双门结构——validate 门先于 export gate 命中同一谓词，故此触发器实际呈现 S2-2；S2-1（ExportBlockedError 页）为该谓词不可达的保留呈现面（REVIEW#2/N1 核实，2026-10-08 修正） | `server.ts:433-437`；US16 |
 | S1-4 空 concept_refs 常态 | 实例未声明 `concept_refs`（合法） | **与 S1-1 逐字一致**：下载区不出现任何 concept_refs 相关徽标/计数/空态提示；SAP 项照常可点、可导 | Q8 决议；PRD Schema 扩展（concept_refs 全可选） |
 | S1-5 校验未通过态 | `validateInstance` 返回 issues | 422 `formErrorPage("校验失败", …)`（[rule] path: message 列表 + 「返回修改」） | `server.ts:432-438`；管线复用推论 |
 
@@ -77,12 +77,14 @@ S1 布局参数（像素对齐基准）：主栏 max-width 1000px 居中；`.car
 
 **S2-1 同构性钉死**：现行阻断页文案不含格式名，因此 SAP 的阻断页与三格式**逐字同构（vacuously，无格式名可变化）**——同一 layout 调用、同一 card 结构、同一文案常量。禁止为 SAP 增加任何格式专属文案、弱化语（如「仅 SAP」「可跳过」）或减少所列指标。
 
+**双门事实（N1 修正留档，2026-10-08）**：导出管线对 LLM 未审核谓词有两道同语义门——`validateInstance`（`llm-unreviewed` 规则）先于 exporter 内 `ExportBlockedError`，因此 LLM 触发器的用户实际所见为 **S2-2 页**；S2-1 页对 LLM 触发器不可达（v3 既有结构，非 v4 引入）。S2-1 的实际可达触发器 = 装配/校验类错误（`SapAssemblyError`/`SapExportValidationError`，v4 B1 修复后同样 422 呈现）。fail-closed 不变量（四格式同一 422、列指标名、给解除路径）在两门均成立，用户故事 US3/US16 实质满足。
+
 ---
 
 ## 2. Click paths（入口 / 动作 / 结果态）
 
 1. **默认路径（S1-1 → S1-2）**：`/instance` 页面加载 → Tab 键序：审核中心 → MetricFlow → Excel → Mermaid → **SAP（第 5，末位）** → Enter/点击 → 浏览器下载 `<实例名>.sap.yaml` → 页面无变化。
-2. **阻断路径（S1-1 → S2-1）**：含未审核 LLM 指标时点击**任一**导出项（含 SAP）→ 422 阻断页 → 列出全部未审核指标名（mono）→ 「前往审核中心」→ `/review` 审核完成后回到 `/instance` 重试导出。
+2. **阻断路径（S1-1 → S2-2）**：含未审核 LLM 指标时点击**任一**导出项（含 SAP）→ 422「导出前校验未通过」页 → 列出全部未审核指标名（mono）→ 「返回修改」/侧栏「审核中心」→ `/review` 审核完成后回到 `/instance` 重试导出。（按「双门事实」修正：实际呈现面为 S2-2。）
 3. **空 concept_refs 路径（S1-4 → S1-2）**：实例无 `concept_refs` → 下载区与默认态完全一致 → SAP 点击直接成功下载，包内 `concept_refs` 段合法为空（`[]`）。
 4. **成功下载的文件契约（展示给用户的落盘物）**：文件名 `<实例名>.sap.yaml`（实例名定义见 §7 BLOCKED-1）；YAML 1.2 内容含 `sap: 0.1`、`runtime_state: design_only`、`fingerprint`、`namespace`、`generator`、`created_at`（PRD Testing Decisions 断言面）。
 

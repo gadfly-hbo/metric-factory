@@ -41,7 +41,13 @@ test("export sap：契约段齐全（sap 0.1 / design_only / fingerprint / names
   expect(doc.package.id).toBe("instance-ecommerce");
   expect(doc.package.namespace).toBe("mf.instance-ecommerce");
   const sha = process.env.MF_GIT_SHA;
-  expect(doc.package.generator).toBe(`metric-factory@${pkgVersion}${sha ? `+${sha}` : ""}`);
+  if (sha) {
+    // 运行时覆盖通道：精确断言
+    expect(doc.package.generator).toBe(`metric-factory@${pkgVersion}+${sha}`);
+  } else {
+    // 构建期注入或纯版本号兜底：断言格式（dist 烘焙 sha / src 直跑无 sha 两种上下文都合法）
+    expect(doc.package.generator).toMatch(new RegExp(`^metric-factory@${pkgVersion.replace(/\./g, "\\.")}(\\+[0-9a-f]{7,40})?$`));
+  }
 
   // 文件字节含契约字面（规范化序列化：非标量保守加双引号）
   expect(raw).toContain('sap: "0.1"');

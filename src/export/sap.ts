@@ -2,7 +2,7 @@
 // 管线：现有 export gate（整批阻断）→ assembleSap → validateSapPackage（issues 非空即 throw，含 rule 列表）
 // → canonicalize(包) 为文件内容。文件名 <packageId>.sap.yaml（CLI 侧 packageId = 实例文件名 slug）。
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Exporter, ExportResult } from "./types.js";
 import { assertExportable } from "./gate.js";
@@ -19,6 +19,11 @@ export function slugifyPackageId(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/-+/g, "-");
+}
+
+// 实例路径 → 包 ID（CLI 与 UI 共用，消除两处组合重复）
+export function packageIdFromInstancePath(instancePath: string): string {
+  return slugifyPackageId(basename(instancePath).replace(/\.yaml$/, ""));
 }
 
 export class SapExportValidationError extends Error {
@@ -54,9 +59,10 @@ function packageVersion(): string {
   throw new Error("无法定位 metric-factory 的 package.json（SAP generator 版本未知）");
 }
 
-// PRD 回退语义：sha 正常由构建期注入（tsup define），此处读取 MF_GIT_SHA 环境回退，纯版本号兜底
+// PRD 回退语义：sha 优先取运行时 MF_GIT_SHA（可覆盖），其次构建期 tsup define 注入的 MF_GIT_SHA_BUILD，
+// 两者皆无则纯版本号兜底。define 在 dist 中为字面量，vitest 直跑 src 时该名为 undefined。
 export function buildGenerator(env: NodeJS.ProcessEnv = process.env): string {
-  const sha = env.MF_GIT_SHA;
+  const sha = env.MF_GIT_SHA || process.env.MF_GIT_SHA_BUILD;
   return `metric-factory@${packageVersion()}${sha ? `+${sha}` : ""}`;
 }
 
