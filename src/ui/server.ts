@@ -1,5 +1,5 @@
 import { createServer, type Server } from "node:http";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadTemplate } from "../engine/loader.js";
 import { layout, templatesPage, templateDetailPage, instancePage, reviewPage, formErrorPage, escapeHtml } from "./render.js";
@@ -30,6 +30,8 @@ import { draftsPage, jobRunningPage, jobErrorPage, type DraftLoad } from "./rend
 import { metricflowExporter } from "../export/metricflow.js";
 import { excelExporter } from "../export/excel.js";
 import { mermaidExporter } from "../export/mermaid.js";
+import { createSapExporter, slugifyPackageId, SapExportValidationError } from "../export/sap.js";
+import { SapAssemblyError } from "../sap/assemble.js";
 import { ExportBlockedError } from "../export/gate.js";
 import type { Exporter } from "../export/types.js";
 import { MappingSchema } from "../schema/mapping.js";
@@ -396,7 +398,8 @@ export function createUiServer(opts: UiOptions): Server {
         return;
       }
 
-      // ===== 导出下载（三格式；与 CLI export 同语义：mapping 自动发现 + 全量校验 + fail-closed 门）=====
+      // ===== 导出下载（四格式；与 CLI export 同语义：mapping 自动发现 + 全量校验 + fail-closed 门）=====
+      // sap 不在静态表内：装配依赖当前实例（基模板 / 文件名 slug / concept_refs），ctx 加载后走 createSapExporter 工厂（与 CLI 同管线，无第二套规则）
       const exporters: Record<string, Exporter> = {
         metricflow: metricflowExporter,
         excel: excelExporter,
@@ -405,10 +408,9 @@ export function createUiServer(opts: UiOptions): Server {
       const exportMatch = path.match(/^\/instance\/export\/([a-z]+)$/);
       if (exportMatch && (req.method === "GET" || req.method === "HEAD")) {
         const format = exportMatch[1]!;
-        const exporter = exporters[format];
-        if (!exporter) {
+        if (format !== "sap" && !exporters[format]) {
           res.writeHead(404, { "content-type": "text/html; charset=utf-8" }).end(
-            layout("instance", "未找到格式", `不支持的导出格式 ${escapeHtml(format)}。`, `<div class="empty">可选：metricflow / excel / mermaid<br><a class="btn" href="/instance">返回实例</a></div>`, statusInfo)
+            layout("instance", "未找到格式", `不支持的导出格式 ${escapeHtml(format)}。`, `<div class="empty">可选：metricflow / excel / mermaid / sap<br><a class="btn" href="/instance">返回实例</a></div>`, statusInfo)
           );
           return;
         }
@@ -437,10 +439,18 @@ export function createUiServer(opts: UiOptions): Server {
           return;
         }
         try {
+          const exporter: Exporter =
+            format === "sap"
+              ? createSapExporter({
+                  template: ctx.base,
+                  packageId: slugifyPackageId(basename(ctx.instancePath).replace(/\.yaml$/, "")),
+                  instanceConceptRefs: ctx.instance.concept_refs
+                })
+              : exporters[format]!;
           const result = await exporter.export(materialized);
           const mime = format === "excel"
             ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            : format === "metricflow"
+            : format === "metricflow" || format === "sap"
               ? "text/yaml; charset=utf-8"
               : "text/plain; charset=utf-8";
           res.writeHead(200, {
@@ -455,6 +465,21 @@ export function createUiServer(opts: UiOptions): Server {
                 `<div class="card"><div class="card-h" style="color:var(--fail)">待审核指标</div>
                 <ul class="error-list">${e.blockedMetrics.map((n) => `<li><span class="mono">${escapeHtml(n)}</span></li>`).join("")}</ul>
                 <a class="btn btn-primary" href="/review">前往审核中心</a></div>`, statusInfo)
+            );
+            return;
+          }
+          // 供应侧查重拒绝 / SAP 包校验失败：与 CLI 同语义（exit 1 的 UI 等价物），422 带文字错误页而非兜底 500
+          if (e instanceof SapAssemblyError) {
+            res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+              layout("instance", "导出装配未通过", "SAP 语义包供应侧查重 fail-closed，修正实例后才能导出。",
+                formErrorPage("装配被拒绝（fail-closed）", [`[${e.rule}] ${e.message}`]), statusInfo)
+            );
+            return;
+          }
+          if (e instanceof SapExportValidationError) {
+            res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+              layout("instance", "导出校验未通过", "SAP 语义包校验 fail-closed，修正包内容后才能导出。",
+                formErrorPage("校验失败", e.issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`)), statusInfo)
             );
             return;
           }

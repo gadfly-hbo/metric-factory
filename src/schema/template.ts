@@ -23,6 +23,30 @@ export const ProvenanceSchema = z
     }
   });
 
+export const ConceptRefSchema = z.object({
+  id: z.string().min(1),
+  version: z.string().min(1),
+  source: z.string().min(1),
+  role: z.string().min(1).optional()
+});
+
+export const AggregationSchema = z.object({
+  allowed_dimensions: z.array(z.string().min(1)),
+  disallowed_dimensions: z.array(z.string().min(1)),
+  ratio_policy: z.literal("recompute_from_parts").optional()
+});
+
+export const CaliberFamilySchema = z.enum([
+  "refund_adjustment",
+  "fee_composition",
+  "scope_inclusion",
+  "validity_threshold",
+  "attribution_window",
+  "proration_rule",
+  "cap_anomaly_rule",
+  "measurement_anchor"
+]);
+
 export const TypeParamsSchema = z.object({
   measure: z.string().regex(/^[a-z][a-z0-9_]*$/).optional(),
   numerator: z.string().regex(/^[a-z][a-z0-9_]*$/).optional(),
@@ -45,6 +69,9 @@ export const MetricSchema = z
     owner_role: z.string().min(1),
     caliber_switches: z.record(z.string(), z.boolean()).default({}),
     type_params: TypeParamsSchema.optional(),
+    aggregation: AggregationSchema.optional(),
+    statistic_object: ConceptRefSchema.optional(),
+    caliber_type: z.array(CaliberFamilySchema).optional(),
     provenance: ProvenanceSchema,
     review: z.object({ required: z.boolean() }).default({ required: false })
   })
@@ -55,6 +82,20 @@ export const MetricSchema = z
         path: ["review", "required"],
         message: "origin=llm 的指标必须 review.required=true（fail-closed）"
       });
+    }
+    if (m.caliber_type) {
+      const seen = new Set<string>();
+      for (const family of m.caliber_type) {
+        if (seen.has(family)) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["caliber_type"],
+            message: `caliber_type 存在重复口径族 "${family}"`
+          });
+          break;
+        }
+        seen.add(family);
+      }
     }
   });
 
@@ -99,3 +140,6 @@ export const TemplateSchema = z.object({
 export type Metric = z.infer<typeof MetricSchema>;
 export type Provenance = z.infer<typeof ProvenanceSchema>;
 export type Template = z.infer<typeof TemplateSchema>;
+export type ConceptRef = z.infer<typeof ConceptRefSchema>;
+export type Aggregation = z.infer<typeof AggregationSchema>;
+export type CaliberFamily = z.infer<typeof CaliberFamilySchema>;

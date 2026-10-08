@@ -1,5 +1,5 @@
 import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { Command } from "commander";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { select, confirm } from "@inquirer/prompts";
@@ -31,6 +31,8 @@ import type { Instance } from "../schema/instance.js";
 import { metricflowExporter } from "../export/metricflow.js";
 import { excelExporter } from "../export/excel.js";
 import { mermaidExporter } from "../export/mermaid.js";
+import { createSapExporter, SapExportValidationError, slugifyPackageId } from "../export/sap.js";
+import { SapAssemblyError } from "../sap/assemble.js";
 import { ExportBlockedError } from "../export/gate.js";
 import type { Exporter } from "../export/types.js";
 import type { Template } from "../schema/template.js";
@@ -64,6 +66,9 @@ async function loadMapping(path: string, opts: { required?: boolean } = {}): Pro
   }
   return parsed.success ? parsed.data : { base: "", mappings: [] };
 }
+
+// 导出名册：help 枚举串与未知格式错误串的唯一来源（D1：新增格式必须同步这里）
+const EXPORT_FORMATS = ["metricflow", "excel", "mermaid", "sap"] as const;
 
 const exporters: Record<string, Exporter> = {
   metricflow: metricflowExporter,
@@ -882,16 +887,15 @@ program
 
 program
   .command("export")
-  .description("导出实例：--format metricflow | excel | mermaid")
+  .description(`导出实例：--format ${EXPORT_FORMATS.join(" | ")}`)
   .argument("<instance>", "实例 YAML 文件路径")
   .option("-f, --format <format>", "导出格式", "metricflow")
   .option("-t, --templates <dir>", "行业模板目录（用于解析实例的基模板）", defaultTemplatesDir())
   .option("-o, --out <dir>", "导出输出目录", ".")
   .option("--mapping <path>", "映射文件路径（默认自动发现 <实例名>.mapping.yaml）")
   .action(async (instancePath: string, opts: { format: string; templates: string; out: string; mapping?: string }) => {
-    const exporter = exporters[opts.format];
-    if (!exporter) {
-      console.error(`ERROR 不支持的导出格式 "${opts.format}"（可选：${Object.keys(exporters).join(" | ")}）`);
+    if (!EXPORT_FORMATS.includes(opts.format as (typeof EXPORT_FORMATS)[number])) {
+      console.error(`ERROR 不支持的导出格式 "${opts.format}"（可选：${EXPORT_FORMATS.join(" | ")}）`);
       process.exit(1);
     }
 
@@ -910,6 +914,13 @@ program
       console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
       process.exit(1);
     }
+
+    // 实例名 = 输入文件名去 .yaml 后缀（D2）；slugify 是包 id 约束 ^[a-z][a-z0-9-]*$ 的推论
+    const instanceSlug = slugifyPackageId(basename(instancePath).replace(/\.yaml$/, ""));
+    const exporter: Exporter =
+      opts.format === "sap"
+        ? createSapExporter({ template: base, packageId: instanceSlug, instanceConceptRefs: loaded.instance.concept_refs })
+        : exporters[opts.format]!;
 
     const materialized = materialize(base, loaded.instance);
 
@@ -937,7 +948,11 @@ program
       await writeFile(outPath, result.content);
       console.log(`已导出：${outPath}（${materialized.metrics.length} 个指标，格式 ${opts.format}）`);
     } catch (e) {
-      if (e instanceof ExportBlockedError) {
+      if (
+        e instanceof ExportBlockedError ||
+        e instanceof SapExportValidationError ||
+        e instanceof SapAssemblyError
+      ) {
         console.error(`ERROR ${e.message}`);
         process.exit(1);
       }

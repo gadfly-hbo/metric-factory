@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MetricSchema } from "./template.js";
+import { MetricSchema, ConceptRefSchema } from "./template.js";
 import { AnswersSchema } from "./answers.js";
 
 // 企业实例 = 模板 fork + diff patch（GRILL 决议 #2：自定义结构化格式，人可读）
@@ -21,7 +21,8 @@ export const InstanceSchema = z.object({
   caliber_switches: z.record(z.string(), z.record(z.string(), z.boolean())).default({}),
   added: z.array(MetricSchema).default([]),
   removed: z.array(z.string().min(1)).default([]),
-  modified: z.array(ModifiedMetricSchema).default([])
+  modified: z.array(ModifiedMetricSchema).default([]),
+  concept_refs: z.array(ConceptRefSchema).default([])
 });
 
 export type Instance = z.infer<typeof InstanceSchema>;

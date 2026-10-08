@@ -11,6 +11,7 @@ export function buildInstance(template: Template, answers: Answers, now: string)
     caliber_switches: answers.caliber,
     added: [],
     removed: [],
-    modified: []
+    modified: [],
+    concept_refs: []
   };
 }

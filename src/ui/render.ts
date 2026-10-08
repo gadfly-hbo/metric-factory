@@ -257,7 +257,9 @@ export function instancePage(materialized: MaterializedInstance, instance: Insta
       <a class="btn btn-primary" href="/instance/export/metricflow">导出 MetricFlow YAML</a>
       <a class="btn" href="/instance/export/excel">导出 Excel 字典</a>
       <a class="btn" href="/instance/export/mermaid">导出 Mermaid 指标树</a>
+      <a class="btn" href="/instance/export/sap" aria-describedby="sap-export-note">导出 SAP 语义包</a>
     </p>
+    <p id="sap-export-note" style="color:var(--text-3);font-size:11.5px;margin-top:8px">SAP 语义包：JuanerAI 语义资产包（YAML，含指纹与出处）</p>
   </div>`;
 
   // 相对模板的变更明细（fork diff：永远可以回答「我们改了什么」）

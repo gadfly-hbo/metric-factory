@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>我的实例 · Metric Factory（v4 UI 原型 · 实例页导出下载区）</title>
+<!--
+  v4 UI-GATE 可点击原型（工件 P1，对应 .flow/ui-contract.md）
+  - 单文件 / 零外部依赖 / 双击可开；tokens 与布局逐字转录自 src/ui/render.ts（2026-09-28 现行契约）
+  - 四状态可切换：默认(S1-1) / 下载成功(S1-2) / 阻断 422(S2-1) / 空 concept_refs(S1-4)
+  - 右下角「原型演示轨」为原型专用件，非产品 UI（契约 §9）
+-->
+<style>
+/* ===== 以下 tokens 逐字转录自 src/ui/render.ts:9-69（现行 09-28 契约，不得改动）===== */
+:root {
+  --bg: #eceae5; --surface: #ffffff; --surface-2: #f4f3ef; --soft: #f7f6f2;
+  --border: #e5e2dc; --border-strong: #d8d3cb;
+  --text: #1d2027; --text-2: #6f7480; --text-3: #8a8076;
+  --accent: #e8643a; --accent-strong: #bf4927; --accent-soft: #fff1e8; --accent-line: #e8c1b4;
+  --navy: #263442;
+  --ok: #176247; --ok-soft: #def3e9; --ok-line: #bfddcf;
+  --warn: #855211; --warn-soft: #fff1d6; --warn-line: #f0dfc2;
+  --fail: #952f2f; --fail-soft: #ffe5e5; --fail-line: #f3caca;
+  --queue: #6d5bd0; --queue-ink: #5b48c0; --queue-soft: #efecfb; --queue-line: #d9d2f5;
+  --rounded-base: 12px; --rounded-sm: 8px;
+  --shadow-card: 0 3px 12px rgba(40,36,30,.04); --shadow-float: 0 18px 48px rgba(35,35,30,.12);
+  --font: Inter, ui-sans-serif, -apple-system, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font: 400 13px/1.55 var(--font); }
+.topbar { position: sticky; top: 0; z-index: 20; height: 64px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 18px; background: rgba(255,255,255,.96); border-bottom: 1px solid var(--border); }
+.app { display: flex; min-height: calc(100vh - 64px); }
+.sidebar { width: 248px; background: var(--surface-2); border-right: 1px solid var(--border); padding: 16px 14px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 64px; height: calc(100vh - 64px); }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav a { display: block; padding: 7px 10px; border-radius: var(--rounded-sm); color: var(--text-2); text-decoration: none; font-size: 13px; }
+.nav a:hover { background: var(--surface); }
+.nav a.active { background: var(--accent-soft); color: var(--accent-strong); font-weight: 500; }
+.boundary { margin-top: auto; padding: 10px; border: 1px dashed var(--border-strong); border-radius: var(--rounded-sm); color: var(--text-3); font-size: 11.5px; line-height: 1.6; }
+.main { flex: 1; padding: 22px; max-width: 1000px; margin: 0 auto; }
+.statusbar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 6px 14px; font-size: 10.5px; color: var(--text-3); display: flex; gap: 14px; z-index: 10; }
+.page-title { font-size: 22px; font-weight: 600; line-height: 1.3; margin-bottom: 6px; letter-spacing: -.01em; }
+.view-title { font-size: 17px; font-weight: 600; line-height: 1.4; margin: 18px 0 10px; }
+.page-desc { color: var(--text-2); font-size: 13px; margin-bottom: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-card); padding: 14px 16px; margin-bottom: 14px; }
+.card-h { font-size: 13.5px; font-weight: 600; margin-bottom: 8px; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl th { text-align: left; background: var(--surface-2); padding: 7px 10px; font-weight: 500; white-space: nowrap; border-bottom: 1px solid var(--border); }
+.tbl td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.tbl td.mono, .mono { font-family: var(--mono); font-size: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 1px 9px; font-size: 11px; border: 1px solid; white-space: nowrap; }
+.chip-ok { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
+.chip-warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-line); }
+.btn { display: inline-block; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); border-radius: var(--rounded-sm); padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; }
+.btn-primary { background: var(--accent); border-color: var(--accent-strong); color: #fff; }
+.btn:hover { border-color: var(--text-3); }
+.btn-primary:hover { background: var(--accent-strong); }
+.error-list { list-style: none; }
+.error-list li { background: var(--fail-soft); border: 1px solid var(--fail-line); color: var(--fail); border-radius: var(--rounded-sm); padding: 6px 10px; margin-bottom: 6px; font-size: 12.5px; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+:focus-visible { outline: 3px solid rgba(232,100,58,.28); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+a { color: var(--accent-strong); }
+/* 顶部品牌栏（09-28 契约 UI-00） */
+.brand { display: flex; gap: 8px; align-items: center; font-weight: 700; letter-spacing: -.01em; }
+.brand-mark { position: relative; display: block; width: 36px; height: 36px; overflow: hidden; border-radius: 9px; background: #fff; border: 1px solid var(--border); }
+.brand-copy { display: flex; flex-direction: column; line-height: 1.05; }
+.brand-copy strong { font-size: 13px; color: var(--text); }
+.brand-copy small { margin-top: 4px; color: #5c655d; font-size: 8px; letter-spacing: .14em; white-space: nowrap; }
+.product-name { margin-left: 4px; padding-left: 9px; border-left: 1px solid var(--border); color: var(--text-2); font-size: 10px; white-space: nowrap; }
+.top-actions { justify-self: end; display: flex; gap: 10px; align-items: center; }
+.badge-local { padding: 5px 9px; border: 1px solid var(--accent-line); border-radius: 999px; color: var(--accent-strong); background: var(--accent-soft); font-size: 11px; font-weight: 600; }
+.avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: #fff; background: #746a60; font-size: 11px; font-weight: 700; }
+.empty { border: 1px dashed var(--border-strong); border-radius: var(--rounded-base); padding: 22px; text-align: center; color: var(--text-2); background: var(--surface); }
+
+/* ===== 原型专用演示轨（非产品 UI，契约 §9 已声明）===== */
+.demo-rail { position: fixed; right: 14px; bottom: 34px; z-index: 30; width: 320px; background: var(--navy); color: #fff; border-radius: 10px; padding: 10px 12px; font-size: 11.5px; box-shadow: var(--shadow-float); }
+.demo-rail .rail-tag { font-weight: 700; letter-spacing: .06em; font-size: 10px; opacity: .85; }
+.demo-rail .rail-btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.demo-rail button { border: 1px solid rgba(255,255,255,.4); background: transparent; color: #fff; border-radius: 6px; padding: 4px 8px; font-size: 11px; cursor: pointer; }
+.demo-rail button[aria-pressed="true"] { background: #fff; color: var(--navy); font-weight: 700; }
+.demo-rail .rail-status { border-top: 1px solid rgba(255,255,255,.25); padding-top: 7px; line-height: 1.55; color: #d6dde4; min-height: 34px; }
+.demo-rail code { font-family: var(--mono); font-size: 10.5px; color: #ffd9c9; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand" aria-label="JuanerAI，持续做出更好的决策；Metric Factory">
+    <span class="brand-mark" title="原型占位：真实 UI 此处为 /assets/juanerai-logo-slogan.png"></span>
+    <span class="brand-copy"><strong>JuanerAI</strong><small>持续做出更好的决策</small></span>
+    <span class="product-name">Metric Factory</span>
+  </div>
+  <div></div>
+  <div class="top-actions">
+    <span class="badge-local">本机运行 · 凭据仅存本机</span>
+    <div class="avatar" aria-label="本地用户">MF</div>
+  </div>
+</header>
+
+<div class="app">
+  <aside class="sidebar">
+    <nav class="nav">
+      <a href="#">工作台</a>
+      <a href="#">模板库</a>
+      <a href="#" class="active">我的实例</a>
+      <a href="#">AI 草案</a>
+      <a href="#">审核中心</a>
+      <a href="#">设置</a>
+    </nav>
+    <div class="boundary">写操作仅限本地实例与映射文件<br>页面无脚本 · 纯服务端表单</div>
+  </aside>
+
+  <main class="main" id="main">
+    <!-- ===== S1 实例页视图（默认 / 成功 / 空 concept_refs 三态共用，逐字一致）===== -->
+    <div id="view-instance">
+      <h1 class="page-title">我的实例</h1>
+      <p class="page-desc">基模板 <span class="mono">ecommerce-marketplace@0.1.0</span> · 下方可微调（口径开关/增删改）并写回，写回前经全量校验。</p>
+
+      <div class="card">
+        <div class="card-h">实例概览 · <span class="mono">examples/ecommerce-instance.yaml</span></div>
+        <p>基模板 <span class="mono">ecommerce-marketplace@0.1.0</span> · 有效指标 <span class="num">41</span> 个
+        · 口径调整 0 · 字段修改 1 · 删除 1 · 新增 1
+        · <span class="chip chip-ok" id="pending-chip">无待审核</span></p>
+        <p style="margin-top:8px" class="btn-row" id="export-row">
+          <a class="btn" href="#" data-demo-export="review">审核中心</a>
+          <a class="btn btn-primary" href="#" data-demo-export="metricflow">导出 MetricFlow YAML</a>
+          <a class="btn" href="#" data-demo-export="excel">导出 Excel 字典</a>
+          <a class="btn" href="#" data-demo-export="mermaid">导出 Mermaid 指标树</a>
+          <a class="btn" href="#" id="btn-sap" aria-describedby="sap-export-note">导出 SAP 语义包</a>
+        </p>
+        <p style="margin-top:8px;color:var(--text-3);font-size:11.5px" id="sap-export-note">SAP 语义包：JuanerAI 语义资产包（YAML，含指纹与出处）</p>
+      </div>
+
+      <div class="view-title">相对模板的变更（fork diff）</div>
+      <div class="card" style="padding:0;overflow-x:auto"><table class="tbl">
+        <thead><tr><th>类型</th><th>对象</th><th>明细</th></tr></thead>
+        <tbody>
+          <tr><td>修改</td><td class="mono">gmv</td><td>definition、owner_role</td></tr>
+          <tr><td>删除</td><td class="mono">nps</td><td>—</td></tr>
+          <tr><td>新增</td><td class="mono">custom_gmv_excluding_gift</td><td>剔除赠品后的成交总额（manual · 已审核）</td></tr>
+        </tbody>
+      </table></div>
+      <p style="color:var(--text-3);font-size:11.5px">（指标树与微调表单区块不属于本契约变更面，原型从略。）</p>
+    </div>
+
+    <!-- ===== S2-1 阻断 422 视图（复刻 server.ts:452-459，逐字同构）===== -->
+    <div id="view-blocked" hidden>
+      <h1 class="page-title">导出被阻断（fail-closed）</h1>
+      <p class="page-desc">以下 LLM 生成指标未经人工审核，完成审核后才能导出。</p>
+      <div class="card"><div class="card-h" style="color:var(--fail)">待审核指标</div>
+        <ul class="error-list"><li><span class="mono">ai_suggested_magic_metric</span></li></ul>
+        <a class="btn btn-primary" href="#" id="btn-to-review">前往审核中心</a>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="statusbar"><span>Metric Factory 工作台</span><span>模板 7 个 · 当前实例 examples/ecommerce-instance.yaml</span><span>本机 127.0.0.1</span></div>
+
+<!-- ===== 原型演示轨（非产品 UI）===== -->
+<div class="demo-rail" id="demo-rail" aria-label="原型状态切换">
+  <div class="rail-tag">原型演示轨 · 非产品 UI</div>
+  <div class="rail-btns" role="group" aria-label="四状态切换">
+    <button type="button" data-state="default" aria-pressed="true">默认态</button>
+    <button type="button" data-state="success" aria-pressed="false">下载成功</button>
+    <button type="button" data-state="blocked" aria-pressed="false">阻断 422</button>
+    <button type="button" data-state="emptyrefs" aria-pressed="false">空 concept_refs</button>
+  </div>
+  <div class="rail-status" id="rail-status" aria-live="polite"></div>
+</div>
+
+<script>
+// ===== 原型演示脚本（非产品 UI；产品页面本身零脚本）=====
+(function () {
+  "use strict";
+  var viewInstance = document.getElementById("view-instance");
+  var viewBlocked = document.getElementById("view-blocked");
+  var railStatus = document.getElementById("rail-status");
+  var pendingChip = document.getElementById("pending-chip");
+  var btns = document.querySelectorAll(".demo-rail [data-state]");
+
+  var DEMO_YAML_FULL = [
+    'sap: "0.1"',
+    'namespace: mf.ecommerce-instance',
+    'runtime_state: design_only',
+    'generator: metric-factory@0.4.0+demo',
+    'created_at: "2026-10-08T08:00:00.000Z"',
+    'fingerprint: "sha256:3f9a1c…d4e5（演示占位指纹）"',
+    'concept_refs:',
+    '  - id: "customer"',
+    '    version: "1.0.0"',
+    '    source: "protege:demo"',
+    '    role: "statistic_object"',
+    'metrics:',
+    '  - name: "gmv"',
+    '    display_name: "成交总额"',
+    '    statistic_object:',
+    '      id: "order"',
+    '      version: "1.2.0"',
+    '      source: "protege:demo"',
+    '      role: "statistic_object"',
+    'review:',
+    '  gate: "metric-factory-export-gate"',
+    '  exported_at: "2026-10-08T08:00:00.000Z"',
+    '  unreviewed: []',
+    ''
+  ].join("\n");
+
+  var DEMO_YAML_EMPTY = [
+    'sap: "0.1"',
+    'namespace: mf.ecommerce-instance',
+    'runtime_state: design_only',
+    'generator: metric-factory@0.4.0+demo',
+    'created_at: "2026-10-08T08:00:00.000Z"',
+    'fingerprint: "sha256:8b2c71…a9f0（演示占位指纹）"',
+    'concept_refs: []',
+    'metrics:',
+    '  - name: "gmv"',
+    '    display_name: "成交总额"',
+    'review:',
+    '  gate: "metric-factory-export-gate"',
+    '  exported_at: "2026-10-08T08:00:00.000Z"',
+    '  unreviewed: []',
+    ''
+  ].join("\n");
+
+  var FILENAME = "ecommerce-instance.sap.yaml";
+  var currentState = "default";
+  var emptyRefs = false;
+
+  function rail(html) { railStatus.innerHTML = html; }
+
+  function setState(state) {
+    currentState = state;
+    btns.forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.state === state)); });
+    if (state === "blocked") {
+      viewInstance.hidden = true;
+      viewBlocked.hidden = false;
+      pendingChip.className = "chip chip-warn";
+      pendingChip.textContent = "待审核 1";
+      rail('契约 S2-1：HTTP <code>422</code> · 页面与三格式逐字同构（现行文案不含格式名）· 列未审核指标名 + 「前往审核中心」入口。');
+      document.getElementById("btn-to-review").focus();
+    } else {
+      viewInstance.hidden = false;
+      viewBlocked.hidden = true;
+      pendingChip.className = "chip chip-ok";
+      pendingChip.textContent = "无待审核";
+      emptyRefs = (state === "emptyrefs");
+      if (state === "default") {
+        rail('契约 S1-1 默认态：按钮组 5 项，SAP 恒居末位。点击「导出 SAP 语义包」将真实下载演示包 <code>' + FILENAME + '</code>。');
+      } else if (state === "success") {
+        rail('契约 S1-2 下载成功：页面本体不变（与三格式同一模式，无 toast/弹层）。HTTP <code>200</code> · <code>content-type: text/yaml; charset=utf-8</code> · <code>content-disposition: attachment; filename="' + FILENAME + '"</code>。');
+      } else if (state === "emptyrefs") {
+        rail('契约 S1-4：实例未声明 concept_refs（合法常态）——下载区与默认态逐字一致，无徽标/空态/告警；SAP 照常可导（演示包 concept_refs 为 <code>[]</code>）。');
+      }
+    }
+  }
+
+  btns.forEach(function (b) {
+    b.addEventListener("click", function () { setState(b.dataset.state); });
+  });
+
+  document.getElementById("btn-sap").addEventListener("click", function (e) {
+    e.preventDefault();
+    if (currentState === "blocked") return;
+    var blob = new Blob([emptyRefs ? DEMO_YAML_EMPTY : DEMO_YAML_FULL], { type: "text/yaml;charset=utf-8" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = FILENAME;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    rail('契约 S1-2 下载成功：已落盘 <code>' + FILENAME + '</code>（浏览器下载器承接反馈，页面不变）。HTTP <code>200</code> · <code>attachment; filename="' + FILENAME + '"</code>。');
+  });
+
+  document.querySelectorAll("[data-demo-export]").forEach(function (el) {
+    el.addEventListener("click", function (e) {
+      e.preventDefault();
+      if (el.dataset.demoExport === "review") { rail("原型：跳转 /review（审核中心页不在本契约变更面）。"); return; }
+      rail("原型：真实流程 GET <code>/instance/export/" + el.dataset.demoExport + "</code> → 200 attachment（既有三格式，行为冻结不变）。");
+    });
+  });
+
+  document.getElementById("btn-to-review").addEventListener("click", function (e) {
+    e.preventDefault();
+    rail("原型：真实流程跳转 <code>/review</code> 审核中心；批准后回到 /instance 重试导出。");
+  });
+
+  setState("default");
+})();
+</script>
+</body>
+</html>

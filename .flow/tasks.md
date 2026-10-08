@@ -1,149 +1,104 @@
-# Metric Factory v3 · 任务拆解（垂直切片）
+# v4 批次 · 任务拆解（tracer-bullet 垂直切片）
 
-> 来源：`.flow/prd.md`（含 GRILL 决议）。
-> 拆解批准理由（自批准，2026-09-29）：9 切片全部端到端可验收；映射链（解析→推荐→命令→导出）与 UI 链（基建→实例→审核）各自递进、track 独立；UI 范围纪律内置（每视图一片、超 2 片不验收即砍）。
+> 来源：`.flow/prd.md`（含 GRILL 决议与 UI-GATE 裁决回写）。拆解经自批准（dev-flow 规则： breakdown self-approved，理由记入 state.json history）。切片 0 与 1 可并行，2 依赖 0，3 依赖 1+2，4 依赖 2。
 
-- [x] 0. dbt artifacts 解析层（manifest/catalog 双输入合并）
-- [x] 1. 映射推荐引擎（归一化 + 同义词 + 信号打分 + 阈值）
-- [x] 2. map 命令族（draft/交互/apply + 差距清单 + mapping schema）
-- [x] 3. export 映射升级 + 契约测试升级
-- [x] 4. track 命令（事件推导 + tracking-plan）
-- [x] 5. UI 基建与设计规范落地（http 外壳 + 模板浏览）
-- [x] 6. UI 实例视图（指标树 + patch 表单写回）
-- [x] 7. UI 审核流视图
-- [x] 8. README v3 + CI 扩展 + 收尾
+- [x] 0. Schema 扩展 + lint 规则（L1 三件套 + concept_refs）
+- [x] 1. 规范化序列化 + 指纹引擎
+- [x] 2. SAP 装配器 + 双面校验器
+- [x] 3. SAP CLI 导出（--format sap + D1）
+- [x] 4. 工作台 UI SAP 下载（含 D2 文件名断言）
 
 ---
 
-## 0. dbt artifacts 解析层
+## 0. Schema 扩展 + lint 规则
 
 ### What to build
-`src/warehouse/parse.ts`：读 manifest.json（nodes 过滤 resource_type=model，取 name/columns/描述）与可选 catalog.json（nodes 同结构，全量列+类型）；合并（catalog 列覆盖 manifest 声明列）；产出 `WarehouseModel[] {name, columns: {name, type?}[], source}`；缺列模型标记；两者皆不可读时给出可定位错误。
+
+指标与实例 schema 增加可选的 L1 契约字段（aggregation / statistic_object / caliber_type 八族枚举数组）与实例级 concept_refs，全部向后兼容（7 模板零改动）；lint 增加配套校验规则（两表 ⊆ dimensions 且不相交、空 dimensions 边界、枚举取值合法且去重、ConceptRef 形状）；materialize 透传新字段使既有三格式导出无感知携带。端到端：模板作者手写新字段 → lint 过/拒 → 物化与导出照常。
 
 ### Acceptance criteria
-- [ ] 四形态 fixture 单测：仅 manifest（有列）/仅 manifest（无列）/manifest+catalog 合并/双缺列
-- [ ] catalog 列覆盖优先级正确；source 字段记录每列来源（manifest|catalog）
-- [ ] 解析错误（坏 JSON、缺 nodes）报可定位错误
+
+- [ ] Metric 增加可选 `aggregation{allowed_dimensions,disallowed_dimensions,ratio_policy?}`、`statistic_object{id,version,source,role?}`、`caliber_type: CaliberFamily[]`；Instance 增加可选 `concept_refs: ConceptRef[]`（8 族枚举常量定义）
+- [ ] lint 正/负例：aggregation 两表 ⊆ dimensions 且不相交；dimensions 为空时 aggregation 存在即错；caliber_type 命中 8 枚举且去重；ConceptRef id/version/source 非空
+- [ ] 回归纪律：先跑既有 148 测试零改动通过（红队 #3 两步顺序），再提交新测试
+- [ ] 7 模板 `npm run lint` 零改动通过
 
 ### Blocked by
-None
+
+None - can start immediately
 
 ---
 
-## 1. 映射推荐引擎
+## 1. 规范化序列化 + 指纹引擎
 
 ### What to build
-`src/warehouse/recommend.ts`：候选生成（指标 × 模型列）+ 信号打分（列名精确=1.0 / 指标名包含列名或列名包含指标名=0.8 / 中英同义词表命中=0.7 / definition 关键词命中列名=0.5，取最高信号）+ 输出 `Recommendation[] {metric, model, column, score, signals[]}`，≥0.6 为可推荐；内置中英同义词表（成交额→gmv/amount/revenue、用户→user/customer、订单→order…≥20 组）。
+
+YAML 1.2 子集规范化序列化器（UTF-8 无 BOM/LF/NFC/2 空格缩进/块式 only/禁锚点/键递归排序/plain-safe 保守规则/双引号 JSON 转义/无文档标记/行尾无空格/单一末尾换行）+ 指纹（计算时 fingerprint 字段置空）。端到端：任意包对象 → 规范字节 → SHA-256 → 往返三次哈希恒定。
 
 ### Acceptance criteria
-- [ ] fixture manifest 上：可映射指标自动推荐命中率 ≥50%（独立字面量断言每个期望命中）
-- [ ] 干扰项不产生 ≥0.6 的假阳性推荐（构造近似但不义的列名）
-- [ ] 信号明细可解释（每条推荐列出来源信号）
+
+- [ ] golden vectors ≥3（纯 ASCII / 含中文 definition / 深嵌套 caliber_switches）字面量断言
+- [ ] round-trip 稳定：parse→canonical→rehash ×3 哈希恒定；与解析库往返语义等价
+- [ ] 引号规则：保守 plain-safe 模式（^[a-z0-9][a-z0-9_.\-/]*$ 且非 core-schema 非串类型）外一律双引号
+- [ ] 指纹自引用：置空字段后计算；声明值=计算值
 
 ### Blocked by
-- #0
+
+None - can start immediately（与 0 并行）
 
 ---
 
-## 2. map 命令族
+## 2. SAP 装配器 + 双面校验器
 
 ### What to build
-`src/schema/mapping.ts`（MappingSchema：base/mappings[{metric, model, column, agg?, confidence, signals, confirmed_by?, confirmed_at?}]）；`metric-factory map <instance> --manifest <m> [--catalog <c>]`：解析→推荐→差距清单三分类输出（+--json）；`--draft` 产 map-draft.yaml；TTY 交互逐条确认直接写 `<实例主名>.mapping.yaml`；`--apply <draft> [--reviewer]` 非交互确认。
+
+物化实例 + 模板 → SAP 0.1 包对象（契约 §3 全部段）：concept_refs = 实例级 ∪ 各指标 statistic_object 按 (id,version,role) 去重；review 段 {gate, exported_at, unreviewed:[]}；namespace mf.<package-id>；generator metric-factory@<version>+<git-sha>（构建期注入，缺失回退）；runtime_state/sap 字面量。供应侧校验：重复指标 name、(id,version,role) 拒绝；schema 校验器覆盖契约全部拒绝规则（结构/未知 sap/非 design_only/指纹失配/重复身份）。
 
 ### Acceptance criteria
-- [ ] e2e：fixture manifest 对 ecommerce 实例产差距清单（三类计数 + 明细）；--draft 落盘
-- [ ] e2e：--apply 后映射文件含 confirmed_by；重复 --apply 幂等（合并不重复）
-- [ ] 差距清单 --json 可解析；无 manifest 时明确报错
+
+- [ ] 装配正例：fixtures 产出契约 §3 形状全段；去重键 (id,version,role) 有断言
+- [ ] 供应侧负例：重复 name、重复 concept key → 拒绝
+- [ ] 校验器负例：构造非法包每类拒绝规则一条（未知 sap 版本/非 design_only/指纹失配/重复 id@version/结构不合法）
+- [ ] created_at 可注入（测试冻结时钟）
 
 ### Blocked by
-- #1
+
+- #0（依赖新 schema 字段）
 
 ---
 
-## 3. export 映射升级 + 契约测试升级
+## 3. SAP CLI 导出（--format sap + D1）
 
 ### What to build
-metricflow exporter：存在映射文件且指标已映射 → semantic model `model.ref` = 映射模型名、measure `expr` = 映射列名、`agg` 用映射覆盖；未映射指标维持占位并在导出头部注释标注未映射清单。export CLI `--mapping` 显式指定 + 同目录自动发现。
+
+既有 export 命令族新增 `--format sap`：管线 = 现有 export gate（整批阻断）→ 装配 → 查重 → 指纹 → 写盘 `<实例名>.sap.yaml`；UI 无关。同步 D1：未知格式错误页/帮助枚举串加 sap。端到端 e2e：成功/阻断/查重拒绝/指纹跨运行一致。
 
 ### Acceptance criteria
-- [ ] e2e：映射实例导出物 model.ref ∈ fixture manifest 模型集、已映射 measure.expr ∈ 对应模型列集
-- [ ] 未映射指标仍可导出（占位 + 头部标注「N 个指标未映射，使用占位模型」）
-- [ ] 契约测试升级后 schema 校验仍 100% 通过
+
+- [ ] e2e 正例：fixture 实例导出文件含 sap: 0.1 / runtime_state: design_only / fingerprint / namespace mf. / generator
+- [ ] e2e 负例：含未审核 LLM 指标 → 整批阻断（与三格式同一语义断言，ExportBlockedError 路径）
+- [ ] 两次导出指纹一致（忽略 created_at）；冻结时钟下单测字节级一致（GRILL Q1）
+- [ ] D1：未知格式错误串枚举含 sap
 
 ### Blocked by
-- #2
+
+- #1、#2
 
 ---
 
-## 4. track 命令
+## 4. 工作台 UI SAP 下载（含 D2 文件名断言）
 
 ### What to build
-`src/engine/tracking.ts`：旅程树（category=旅程）+ 北极星指标 → 事件推导（GRILL #5 动词映射表）；输出 `tracking-plan.yaml`（事件/触发时机/属性/关联指标）与 `tracking-plan.schema.json`。
+
+实例页导出下载区按 `.flow/ui-contract.md` 新增「SAP 语义包」项（恒居末位，术语逐字）；服务端复用同一装配管线与 gate；阻断走同一 ExportBlockedError → 422 页零弱化；下载文件名 `<实例名>.sap.yaml`（D2：文件名去后缀）。端到端 UI e2e（真实 server + fetch）。
 
 ### Acceptance criteria
-- [ ] e2e：ecommerce 实例产出的计划覆盖全部旅程树指标（数量断言）
-- [ ] 每事件属性含公共属性 + 指标 dimensions；schema.json 每事件一份合法 JSON Schema（ ajv 自校验）
-- [ ] 动词映射命中与 fallback（track_<metric>）两类都有输出
+
+- [ ] UI e2e：SAP 下载 200，内容含 sap: 0.1/design_only/fingerprint；Content-Disposition filename=<实例名>.sap.yaml
+- [ ] UI e2e：阻断实例 → 422 页含未审核指标名 + /review 入口（与既有 export-download fail-closed 断言同构）
+- [ ] 下载区 HTML 含 SAP 项且居末位；术语与 ui-contract §4 逐字一致
+- [ ] 既有 test/ui 全部零改动通过
 
 ### Blocked by
-None（引擎纯函数）
 
----
-
-## 5. UI 基建与设计规范落地
-
-### What to build
-`src/ui/`：node:http server（零新依赖）+ Xanthil 设计规范落地（CSS 变量 token 全量、三栏外壳 sidebar 248/主区 860/inspector 300、状态 chip 色字双通道、边界声明常驻）；路由：`GET /`（工作台首页：实例概览与入口）、`GET /templates`、`GET /templates/:id`（六模板指标字典表格）；`metric-factory ui [--port]` 命令。
-
-### Acceptance criteria
-- [ ] e2e（真实 server + fetch）：三路由 200 且含关键内容（模板名/指标数/口径列）
-- [ ] HTML 含设计 token（accent #0f766e、bg #f7f6f3 等在 CSS 变量中）与边界声明文案
-- [ ] 未知模板 404；仅监听 127.0.0.1；--port 0 随机端口可用于测试
-
-### Blocked by
-None
-
----
-
-## 6. UI 实例视图（树 + patch 表单）
-
-### What to build
-`GET /instance`（实例指标树按分类分色 + 指标详情 inspector）与 patch 编辑表单（caliber 开关勾选、modified 字段、removed 勾选、added JSON 文本域）；`POST /instance/patch` 调引擎（应用→validate→全过写回，错误返回 rule/message 列表）；原生 form 提交 + fetch 增强。
-
-### Acceptance criteria
-- [ ] e2e：GET 含实例指标与树分组；合法 patch POST 写回后 CLI diff 可见变更
-- [ ] 非法 patch（悬空维度）POST 返回 422 + dangling-dimension 错误信息，实例文件零变化
-- [ ] 禁用 JS 语义：form 原生 action 提交可达同一端点（HTML action 属性正确）
-
-### Blocked by
-- #5
-
----
-
-## 7. UI 审核流视图
-
-### What to build
-`GET /review`（待审 LLM 指标列表：口径/出处/置信信息）+ `POST /review/:name`（action=approve|reject，reviewer 参数，走 review 引擎写 reviewed_by/移除）。
-
-### Acceptance criteria
-- [ ] e2e：含待审指标的实例在 UI 批准后导出放行（fail-closed 全链路在 UI 路径成立）
-- [ ] reject 后指标从实例消失；非待审指标 POST 返回 422（同 CLI S4 语义）
-- [ ] 无待审时页面显示空状态（虚线框 + 下一步指引，符合规范）
-
-### Blocked by
-- #5（可与 #6 并行）
-
----
-
-## 8. README v3 + CI 扩展 + 收尾
-
-### What to build
-README v3 章节（map/track/ui 用法、catalog.json 说明、设计规范声明）；CI 无需改结构（lint/typecheck/test/contract 自动纳入）；examples 增映射与 tracking-plan 示例产物说明。
-
-### Acceptance criteria
-- [ ] 四门命令全绿（含全部新测试）
-- [ ] README 命令可复制执行（fixture manifest 路径给出）
-- [ ] examples 目录含 fixture 演示路径说明
-
-### Blocked by
-- #0–#7 全部
+- #2（#3 完成后接续，UI 端点独立于 CLI 但共享装配）

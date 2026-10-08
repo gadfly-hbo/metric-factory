@@ -31,6 +31,59 @@ export function lintTemplate(t: Template): LintIssue[] {
         });
       }
     }
+
+    const agg = m.aggregation;
+    if (agg) {
+      if (m.dimensions.length === 0) {
+        issues.push({
+          rule: "aggregation-dimensions",
+          path: `metrics.${i}.aggregation`,
+          message: `指标 ${m.name} 的 dimensions 为空数组，不允许声明 aggregation（防双源不一致）`
+        });
+      }
+      for (const dim of agg.allowed_dimensions) {
+        if (!knownDims.has(dim)) {
+          issues.push({
+            rule: "aggregation-dimensions",
+            path: `metrics.${i}.aggregation.allowed_dimensions`,
+            message: `指标 ${m.name} 的 aggregation.allowed_dimensions 包含模板未声明的 dimension "${dim}"`
+          });
+        }
+      }
+      for (const dim of agg.disallowed_dimensions) {
+        if (!knownDims.has(dim)) {
+          issues.push({
+            rule: "aggregation-dimensions",
+            path: `metrics.${i}.aggregation.disallowed_dimensions`,
+            message: `指标 ${m.name} 的 aggregation.disallowed_dimensions 包含模板未声明的 dimension "${dim}"`
+          });
+        }
+      }
+      for (const dim of agg.allowed_dimensions) {
+        if (agg.disallowed_dimensions.includes(dim)) {
+          issues.push({
+            rule: "aggregation-dimensions",
+            path: `metrics.${i}.aggregation.allowed_dimensions`,
+            message: `指标 ${m.name} 的 dimension "${dim}" 同时出现在 aggregation.allowed_dimensions 与 disallowed_dimensions`
+          });
+        }
+      }
+    }
+
+    if (m.caliber_type) {
+      const seen = new Set<string>();
+      for (const family of m.caliber_type) {
+        if (seen.has(family)) {
+          issues.push({
+            rule: "caliber-dedup",
+            path: `metrics.${i}.caliber_type`,
+            message: `指标 ${m.name} 的 caliber_type 存在重复口径族 "${family}"`
+          });
+          break;
+        }
+        seen.add(family);
+      }
+    }
   }
 
   for (const [i, tree] of t.trees.entries()) {

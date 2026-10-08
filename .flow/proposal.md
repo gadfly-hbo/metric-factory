@@ -1,38 +1,50 @@
-# Metric Factory · v3 方案（落地闭环）
+# v4 批次开工 · 方案（proposal）
 
-> 本 flow 的规格源。上游根规格：仓库根 PRODUCT_PLAN.md（v0.1）第 4.2 节 P3 段与第 5 节 v3 段。
-> MVP（commit 0ad90aa）与 v2 LLM 设计器（commit 1e6eda3）已交付，其决策继续有效。
+> dev-flow ASSESS 固化的规格源。上游冻结契约：`docs/juanerai-semantic-asset-contract-v0.1.md` v0.1（2026-10-08 用户批准冻结，readiness review 两轮 PASS）——本批次的**主规格**；PRODUCT_PLAN.md v0.2 §5「v4 批次」段与 §8-Q8 方向裁决为配套基线。契约未写的，以本文为准；本文与契约冲突时契约优先（升级用户，不静默覆盖）。
 
 ## 目标
 
-把 PRODUCT_PLAN v3 段（落地闭环）落地，三件套：
+metric-factory v4 批次 = 语义资产交换契约 v0.1 的**首个实现批次**（契约条款：首个实现批次另行批准——用户以 `/dev-flow v4 批次开工` 批准）。产出：metric-factory 能导出符合 SAP 0.1 的语义资产包，且现有功能零回归。
 
-1. **数仓反推与字段映射（map 命令族）**：读取 dbt manifest.json（优先；information schema 后置）→ 发现已有模型与字段 → 推荐「指标 → 模型字段」映射（AI 推荐 + 人工 Review 门，与 v2 审核流同构）→ 产出映射文件与「模板指标 vs 企业现状」差距清单（已映射 / 可映射未映射 / 数仓无对应物三类）。映射落定后，**MetricFlow 导出从占位 semantic model 升级为真实模型引用**——补上「设计态 → 定义态」的最后一公里。
-2. **埋点建议与事件 schema 生成（track 命令）**：从实例的旅程类指标 + 维度推导埋点/事件清单与事件 schema（JSON），输出「指标 → 事件 → 字段」的采集建议，与字段映射形成「有数可算」的闭环。
-3. **Web UI（ui 命令，本地优先）**：模板浏览 / 指标树可视化编辑（写回实例 patch）/ 审核流（LLM 待审指标批准拒绝）。定位是「壳不是核」（proposal 3.3）：所有写操作走既有引擎（与 CLI 同一 fail-closed 语义），Web UI 不引入新的业务规则。
+## 范围（做什么）
 
-## 验收（可执行部分）
+1. **指标契约 L1 三件套进入 schema**（Q8 方向裁决：aggregation / statistic_object / caliber_type 进 v0.2 冻结范围）：
+   - `aggregation`：可加/不可加维度、比例重算规则
+   - `statistic_object`：concept_ref 引用（平面 id/version/source/role，引用不拥有）
+   - `caliber_type`：口径类型枚举
+   - 字段细节在本批次设计冻结（Q8 原话：细节随 v4 批次设计冻结）
+2. **concept_refs 进入实例数据**：实例可携带本体概念引用数组（v0.1 已定义形状，见契约 §3.3）。
+3. **命名空间前缀**（Q4 方向裁决：前缀约定，包级 `namespace` 字段）：具体前缀格式随本批次设计冻结；零中心化服务依赖。
+4. **SAP 0.1 导出器**：YAML 1.2 规范序列化；fingerprint（SHA-256 规范化算法，**必须显式裁决 fingerprint 字段自身是否计入哈希——建议排除/置空**，契约 §4 自引用决策项）；`generator: metric-factory@<git-sha>`；包级 review 段（形状本批次冻结）。
+5. **导出门语义**：SAP 导出**复用**现有 fail-closed export gate（未审核 LLM 指标整批阻断，契约 §3.5）；供应侧导出校验：重复 `id@version` 拒绝产出（契约 §4）。
+6. **零网络测试**：包格式正/负证据——schema 校验、指纹对账、fail-closed 负例（含未审核 LLM 整批阻断、非 design_only 构造包检测的供应侧等价校验）、`design_only` 恒等式、重复身份拒绝、未知 `sap` 版本拒绝（供应侧导出校验视角）。
 
-- `metric-factory map <instance> --manifest <dbt manifest.json>`：产出映射草案（每指标含推荐模型.字段 + 置信度 + 理由），`--apply` 经确认写映射文件；差距清单三类齐备
-- 映射完成后 `export --format metricflow` 的 semantic model 引用真实 dbt 模型与列名（契约测试升级：导出物 `model.ref` ∈ manifest 模型名集合、measure.expr ∈ 模型列名集合）
-- `metric-factory track <instance>`：产出事件清单（名称/触发时机/属性 schema JSON/对应指标），旅程类指标全覆盖
-- `metric-factory ui`：本地起服务，浏览器可浏览六模板、可视化查看指标树、对待审 LLM 指标执行批准/拒绝（写回实例文件）；树编辑器可增删改实例 patch 并写回
-- 全部写路径复用引擎（validate 门、fail-closed、provenance），Web UI 无旁路
-- 真实 dbt manifest 为夹具驱动（fixture manifest 结构对齐 dbt 1.8+ artifacts schema）；真实数仓连接不在本期
+## 不可削弱的不变量
 
-**运行时指标（开发期不可验证）**：映射采纳率、UI 周活、埋点建议直接采用率。
+- 现有 fail-closed export gate 语义不动（整批阻断）；provenance 链完整
+- YAML 1.2 为唯一规范序列化；精确版本引用、禁止 latest
+- 测试零网络；四门全绿（lint / typecheck / test / contract-test）
+- 现有导出（MetricFlow / Excel / Mermaid）与全部既有测试零回归
+- `validate_import` 是消费侧职责：v4 只交付「包 + 供应侧导出校验」，不实现消费侧导入器
 
-## 约束与既有决策（继续有效）
+## 显式不做（非目标）
 
-- 技术栈：TypeScript / Node ≥20 ESM；测试 vitest；零网络进测试（映射推荐用确定性规则引擎 + 可选 LLM 增强，测试走规则路径）
-- fail-closed 永不放松；provenance 链完整；映射推荐同样走「AI/规则出草案 → 人确认」
-- LLM 访问沿用 v2 的 pi-ai 适配层（src/llm/，业务代码零 pi import）
-- **Web UI 视觉规范**：遵循全局设计规范 `~/.zcode/design/DESIGN.md`（JuanerAI Xanthil 暖灰青工作台设计语言）——动手做 UI 视觉决策前必读；本项目无自己的 DESIGN.md，全局规范为默认基线
-- Web UI 技术形态后置到 GRILL 决议（倾向：无构建步骤的本地服务端渲染 + 渐进增强，服务 node dist/cli.js ui 一条命令启动；不引入重型前端框架）
-- 双机同步：origin = github.com/gadfly-hbo/metric-factory.git；sync.targets = macbook:/Users/huangbo/Dev/Projects/metric-factory
+- 场景编辑器 / ScenarioSpec 结构冻结（v5 批次）
+- `executable` 状态语义、运行时 Binding Manifest（消费侧，v6 窗口）
+- 跨包依赖声明机制（契约 §4 注记：v0.1 不含）
+- JuanerAI 侧任何代码、导入触发工程（Q5：手动文件导入是唯一方式，工程化留 v6 窗口）
+- `concept_refs.source` 结构性格式（Q6：平面定位符方向，细节 v6 窗口）
+- SAP 的 Web UI 下载入口（本批次 CLI 优先；UI 暴露如属平凡增量可在 GRILL 决定）
 
-## 非目标（本 flow 不做）
+## 开放决策（交 GRILL 自答，记录决议）
 
-- information schema 直连数仓 / 反向 ETL（PRODUCT_PLAN P3 只说 dbt manifest 优先，直连后置）
-- 多用户 / 权限 / 云端部署（本地单用户工具）
-- 移动端适配
+- fingerprint 规范化算法细节与自引用裁决（倾向：字段置空后计算）
+- `namespace` 前缀具体格式（倾向：`mf.<实例或模板ID>` 包级单字段）
+- `caliber_type` 枚举取值（倾向：从七行业模板已有口径差异归纳最小集）
+- L1 三件套在 lint / validate / materialize 中的规则接入面（最小接入：lint 校验结构、validate 透传、materialize 携带）
+- concept_refs 的编辑面（v4 仅 YAML 手写 + schema 校验，不加 CLI 向导）
+
+## 已完成的前置（本流程不复审）
+
+- 契约 v0.1 冻结 + Q4–Q8 方向裁决（2026-10-08，commit `a9d8112`）
+- PRODUCT_PLAN v0.2（commit `1204831`）
