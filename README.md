@@ -46,7 +46,7 @@ node dist/cli.js export my-instance/instance.yaml --format sap      --out out
 zsh scripts/dbt-parse-smoke.sh out/metricflow.yaml
 ```
 
-`--format sap` 产出 JuanerAI 语义资产包 `out/<实例名>.sap.yaml`（契约 v0.1：YAML 规范序列化 + SHA-256 指纹 + concept_refs + namespace + 包级 review）。「实例名」= 实例文件名去 `.yaml` 后缀；包 id 要求 `^[a-z][a-z0-9-]*$`，故文件名中的大写 / 空格 / 下划线等会 slugify（小写、非法字符→`-`、折叠连续 `-`），下载文件名用 slug 后的名字。同一实例两次导出的 `created_at` 必然不同（契约必填时间戳），不计入指纹对账。
+`--format sap` 产出 JuanerAI 语义资产包 `out/<实例名>.sap.yaml`（SAP = Semantic Asset Package，与 SAP 公司无关；契约 v0.1：YAML 规范序列化 + SHA-256 指纹 + concept_refs + namespace + 包级 review）。「实例名」= 实例文件名去 `.yaml` 后缀；包 id 要求 `^[a-z][a-z0-9-]*$`，故文件名中的大写 / 空格 / 下划线等会 slugify（小写、非法字符→`-`、折叠连续 `-`），下载文件名用 slug 后的名字。同一实例两次导出的 `created_at` 必然不同（契约必填时间戳），不计入指纹对账。
 
 微调实例：编辑 `instance.yaml` 的四个 patch 段——`caliber_switches`（口径开关取值）、`modified`（改字段）、`removed`（删指标）、`added`（增指标，必须带 provenance）。
 
