@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 版本 | `v0.1`（冻结） / 2026-10-08；评审与修订历史 draft.1–draft.4 见文末变更记录 |
-| 状态 | **已冻结 v0.1**（用户批准 2026-10-08；readiness review 两轮 PASS）；不授权任何代码修改、依赖安装或跨仓写入，首个实现批次另行批准 |
+| 版本 | `v0.2`（修订冻结） / 2026-10-09；v0.1 历史（2026-10-08 冻结 + errata.1–3）见文末变更记录 |
+| 状态 | **v0.2 修订冻结**（用户批准开工 2026-10-09；登记内容经两轮独立 readiness gate：第 1 轮 NEEDS_CLARIFICATION 修正后第 2 轮 PASS；定格以用户确认为准）；errata 不再单列，已并入正文 |
 | 供应方 | metric-factory（独立开源，Apache-2.0，仓库 `/Users/huangbo/Dev/Projects/metric-factory`） |
 | 消费方 | JuanerAI（`/Users/huangbo/JuanerAI`，现行基线：白皮书 v4.0 + **Blueprint v4.2（已生效 2026-10-04，批准记录为状态权威，main 已发布）**；勘误 2026-10-08，见变更记录） |
 | 命名声明 | 本文 **SAP = Semantic Asset Package（语义资产包）**的缩写，**与 SAP SE（德国 ERP 软件公司）无关**；跨仓文档引用本契约时请用全名「语义资产包 / Semantic Asset Package」以避免歧义（用户裁决 C，2026-10-08） |
@@ -76,9 +76,10 @@ package:
   version: 0.1.0              # semver
   kind: template | instance | blueprint | binding-spec
   created_at: <ISO-8601>
-  generator: metric-factory@<git-sha>
+  generator: metric-factory@<version>[+<git-sha>]
+  namespace: mf.<package-id>
   fingerprint: sha256:<规范化序列化的 SHA-256>
-scenarios: []                  # 分析体系配置（§3.1，v0.1 预留空数组）
+scenarios: []                  # 分析体系配置（§3.1，v0.2 起正式段，结构已冻结）
 metrics: []                    # 见 §3.2 契约等级
 dimensions: []                 # 维度名数组（透传，§3.2）；维度字典为预留槽位
 concept_refs: []               # 本体概念引用（§3.3，v0.1 已定义形状，可为空）
@@ -87,17 +88,30 @@ review: {}                     # 包级审查状态（§3.5）
 runtime_state: design_only     # v0.1 恒为 design_only（§3.6）
 ```
 
-占位符说明：`kind` 在 v0.1 为格式占位，不影响任何校验语义；各 kind 的段组成规则随首个实现批次与 §8-Q4/Q7 一并冻结。`sap` 合同版本未知（非 `0.1`）的包，`validate_import` 拒绝（fail-closed）。
+占位符说明：`kind` 已随首个实现批次冻结为 `instance` 字面量（校验器按字面拒绝其余取值）；其余 kind（template/blueprint/binding-spec）的段组成规则仍随后续批次冻结。`sap` 合同版本未知（非 `0.1`）的包，`validate_import` 拒绝（fail-closed）。
 
-### 3.1 场景条目（预留）
+### 3.1 场景条目（v0.2 正式段，结构已冻结）
 
-分析体系设计资产：决策场景、问题树、方法引用、证据要求、输出与复盘规则（JA-ABS-PRD-001 F03 的对象模型）。**v0.1 不承诺其内部结构**（metric-factory 代码尚无场景模型），仅预留空数组槽位；结构随工作台场景编辑器批次另行冻结，冻结前消费方对 `scenarios` 段忽略。
+分析体系设计资产（JA-ABS-PRD-001 F03 对象模型的最小集）。**ScenarioSpec v0.1 已随 v5 批次冻结（2026-10-09，两轮独立 REVIEW）**，仓库事实源 = `src/schema/scenario.ts`：
+
+- `id`（snake_case；裸 id 唯一由上游 lint 与物化合并保证，包级执法键为 id@version，见 §4）/ `version`（semver）/ `title`
+- `decision_purpose` 必填非空（无决策用途不可保存——ABS AT02 门）
+- `question_tree`：平面节点表 `{id, label, parent?, metric?}`；parent 引用同场景节点、禁自指/成环；metric 引用包内指标
+- `metric_usages`：`{metric, role: outcome|driver|guardrail, note?}`——场景角色，不是新指标定义
+- `method_refs[]`（引用不实现，如 `dame.m2.driver_decomposition@1.0.0`）/ `evidence_requirements` / `output_spec` / `review_rules`（文本）
+
+重复身份（§4）覆盖场景 id@version；scenarios→metrics 引用一致性为校验器正式规则（消费侧镜像，契约 §6）。
 
 ### 3.2 指标条目与契约等级
 
 - **维度条目（v0.1 冻结）**：`dimensions` 为**字符串数组透传**（仅维度名称，与现行 `TemplateSchema.dimensions` 一致）；维度字典（名称/说明/可加性标记）为**预留槽位**，v0.1 不承诺。
 - **L0（v0.1 承诺）**：即 metric-factory 现行 `MetricSchema` 字段——name / display_name / display_name_en（可选）/ type / definition / definition_en（可选）/ dimensions / time_grains / owner_role / caliber_switches / type_params / provenance / review。枚举未穷尽显有可选字段，以现行 schema 为准。
-- **L1（后续 Change，不在 v0.1 承诺）**：汇总规则（可加/不可加维度、比例重算）、统计对象引用、口径类型。契约已为 L1 字段预留可选槽位，消费方对未知字段应忽略而非报错（向前兼容原则）。
+- **L1（v0.2 已冻结，v4 批次交付 + 独立 REVIEW 证据）**：三件套可选字段——
+  - `aggregation?: { allowed_dimensions: string[]; disallowed_dimensions: string[]; ratio_policy?: "recompute_from_parts" }`（两表 ⊆ 模板 dimensions 且互不相交；指标 dimensions 为空时不得存在）
+  - `statistic_object?: ConceptRef`（与包级 concept_refs 同形）
+  - `caliber_type?: CaliberFamily[]`（**多值枚举数组、去重**；8 族：refund_adjustment / fee_composition / scope_inclusion / validity_threshold / attribution_window / proration_rule / cap_anomaly_rule / measurement_anchor——2026-10-08 普查冻结，336 指标回填验证）
+  - 消费方对未实现的可选字段忽略而非报错（向前兼容原则不变）
+  - 执法面注记：aggregation 语义约束（两表 ⊆/不相交/空边界）执法点在供应侧模板 lint；SAP 校验器**有意不镜像**该约束（与 v4 REVIEW N3 的 LLM 规则同类取舍——闭包复核不重复上游语境校验），消费侧如需可随 v6 补
 
 ### 3.3 概念引用（concept_refs）
 
@@ -120,7 +134,7 @@ concept_refs:
 - provenance 三来源：`template`（须 template_ref）/ `llm`（须 model + prompt_version）/ `manual`。
 - **阻断半径（v0.1 冻结）**：与 metric-factory export gate 的**整批阻断**等价——`validate_import` 对含任一 `origin=llm` 且无 `reviewed_by` 条目的包**整体拒绝**，不做条目级剔除或降级放行。
 - **导出门关系（v0.1 冻结）**：SAP 导出**复用** metric-factory 现有 export gate——未审核 LLM 指标在导出侧即被整批阻断，正常路径不会产生「带未审核清单的包」；导入侧校验是针对手工构造包的纵深防御，语义同为整批拒绝。
-- 包级 `review` 段随包携带（形状在首个实现批次冻结），供消费方核对与审计。
+- 包级 `review` 段随包携带（形状已冻结，见 §10 登记表），供消费方核对与审计。
 
 ### 3.6 双状态
 
@@ -131,7 +145,7 @@ concept_refs:
 ## 4. 身份、版本与指纹
 
 - 引用一律 `id@version`（指标、场景、概念、依赖包均同）；消费方必须按精确版本绑定，**禁止 latest 跟随**（对齐 JuanerAI「Run binds immutable version」原则）。
-- fingerprint = SHA-256（UTF-8 无 BOM、LF、按键名排序、无空行的规范化序列化）；具体规范化算法在 v0.1 评审后冻结。
+- fingerprint = SHA-256（UTF-8 无 BOM、LF、按键名排序、无空行的规范化序列化）；规范化算法与自引用裁决**已冻结并实现**（精确规则见 §10 登记表与 `src/sap/canonical.ts`）。
 - **指纹失配语义（v0.1 冻结）**：`validate_import` 重算指纹与包内声明不一致时**拒绝**该包并视为不可信（fail-closed）。
 - **重复身份语义（v0.1 冻结）**：包内出现重复 `id@version` 即非法——供应方导出校验拒绝产出，消费方导入校验拒绝接收。
 - 包内跨引用必须在同一包内可解析；包间引用（含 concept_refs 的 source）须显式声明 `id@version`。**v0.1 不含跨包依赖声明机制**，其引入随 L1/场景批次另行冻结。
@@ -188,11 +202,11 @@ concept_refs:
 
 方向已定（细节随相应实现批次冻结）：
 
-4. **命名空间机制 → 前缀约定**。metric-factory 资产 ID 自带供应方命名空间前缀（包级 `namespace` 字段），不采用注册表分配——保持零中心化服务依赖；具体前缀格式与 Workspace 映射规则随 v4 批次冻结。
+4. **命名空间机制 → 前缀约定**。包级 `namespace` 字段（前缀格式 `mf.<package-id>` 已随 v4 批次冻结并实现，见 §10），不采用注册表分配——零中心化服务依赖；Workspace 映射规则仍留 v6 窗口。
 5. **导入触发 → 手动文件导入**。v0.1～v6 窗口以文件快照导入为唯一方式（本地优先、git 可管）；git 引用拉取与发布包登记作为消费方后续选项，随 v6 窗口评估。
 6. **`concept_refs.source` 结构格式 → 平面定位符**。形式为「发布方标识 + 条目 ID@version」的不透明定位符（不承诺解析语义）；与本体 Owner 发布产物的对接时点 = 消费方 A-02/N04 有真实实现后的 v6 窗口。
-7. **`scenarios` 结构冻结时点 → v5 批次**。以 JA-ABS-PRD-001 F03/§7 对象为输入、随场景编辑器落地同步冻结；契约侧不提前冻结。
-8. **L1 指标字段最小集 → 三件套**。`aggregation`（可加/不可加维度、比例重算）、`statistic_object`（concept_ref 引用）、`caliber_type`（口径类型枚举）进入 v0.2 冻结范围；字段细节随 v4 批次设计冻结，其余 L1 候选保持预留。
+7. ~~`scenarios` 结构冻结时点~~ → **已随 v5 批次冻结**（ScenarioSpec v0.1，见 §3.1；原 Q7 关闭）。
+8. ~~L1 指标字段最小集~~ → **三件套已冻结并实现**（v4 批次，见 §3.2；原 Q8 关闭）；维度字典（名称/说明/可加性）仍预留。
 
 ## 9. 证据与审查边界
 
@@ -211,6 +225,19 @@ concept_refs:
 6. **Required Plan Additions**：第 1 轮七项已在 draft.3 完成；第 2 轮 PASS 附五项非语义加固，已在 draft.4 落地（`kind` 占位说明、未知 `sap` 版本拒绝、指纹自引用决策项、谱系 ID 措辞、跨包依赖机制注记）。
 7. **Verdict**：第 2 轮 PASS（独立 Reviewer）；本草案不自我裁决。
 
+## 10. 实现批次登记（v0.2 新增；供应侧事实，均有独立 REVIEW 证据）
+
+| 项 | 冻结事实（仓库事实源） |
+|---|---|
+| 规范化序列化 | YAML 1.2 子集（NFC/2 空格/块式/禁锚点/键递归排序/保守 plain-safe 正则 `^[a-z0-9][a-z0-9_.\-/]*$`/双引号 JSON 转义）；指纹计算时 `fingerprint` 字段置空（§4 决策项兑现）；`src/sap/canonical.ts` |
+| generator 双通道 | 构建期 tsup define 注入 `MF_GIT_SHA_BUILD`（git rev-parse，可 env 覆盖），运行时 `MF_GIT_SHA` 优先，均无则纯版本号；`metric-factory@<version>[+<sha>]` |
+| namespace 格式 | `mf.<package-id>`；package-id = 实例文件名去 `.yaml` 后 slugify（小写/非法字符→`-`/折叠）——**「实例名」定义 = D2 裁决**：文件名去后缀；下载产物名为 `<package-id>.sap.yaml`（package-id = slugify(实例名)，非 kebab 文件名两者一致） |
+| 包级 review 段 | `{ gate: "metric-factory-export-gate", exported_at, unreviewed: [] }`（正常路径恒空） |
+| SAP 校验器规则集 | structure（含未知 sap 版本/场景与绑定段形状/跨段引用镜像）/ runtime-state / fingerprint-mismatch / duplicate-identity（指标 name、concept (id,version,role)、场景 id@version——契约 §4 全覆盖）；`src/sap/validate.ts` |
+| SAP 导出管线 | export gate（整批阻断）→ 装配（内含供应侧查重与指纹计算）→ **整包校验（issues 非空即拒绝）** → 规范化写盘；CLI `--format sap` 与工作台下载双出口等价（422 语义一致） |
+| golden artifact | `examples/ecommerce-instance.sap.yaml`（53 指标 + gmv_gap_diagnosis 种子场景；随批次再生成，指纹随内容） |
+| 回填资产 | 7 模板 336 指标 L1 全量回填：caliber_type 137 填（服饰试点 49 + 其余 6 模板 88）/ aggregation 194 填（30 + 164）；SOP：多值仅真实跨族 / 非默认锚才赋值 / 粒度声明≠排除 / **开关即证据** / 继承留空——`.flow/l1-backfill-*.md` 留档 |
+
 ## 变更记录
 
 | 版本 | 日期 | 变更 |
@@ -223,3 +250,5 @@ concept_refs:
 | v0.1-errata.1 | 2026-10-08 | **事实勘误（无语义变更）**：消费方基线更正为 Blueprint v4.2 已生效（用户确认 2026-10-08，GitHub main 已核对；批准记录 `blueprint-v4.2-approval-and-rule-integration.md` 为状态权威，v4.2 正文头部保留草案期冻结字节）；§7 跟踪项同步改写（v4 实现批次不再以蓝图同步为前置，同步以 v4.2 为基线另行完成） |
 | v0.1-errata.2 | 2026-10-08 | **命名声明（无语义变更）**：新增文档控制「命名声明」行——SAP = Semantic Asset Package（语义资产包），与 SAP SE（ERP 软件公司）无关；跨仓引用用全名避免歧义（用户裁决 C：保名加声明，不更名） |
 | v0.1-errata.3 | 2026-10-09 | **跟踪项处置（无语义变更）**：§7.5 蓝图落位按用户裁决**搁置**（产品处边做边改阶段；metric-factory 为独立能力提供方、非隶属于 JuanerAI）；搁置期间双方关系由本契约单独管辖，未来重启优先评估「能力提供方登记」形态 |
+| **v0.2（修订冻结）** | 2026-10-09 | 用户批准开工（v5 收尾序列第 2 项）。修订内容：①§3.1 scenarios 预留→正式段（ScenarioSpec v0.1 结构冻结，v5 批次 + 两轮 REVIEW 证据）；②§3.2 L1 三件套预留→冻结（v4 批次交付，8 族枚举与 336 指标回填验证）；③§8 Q7/Q8 关闭登记；④新增 §10 实现批次登记（规范化/generator 双通道/namespace 与实例名 D2/review 段形状/校验器规则集/导出管线/golden artifact/回填资产 SOP）；⑤errata.1–3 事实并入正文基线。待 readiness review 通过后随用户确认定格 |
+| v0.2-rc.2 | 2026-10-09 | readiness gate 第 1 轮 NEEDS_CLARIFICATION：F1 统计口径失实（88/164 为 batch2 小计，7 模板实测 137/194）+ F2-F6 文本残留 → 修正；第 2 轮（新鲜评审员）**PASS**：统计三方对齐、登记与代码逐字一致、v0.1 不变量未触碰；L1-L4 文字残留（kind 字面量说明/文件名 slug 精度/Q4 时态/状态行）随本稿收口。待用户确认定格 v0.2 |
