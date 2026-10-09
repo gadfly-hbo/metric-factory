@@ -337,7 +337,7 @@ metrics:
       disallowed_dimensions: []
       ratio_policy: recompute_from_parts
     caliber_type:
-      - measurement_anchor
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -464,7 +464,7 @@ metrics:
       disallowed_dimensions: []
       ratio_policy: recompute_from_parts
     caliber_type:
-      - measurement_anchor
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: content-community@0.1.0

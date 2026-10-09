@@ -1,6 +1,6 @@
-# 其余 6 模板 L1 回填依据留档（batch2）
+# 其余 6 模板 L1 回填依据留档（batch2，含语义审计修正）
 
-> 依据摘句由脚本从各指标 definition 原文截取（口径关键词句优先，≤40 字），保证与原文逐字一致。生成：controller 接管生成（子代理配额耗尽，工人已完成 YAML 回填）。
+> 依据摘句由脚本从各指标 definition 原文截取（口径关键词句优先，≤40 字），保证与原文逐字一致。生成：controller 接管（子代理配额耗尽）；2026-10-09 语义审计 12 处族修正后重生成，审计表见 l1-backfill-audit-batch2.md。
 
 ## 电商交易平台（ecommerce-marketplace.yaml，53 指标）
 
@@ -8,7 +8,7 @@
 |---|---|---|---|---|
 | gmv | refund_adjustment + scope_inclusion | （空） | 默认剔除退款订单、不含运费与虚拟赠品 |  |
 | order_count | refund_adjustment | （空） | 默认不含退款订单，一笔订单多次支付只计最终成功一笔 |  |
-| uv | scope_inclusion + validity_threshold | （空） | 统计周期内去重访问用户数，按设备与账号联合去重 |  |
+| uv | scope_inclusion | （空） | 统计周期内去重访问用户数，按设备与账号联合去重 |  |
 | cvr | （空） | ratio_policy | 下单用户数 / 访客数，衡量流量到订单的转化效率 | 无口径决策 |
 | aov | refund_adjustment | ratio_policy | 分子默认剔除退款 |  |
 | paid_user_count | （空） | （空） | 统计周期内至少完成一笔支付成功的去重用户数 | 未构成 8 族口径决策（直计/去重/继承类） |
@@ -22,7 +22,7 @@
 | repeat_buyer_count | validity_threshold | （空） | 统计周期内下单 ≥2 次的去重用户数（复购率分子） |  |
 | marketing_spend | scope_inclusion | （空） | 统计周期内外部渠道投放费用合计（不含平台内部资源位） |  |
 | buy_repeat_rate | validity_threshold | ratio_policy | 统计周期内下单 ≥2 次的用户数 / 下单用户数 |  |
-| retention_30d | scope_inclusion | ratio_policy | 新用户首访后 30 日内再次活跃的用户占比 |  |
+| retention_30d | validity_threshold | ratio_policy | 新用户首访后 30 日内再次活跃的用户占比 |  |
 | refund_rate | refund_adjustment | ratio_policy | 默认仅统计已完成退款，不含退款中 |  |
 | return_rate | refund_adjustment | ratio_policy | 统计周期内退货订单数 / 支付订单数（退货 = 已发货后退回商品，区别于未发货仅… |  |
 | order_cancel_rate | （空） | ratio_policy | 统计周期内用户主动取消 + 超时未支付关闭的订单数 / 下单订单数 | 无口径决策 |
@@ -33,11 +33,11 @@
 | deliver_avg_days | measurement_anchor | （空） | 支付成功到确认收货的平均自然日天数 |  |
 | out_of_stock_rate | （空） | ratio_policy | 统计周期内因库存不足导致的不可售商品曝光次数 / 商品总曝光次数 | 无口径决策 |
 | complaint_rate | （空） | ratio_policy | 统计周期内发起客诉的订单数 / 支付订单数 | 无口径决策 |
-| nps | validity_threshold | （空） | 推荐者占比（9–10 分）− 贬损者占比（0–6 分），基于周期性调研问卷 |  |
+| nps | （空） | （空） | 推荐者占比（9–10 分）− 贬损者占比（0–6 分），基于周期性调研问卷 | 无口径决策 |
 | new_user_gmv_share | scope_inclusion | ratio_policy | 新客（统计周期内首次购买用户）贡献 GMV / 全站 GMV，衡量增长对拉新的依… |  |
 | category_top3_gmv_share | （空） | ratio_policy | GMV 最高的三个品类合计占比，衡量品类结构分散度 | 无口径决策 |
 | seller_top10_gmv_share | （空） | ratio_policy | GMV 前 10 名商家合计 GMV / 全站 GMV，衡量供给侧对头部商家的依… | 无口径决策 |
-| new_seller_gmv_share | measurement_anchor | ratio_policy | 入驻 90 日内商家的 GMV / 全站 GMV，衡量供给侧新鲜度 |  |
+| new_seller_gmv_share | scope_inclusion | ratio_policy | 入驻 90 日内商家的 GMV / 全站 GMV，衡量供给侧新鲜度 |  |
 | mobile_gmv_share | scope_inclusion | ratio_policy | 移动端（App + 移动 Web）GMV / 全站 GMV |  |
 | paid_traffic_share | （空） | ratio_policy | 付费渠道（投放入口）带来的访问量 / 总访问量 | 未构成 8 族口径决策（直计/去重/继承类） |
 | cross_category_buy_rate | validity_threshold | ratio_policy | 统计周期内购买 ≥2 个品类商品的用户数 / 购买用户数 |  |
@@ -60,7 +60,7 @@
 | comeback_rate | （空） | ratio_policy | 触达的沉默用户在 14 日内回访的占比 | 无口径决策 |
 | session_avg_duration | validity_threshold | （空） | 单次有效访问的平均时长（秒），剔除 <5 秒的误触访问 |  |
 
-小计：填 28 / 空 25 / aggregation 36 / 多值 3
+小计：填 27 / 空 26 / aggregation 36 / 多值 2
 
 ## SaaS 订阅（saas-subscription.yaml，48 指标）
 
@@ -86,12 +86,12 @@
 | logo_churn_rate | （空） | ratio_policy | 统计周期内流失客户数 / 期初付费客户数 | 无口径决策 |
 | churned_account_count | （空） | （空） | 统计周期内取消全部订阅的客户数 | 无口径决策 |
 | mrr_churn_rate | scope_inclusion | ratio_policy | 统计周期内流失 MRR / 期初 MRR（不含收缩，收缩单独计 contract… |  |
-| nps | validity_threshold | （空） | 推荐者占比（9–10 分）− 贬损者占比（0–6 分），基于周期性关系调研 |  |
+| nps | （空） | （空） | 推荐者占比（9–10 分）− 贬损者占比（0–6 分），基于周期性关系调研 | 无口径决策 |
 | csat | （空） | （空） | 工单关闭时的满意评分（1–5）平均值 | 无口径决策 |
 | first_response_time_minutes | measurement_anchor | （空） | 工单从创建到首次人工响应的平均分钟数（中位数口径） |  |
 | resolution_time_hours | measurement_anchor + scope_inclusion | （空） | 工单从创建到解决的平均小时数（中位数口径，不含待客户回复时间） |  |
 | uptime_rate | scope_inclusion | ratio_policy | 统计周期内服务可用时间 / 总时间（按 SLA 口径剔除计划内维护） |  |
-| incident_count | validity_threshold | （空） | 统计周期内 P1–P3 级生产故障次数合计 |  |
+| incident_count | scope_inclusion | （空） | 统计周期内 P1–P3 级生产故障次数合计 |  |
 | activation_rate | validity_threshold | ratio_policy | 新付费客户在签约后 30 日内完成关键行为（默认：核心功能被 ≥3 名成员使用）… |  |
 | enterprise_revenue_share | （空） | ratio_policy | KA（大客户）分层贡献的 ARR / 总 ARR | 无口径决策 |
 | self_serve_share | scope_inclusion | ratio_policy | 自助注册付费（无销售介入）的 ARR / 总 ARR |  |
@@ -100,7 +100,7 @@
 | annual_contract_share | scope_inclusion | ratio_policy | 年付（及以上）合同的 MRR / 总 MRR |  |
 | channel_partner_share | （空） | ratio_policy | 经渠道伙伴成交的 ARR / 总 ARR | 未构成 8 族口径决策（直计/去重/继承类） |
 | arpa | （空） | ratio_policy | MRR / 付费客户数 | 无口径决策 |
-| avg_customer_lifetime_months | measurement_anchor | （空） | 1 / 月度客户流失率（按 12 个月移动平均流失率折算），单位月 |  |
+| avg_customer_lifetime_months | proration_rule | （空） | 1 / 月度客户流失率（按 12 个月移动平均流失率折算），单位月 |  |
 | ltv | fee_composition | （空） | 客户平均收入 × 平均客户生命周期（毛利口径调整由 caliber 开关控制） |  |
 | sales_marketing_spend | （空） | （空） | 统计周期内销售与市场费用合计（人力 + 投放 + 活动分配） | 无口径决策 |
 | cac | （空） | ratio_policy | 销售营销费用 / 新客户数 | 无口径决策 |
@@ -115,7 +115,7 @@
 | login_frequency | （空） | （空） | 活跃用户每周平均登录次数（按周去重用户折算） | 未构成 8 族口径决策（直计/去重/继承类） |
 | sticky_wau_mau | （空） | ratio_policy | 周活跃用户数 / 月活跃用户数 | 未构成 8 族口径决策（直计/去重/继承类） |
 
-小计：填 20 / 空 28 / aggregation 23 / 多值 2
+小计：填 19 / 空 29 / aggregation 23 / 多值 2
 
 ## 内容社区 App（content-community.yaml，43 指标）
 
@@ -140,7 +140,7 @@
 | content_completion_rate | validity_threshold | ratio_policy | 播放进度 ≥80% 的播放次数 / 有效播放次数（视频类核心质量） |  |
 | interaction_rate | （空） | ratio_policy | 互动量 / 有效播放量 | 未构成 8 族口径决策（直计/去重/继承类） |
 | share_rate | （空） | ratio_policy | 分享次数 / 有效播放次数，衡量内容传播力 | 未构成 8 族口径决策（直计/去重/继承类） |
-| creator_retention_90d | measurement_anchor | ratio_policy | 首发内容创作者 90 日内再次发布的占比，供给侧健康度核心 |  |
+| creator_retention_90d | scope_inclusion | ratio_policy | 首发内容创作者 90 日内再次发布的占比，供给侧健康度核心 |  |
 | content_complaint_rate | （空） | ratio_policy | 被举报内容数 / 过审内容数，内容安全与质量底线 | 无口径决策 |
 | creator_active_rate | （空） | ratio_policy | 统计周期内发布内容的创作者 / 存量注册创作者 | 无口径决策 |
 | csat_community | （空） | （空） | 周期性调研的社区体验满意评分（1–5 均值） | 无口径决策 |
@@ -148,7 +148,7 @@
 | head_creator_content_share | （空） | ratio_policy | 头部分层（TOP 5% 创作者）发布内容的播放占比，供给侧集中度 | 无口径决策 |
 | ugc_pgc_share | （空） | ratio_policy | 机构/专业创作者内容的播放占比（其余为 UGC） | 无口径决策 |
 | recommend_traffic_share | （空） | ratio_policy | 推荐分发带来的播放量 / 总播放量（其余为搜索、关注、直达） | 无口径决策 |
-| new_creator_content_share | measurement_anchor | ratio_policy | 注册 90 日内创作者发布内容的播放占比，供给侧新鲜度 |  |
+| new_creator_content_share | scope_inclusion | ratio_policy | 注册 90 日内创作者发布内容的播放占比，供给侧新鲜度 |  |
 | ad_load_rate | （空） | ratio_policy | 广告曝光次数 / 内容播放次数 | 无口径决策 |
 | arpu | （空） | ratio_policy | 广告收入 / 日活跃用户数（按日折算） | 未构成 8 族口径决策（直计/去重/继承类） |
 | rpm | （空） | ratio_policy | 广告收入 × 1000 / 有效播放量，内容流量的变现效率 | 未构成 8 族口径决策（直计/去重/继承类） |
@@ -308,6 +308,6 @@
 
 小计：填 6 / 空 34 / aggregation 24 / 多值 0
 
-## 总统计（batch2）
+## 总统计（batch2，审计后）
 
-caliber_type 填 90 / 空 174；aggregation 填 164；多值 6。SOP 基准沿用试点：measurement_anchor 仅非默认锚；粒度支持声明 ≠ disallowed；宁缺毋滥。
+caliber_type 填 88 / 空 176；aggregation 填 164；多值 5。SOP 基准沿用试点；语义审计两轮：首轮修正 12 处，REVIEW#2「开关即证据」裁决恢复 3 处（take_rate/arpu/forecast_accuracy_rate），净修正 9 处——清空 2（评分类 nps×2）+ 继承清空裁决撤销（其自身带开关）+ 公式来源撤销 + 族改位 5（retention_30d/new_seller/avg_customer_lifetime/incident_count/creator×2，uv 去单值）。明细见审计表裁决全记录。

@@ -100,7 +100,6 @@ metrics:
       exclude_inner_channel: true
     caliber_type:
       - scope_inclusion
-      - validity_threshold
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -315,7 +314,7 @@ metrics:
       disallowed_dimensions: []
       ratio_policy: recompute_from_parts
     caliber_type:
-      - scope_inclusion
+      - validity_threshold
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -493,8 +492,6 @@ metrics:
     time_grains: [quarter]
     owner_role: 用户运营负责人
     caliber_switches: {}
-    caliber_type:
-      - validity_threshold
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -563,7 +560,7 @@ metrics:
       disallowed_dimensions: []
       ratio_policy: recompute_from_parts
     caliber_type:
-      - measurement_anchor
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0

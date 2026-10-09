@@ -362,8 +362,6 @@ metrics:
     time_grains: [quarter]
     owner_role: 客户成功负责人
     caliber_switches: {}
-    caliber_type:
-      - validity_threshold
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -437,7 +435,7 @@ metrics:
     owner_role: 研发负责人
     caliber_switches: {}
     caliber_type:
-      - validity_threshold
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -593,7 +591,7 @@ metrics:
     owner_role: 客户成功负责人
     caliber_switches: {}
     caliber_type:
-      - measurement_anchor
+      - proration_rule
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
