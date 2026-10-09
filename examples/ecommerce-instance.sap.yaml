@@ -12,6 +12,9 @@ metrics:
       exclude_inner_channel: true
       include_refund: true
       include_shipping: false
+    caliber_type:
+      - refund_adjustment
+      - scope_inclusion
     definition: "统计周期内支付成功订单的金额合计；默认剔除退款订单、不含运费与虚拟赠品"
     dimensions:
       - channel
@@ -36,6 +39,8 @@ metrics:
       expr: "uv * cvr * aov"
   - caliber_switches:
       include_refund: false
+    caliber_type:
+      - refund_adjustment
     definition: "统计周期内支付成功的订单数；默认不含退款订单，一笔订单多次支付只计最终成功一笔"
     dimensions:
       - channel
@@ -56,6 +61,8 @@ metrics:
     type: simple
   - caliber_switches:
       exclude_inner_channel: true
+    caliber_type:
+      - scope_inclusion
     definition: "统计周期内去重访问用户数，按设备与账号联合去重；默认剔除内部渠道与机器流量"
     dimensions:
       - channel
@@ -75,7 +82,11 @@ metrics:
       - week
       - month
     type: simple
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "下单用户数 / 访客数，衡量流量到订单的转化效率"
     dimensions:
       - channel
@@ -97,8 +108,14 @@ metrics:
     type_params:
       denominator: uv
       numerator: order_user_count
-  - caliber_switches:
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches:
       include_refund: false
+    caliber_type:
+      - refund_adjustment
     definition: "成交总额 / 支付订单数；分子默认剔除退款"
     dimensions:
       - channel
@@ -141,6 +158,8 @@ metrics:
       - month
     type: simple
   - caliber_switches: {}
+    caliber_type:
+      - validity_threshold
     definition: "统计周期内完成注册（含第三方授权注册）的去重新用户数；默认剔除注册后未激活的机器账号"
     dimensions:
       - channel
@@ -227,6 +246,8 @@ metrics:
     type: simple
   - caliber_switches:
       include_refund: false
+    caliber_type:
+      - refund_adjustment
     definition: "平台按成交金额与类目佣金率计提的交易佣金收入；分子口径与 GMV 一致（默认剔除退款）"
     dimensions:
       - category
@@ -263,6 +284,8 @@ metrics:
       - month
     type: simple
   - caliber_switches: {}
+    caliber_type:
+      - validity_threshold
     definition: "统计周期内下单 ≥2 次的去重用户数（复购率分子）"
     dimensions:
       - channel
@@ -280,6 +303,8 @@ metrics:
       - quarter
     type: simple
   - caliber_switches: {}
+    caliber_type:
+      - scope_inclusion
     definition: "统计周期内外部渠道投放费用合计（不含平台内部资源位）"
     dimensions:
       - channel
@@ -294,7 +319,13 @@ metrics:
     time_grains:
       - month
     type: simple
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
+    caliber_type:
+      - validity_threshold
     definition: "统计周期内下单 ≥2 次的用户数 / 下单用户数"
     dimensions:
       - channel
@@ -314,8 +345,14 @@ metrics:
     type_params:
       denominator: order_user_count
       numerator: repeat_buyer_count
-  - caliber_switches:
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches:
       active_by_pay: false
+    caliber_type:
+      - validity_threshold
     definition: "新用户首访后 30 日内再次活跃的用户占比；默认活跃 = 再次访问，可收紧为再次支付"
     dimensions:
       - channel
@@ -330,8 +367,14 @@ metrics:
     time_grains:
       - month
     type: ratio
-  - caliber_switches:
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches:
       include_pending_refund: true
+    caliber_type:
+      - refund_adjustment
     definition: "统计周期内退款订单数 / 支付订单数；默认仅统计已完成退款，不含退款中"
     dimensions:
       - category
@@ -349,7 +392,13 @@ metrics:
       - week
       - month
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
+    caliber_type:
+      - refund_adjustment
     definition: "统计周期内退货订单数 / 支付订单数（退货 = 已发货后退回商品，区别于未发货仅退款）"
     dimensions:
       - category
@@ -366,7 +415,11 @@ metrics:
       - week
       - month
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "统计周期内用户主动取消 + 超时未支付关闭的订单数 / 下单订单数"
     dimensions:
       - channel
@@ -384,7 +437,13 @@ metrics:
       - week
       - month
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
+    caliber_type:
+      - validity_threshold
     definition: "统计周期内 1–2 星评价数 / 有效评价数"
     dimensions:
       - category
@@ -400,7 +459,11 @@ metrics:
       - week
       - month
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "统计周期内已评价订单数 / 确认收货订单数"
     dimensions:
       - category
@@ -430,7 +493,13 @@ metrics:
     time_grains:
       - month
     type: simple
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
+    caliber_type:
+      - measurement_anchor
     definition: "按承诺发货时间准时发货的订单数 / 应发货订单数"
     dimensions:
       - category
@@ -448,6 +517,8 @@ metrics:
       - month
     type: ratio
   - caliber_switches: {}
+    caliber_type:
+      - measurement_anchor
     definition: "支付成功到确认收货的平均自然日天数"
     dimensions:
       - region
@@ -464,7 +535,11 @@ metrics:
     time_grains:
       - month
     type: simple
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "统计周期内因库存不足导致的不可售商品曝光次数 / 商品总曝光次数"
     dimensions:
       - category
@@ -481,7 +556,11 @@ metrics:
       - week
       - month
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "统计周期内发起客诉的订单数 / 支付订单数"
     dimensions:
       - channel
@@ -513,7 +592,13 @@ metrics:
     time_grains:
       - quarter
     type: simple
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
+    caliber_type:
+      - scope_inclusion
     definition: "新客（统计周期内首次购买用户）贡献 GMV / 全站 GMV，衡量增长对拉新的依赖度"
     dimensions:
       - channel
@@ -529,7 +614,11 @@ metrics:
       - month
       - quarter
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "GMV 最高的三个品类合计占比，衡量品类结构分散度"
     dimensions:
       - region
@@ -545,7 +634,11 @@ metrics:
       - month
       - quarter
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "GMV 前 10 名商家合计 GMV / 全站 GMV，衡量供给侧对头部商家的依赖"
     dimensions:
       - category
@@ -561,7 +654,13 @@ metrics:
       - month
       - quarter
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
+    caliber_type:
+      - scope_inclusion
     definition: "入驻 90 日内商家的 GMV / 全站 GMV，衡量供给侧新鲜度"
     dimensions:
       - category
@@ -577,7 +676,13 @@ metrics:
       - month
       - quarter
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
+    caliber_type:
+      - scope_inclusion
     definition: "移动端（App + 移动 Web）GMV / 全站 GMV"
     dimensions:
       - region
@@ -593,7 +698,11 @@ metrics:
     time_grains:
       - month
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "付费渠道（投放入口）带来的访问量 / 总访问量"
     dimensions:
       - platform
@@ -608,7 +717,13 @@ metrics:
     time_grains:
       - month
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
+    caliber_type:
+      - validity_threshold
     definition: "统计周期内购买 ≥2 个品类商品的用户数 / 购买用户数"
     dimensions:
       - user_tier
@@ -624,7 +739,11 @@ metrics:
       - month
       - quarter
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "统计周期内产生销售的商品数（SKU）/ 在架商品数"
     dimensions:
       - category
@@ -640,7 +759,11 @@ metrics:
     time_grains:
       - month
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "平均库存金额 / 统计周期内日均销售成本（商家侧库存效率，平台聚合口径）"
     dimensions:
       - category
@@ -656,8 +779,14 @@ metrics:
       - month
       - quarter
     type: simple
-  - caliber_switches:
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches:
       include_refund: false
+    caliber_type:
+      - refund_adjustment
     definition: "佣金收入 / GMV，衡量平台从交易中提取价值的比例"
     dimensions:
       - category
@@ -676,7 +805,11 @@ metrics:
     type_params:
       denominator: gmv
       numerator: commission_revenue
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "GMV / 动销商家数"
     dimensions:
       - category
@@ -696,8 +829,14 @@ metrics:
     type_params:
       denominator: active_seller_count
       numerator: gmv
-  - caliber_switches:
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches:
       include_refund: false
+    caliber_type:
+      - refund_adjustment
     definition: "GMV / 活跃用户数（分母默认访问活跃）"
     dimensions:
       - user_tier
@@ -717,7 +856,13 @@ metrics:
     type_params:
       denominator: app_dau
       numerator: gmv
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
+    caliber_type:
+      - attribution_window
     definition: "归因到投放渠道的 GMV / 投放费用（归因窗口默认 7 日点击）"
     dimensions:
       - channel
@@ -732,7 +877,13 @@ metrics:
     time_grains:
       - month
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
+    caliber_type:
+      - scope_inclusion
     definition: "参与营销活动（大促/券/补贴）订单的 GMV / 总 GMV"
     dimensions:
       - channel
@@ -748,8 +899,14 @@ metrics:
     time_grains:
       - month
     type: ratio
-  - caliber_switches:
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches:
       include_platform_subsidy: false
+    caliber_type:
+      - fee_composition
     definition: "补贴金额（券 + 价格补贴）/ GMV；默认不含平台承担的运费补贴"
     dimensions:
       - channel
@@ -764,7 +921,11 @@ metrics:
     time_grains:
       - month
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "总物流成本 / 支付订单数"
     dimensions:
       - region
@@ -779,7 +940,11 @@ metrics:
     time_grains:
       - month
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "总客服成本（人力 + 智能客服） / 支付订单数"
     dimensions:
       - channel
@@ -794,7 +959,13 @@ metrics:
     time_grains:
       - month
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
+    caliber_type:
+      - validity_threshold
     definition: "新注册用户在注册后 7 日内完成关键行为（默认：首单浏览 ≥3 个商品详情）的占比"
     dimensions:
       - channel
@@ -810,7 +981,11 @@ metrics:
       - week
       - month
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "新注册用户在注册后 7 日内完成首笔支付成功的占比"
     dimensions:
       - channel
@@ -826,7 +1001,11 @@ metrics:
       - week
       - month
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "搜索后点击进入商品详情的用户数 / 搜索用户数"
     dimensions:
       - channel
@@ -842,7 +1021,11 @@ metrics:
       - day
       - week
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "浏览商品详情后加入购物车的用户数 / 详情页用户数"
     dimensions:
       - channel
@@ -859,7 +1042,11 @@ metrics:
       - day
       - week
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "购物车内商品最终支付成功的用户数 / 加购用户数"
     dimensions:
       - channel
@@ -875,7 +1062,14 @@ metrics:
       - day
       - week
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
+    caliber_type:
+      - validity_threshold
+      - measurement_anchor
     definition: "近 90 日无任何访问的存量用户 / 期末存量用户"
     dimensions:
       - channel
@@ -890,7 +1084,11 @@ metrics:
     time_grains:
       - month
     type: ratio
-  - caliber_switches: {}
+  - aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_switches: {}
     definition: "触达的沉默用户在 14 日内回访的占比"
     dimensions:
       - channel
@@ -906,6 +1104,8 @@ metrics:
       - month
     type: ratio
   - caliber_switches: {}
+    caliber_type:
+      - validity_threshold
     definition: "单次有效访问的平均时长（秒），剔除 <5 秒的误触访问"
     dimensions:
       - platform
@@ -922,17 +1122,59 @@ metrics:
       - month
     type: simple
 package:
-  created_at: "2026-10-08T15:00:56.950Z"
-  fingerprint: "sha256:6e55838ec0278cf48ff0bd7f0428728ec10f6e4f454b2550226e558dc9cec7ba"
-  generator: "metric-factory@0.1.0+7a47de7"
+  created_at: "2026-10-09T08:05:05.695Z"
+  fingerprint: "sha256:3d671686697d9a2ef534b54d40bdbdc4b9f20638ae6c3a3f729c04fe779d3d13"
+  generator: "metric-factory@0.1.0+05d6489"
   id: ecommerce-instance
   kind: instance
   namespace: mf.ecommerce-instance
   version: 0.1.0
 review:
-  exported_at: "2026-10-08T15:00:56.950Z"
+  exported_at: "2026-10-09T08:05:05.695Z"
   gate: metric-factory-export-gate
   unreviewed: []
 runtime_state: design_only
 sap: "0.1"
-scenarios: []
+scenarios:
+  - decision_purpose: "定位 GMV 与目标差距的量价来源，决定流量、转化、客单三侧的资源投放优先级"
+    evidence_requirements: "近 13 周周粒度 gmv/uv/cvr/aov 序列与同期目标值"
+    id: gmv_gap_diagnosis
+    method_refs:
+      - "dame.m2.driver_decomposition@1.0.0"
+    metric_usages:
+      - metric: gmv
+        note: "差距量化对象，对齐北极星候选 gmv 的模板口径"
+        role: outcome
+      - metric: uv
+        note: "规模侧第一层拆解（revenue 树：gmv = uv * cvr * aov）"
+        role: driver
+      - metric: cvr
+        role: driver
+      - metric: aov
+        role: driver
+      - metric: retention_30d
+        note: "诊断期流量加码不得损伤 30 日留存"
+        role: guardrail
+      - metric: refund_rate
+        note: "转化抢救动作不得推高退款率"
+        role: guardrail
+    output_spec: "一页差距归因结论 + 流量/转化/客单三侧行动优先级清单"
+    question_tree:
+      - id: gap_root
+        label: "GMV 与目标差距多大"
+        metric: gmv
+      - id: uv_gap
+        label: "访客规模是否拖累"
+        metric: uv
+        parent: gap_root
+      - id: cvr_gap
+        label: "下单转化是否恶化"
+        metric: cvr
+        parent: gap_root
+      - id: aov_gap
+        label: "客单价是否下滑"
+        metric: aov
+        parent: gap_root
+    review_rules: "业务负责人确认目标口径与归因窗口后定稿"
+    title: "GMV 差距诊断"
+    version: 0.1.0

@@ -50,6 +50,22 @@ zsh scripts/dbt-parse-smoke.sh out/metricflow.yaml
 
 微调实例：编辑 `instance.yaml` 的四个 patch 段——`caliber_switches`（口径开关取值）、`modified`（改字段）、`removed`（删指标）、`added`（增指标，必须带 provenance）。
 
+## 分析体系：决策场景（v5）
+
+指标回答「用什么衡量」，场景回答「这个问题应该怎样分析」。场景 = 决策用途 + 问题树 + 指标角色 + 方法引用 + 证据要求：
+
+- **模板种子**：电商（GMV 差距诊断）与服饰（月度经营复盘）模板自带种子场景，新实例开箱有分析骨架
+- **实例添加**：`instance.yaml` 的 `added_scenarios` 段（与指标 added 对称；同 id 覆盖模板种子）
+- **场景结构**（ScenarioSpec v0.1，冻结）：`decision_purpose` 必填（无决策用途不可保存）；`question_tree` 平面节点表（id/label/parent/metric，禁环）；`metric_usages` 指标角色 `outcome | driver | guardrail`；`method_refs` 引用不实现
+- **校验**：`validate` 拦截坏场景（引用悬空指标/父节点/成环/用途为空）；`diff` 显示「场景 scenarios: +N」计数
+- **导出**：`export --format sap` 的包内 `scenarios` 段（契约正式段，随指纹保护）
+- **工作台**：实例页「场景」区块可视化浏览/新建/编辑（问题树与指标角色用逐行 DSL：`id|label|parent|metric` / `metric|role|note`，服务端解析逐行报错，保存失败零写盘）
+
+```bash
+node dist/cli.js validate my-instance/instance.yaml   # 场景校验含其中
+node dist/cli.js diff my-instance/instance.yaml       # 含场景计数
+```
+
 ## 口径可信性（fail-closed）
 
 - 每个指标必须带 `provenance`：`template`（模板出处）/ `manual`（人工）/ `llm`（模型 + prompt 版本）
@@ -173,6 +189,7 @@ node dist/cli.js ui --instance my-instance/instance.yaml --port 4173
 1. **创建实例**：首页「创建实例」问卷向导（三问 → 匹配行业模板 → 命名生成），或打开工作区已有实例
 2. **微调**：实例页改口径开关 / 增删改指标（写回前全量校验，失败零写盘），内嵌「相对模板的变更」fork diff 对比
 3. **AI 草案**（可选）：设置页配置模型（存仓库根 `.env.local`，已 gitignore，页面打码不回显）；草案工坊填业务描述或自然语言微调指令 → 进度页自动刷新 → 待采纳草案卡预览 → 采纳合入（引擎校验）/ 丢弃
-4. **审核与导出**：审核中心批准 LLM 指标（fail-closed：未批准导出被硬阻断）；实例页一键下载 MetricFlow YAML / Excel 字典 / Mermaid 指标树（与 CLI export 同语义：mapping 自动发现 + 导出前全量校验）
+4. **审核与导出**：审核中心批准 LLM 指标（fail-closed：未批准导出被硬阻断）；实例页一键下载 MetricFlow YAML / Excel 字典 / Mermaid 指标树 / SAP 语义包（与 CLI export 同语义：mapping 自动发现 + 导出前全量校验）
+5. **场景编辑**（v5）：实例页「场景」区块——浏览决策场景（来源：模板种子/实例新增/实例覆盖）、新建与编辑（表单 + 逐行 DSL），保存走引擎校验，失败逐行回显零写盘
 
 本地单用户：仅监听 127.0.0.1；写操作仅限工作区实例、`draft.pending.yaml` 草案与 `.env.local`（均过引擎校验）；实例打开限工作区扫描白名单。界面对齐 JuanerAI 最新 UI 标准（2026-09-28 Case 助手增量契约：品牌栏 + 待采纳草案卡 + 橘 accent 视觉），零客户端脚本、纯服务端表单。
