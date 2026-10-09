@@ -1,0 +1,560 @@
+<!doctype html>
+<!--
+  metric-factory · v5 决策场景区块 · UI-GATE 可点击原型
+  · 契约源：.flow/ui-contract.md（本文件与其 1:1）
+  · 样式：内联 CSS 逐字取自 src/ui/render.ts 顶部 CSS 块（2026-09-28 亮橘契约 #e8643a 系 tokens）；
+    文件末尾另有明确标注的「演示专用」样式块（非生产 UI）
+  · 脚本：仅用于切换六个冻结状态的演示；生产实现为零客户端脚本（契约 N1）
+  · 演示数据为虚构电商实例；指标名取自 templates/ecommerce-marketplace.yaml
+  · 双击即可打开（logo 走仓库内相对路径，零外部依赖）
+-->
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>我的实例 · Metric Factory</title>
+<style>
+:root {
+  --bg: #eceae5; --surface: #ffffff; --surface-2: #f4f3ef; --soft: #f7f6f2;
+  --border: #e5e2dc; --border-strong: #d8d3cb;
+  --text: #1d2027; --text-2: #6f7480; --text-3: #8a8076;
+  --accent: #e8643a; --accent-strong: #bf4927; --accent-soft: #fff1e8; --accent-line: #e8c1b4;
+  --navy: #263442;
+  --ok: #176247; --ok-soft: #def3e9; --ok-line: #bfddcf;
+  --warn: #855211; --warn-soft: #fff1d6; --warn-line: #f0dfc2;
+  --fail: #952f2f; --fail-soft: #ffe5e5; --fail-line: #f3caca;
+  --queue: #6d5bd0; --queue-ink: #5b48c0; --queue-soft: #efecfb; --queue-line: #d9d2f5;
+  --rounded-base: 12px; --rounded-sm: 8px;
+  --shadow-card: 0 3px 12px rgba(40,36,30,.04); --shadow-float: 0 18px 48px rgba(35,35,30,.12);
+  --font: Inter, ui-sans-serif, -apple-system, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font: 400 13px/1.55 var(--font); }
+.topbar { position: sticky; top: 0; z-index: 20; height: 64px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 18px; background: rgba(255,255,255,.96); border-bottom: 1px solid var(--border); }
+.app { display: flex; min-height: calc(100vh - 64px); }
+.sidebar { width: 248px; background: var(--surface-2); border-right: 1px solid var(--border); padding: 16px 14px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 64px; height: calc(100vh - 64px); }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav a { display: block; padding: 7px 10px; border-radius: var(--rounded-sm); color: var(--text-2); text-decoration: none; font-size: 13px; }
+.nav a:hover { background: var(--surface); }
+.nav a.active { background: var(--accent-soft); color: var(--accent-strong); font-weight: 500; }
+.boundary { margin-top: auto; padding: 10px; border: 1px dashed var(--border-strong); border-radius: var(--rounded-sm); color: var(--text-3); font-size: 11.5px; line-height: 1.6; }
+.main { flex: 1; padding: 22px; max-width: 1000px; margin: 0 auto; }
+.statusbar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 6px 14px; font-size: 10.5px; color: var(--text-3); display: flex; gap: 14px; z-index: 10; }
+.page-title { font-size: 22px; font-weight: 600; line-height: 1.3; margin-bottom: 6px; letter-spacing: -.01em; }
+.view-title { font-size: 17px; font-weight: 600; line-height: 1.4; margin: 18px 0 10px; }
+.page-desc { color: var(--text-2); font-size: 13px; margin-bottom: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-card); padding: 14px 16px; margin-bottom: 14px; }
+.card-h { font-size: 13.5px; font-weight: 600; margin-bottom: 8px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl th { text-align: left; background: var(--surface-2); padding: 7px 10px; font-weight: 500; white-space: nowrap; border-bottom: 1px solid var(--border); }
+.tbl td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.tbl td.mono, .mono { font-family: var(--mono); font-size: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 1px 9px; font-size: 11px; border: 1px solid; white-space: nowrap; }
+.chip-ok { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
+.chip-warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-line); }
+.chip-queue { background: var(--queue-soft); color: var(--queue-ink); border-color: var(--queue-line); }
+.chip-accent { background: var(--accent-soft); color: var(--accent-strong); border-color: var(--accent-line); }
+.btn { display: inline-block; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); border-radius: var(--rounded-sm); padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; }
+.btn-primary { background: var(--accent); border-color: var(--accent-strong); color: #fff; }
+.btn:hover { border-color: var(--text-3); }
+.btn-primary:hover { background: var(--accent-strong); }
+.btn-danger { border-color: var(--fail-line); background: #fffafa; color: var(--fail); }
+.fld { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.fld label { font-size: 12px; color: var(--text-2); font-weight: 500; }
+.fld input[type=text], .fld select, .fld textarea { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rounded-sm); padding: 6px 8px; font: 400 13px var(--font); width: 100%; }
+.fld textarea { font-family: var(--mono); font-size: 12px; min-height: 72px; }
+.empty { border: 1px dashed var(--border-strong); border-radius: var(--rounded-base); padding: 22px; text-align: center; color: var(--text-2); background: var(--surface); }
+.empty .btn { margin-top: 10px; }
+.error-list { list-style: none; }
+.error-list li { background: var(--fail-soft); border: 1px solid var(--fail-line); color: var(--fail); border-radius: var(--rounded-sm); padding: 6px 10px; margin-bottom: 6px; font-size: 12.5px; }
+.tree-children { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tree-child { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--rounded-sm); padding: 3px 8px; font-size: 12px; }
+a { color: var(--accent-strong); }
+:focus-visible { outline: 3px solid rgba(232,100,58,.28); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* 顶部品牌栏（09-28 契约 UI-00：logo 裁切显示 + 完整品牌名与 slogan + 产品名） */
+.brand { display: flex; gap: 8px; align-items: center; font-weight: 700; letter-spacing: -.01em; }
+.brand-mark { position: relative; display: block; width: 36px; height: 36px; overflow: hidden; border-radius: 9px; background: #fff; border: 1px solid var(--border); }
+.brand-mark img { position: absolute; width: 90px; height: 90px; max-width: none; left: -22px; top: -10px; object-fit: cover; object-position: top center; }
+.brand-copy { display: flex; flex-direction: column; line-height: 1.05; }
+.brand-copy strong { font-size: 13px; color: var(--text); }
+.brand-copy small { margin-top: 4px; color: #5c655d; font-size: 8px; letter-spacing: .14em; white-space: nowrap; }
+.product-name { margin-left: 4px; padding-left: 9px; border-left: 1px solid var(--border); color: var(--text-2); font-size: 10px; white-space: nowrap; }
+.top-actions { justify-self: end; display: flex; gap: 10px; align-items: center; }
+.badge-local { padding: 5px 9px; border: 1px solid var(--accent-line); border-radius: 999px; color: var(--accent-strong); background: var(--accent-soft); font-size: 11px; font-weight: 600; }
+.avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: #fff; background: #746a60; font-size: 11px; font-weight: 700; }
+
+/* 待采纳草案卡（09-28 契约 UI-11 范式：eyebrow + 标题 + 状态徽 + 字段 dl + 动作区） */
+.draft-card { background: var(--surface); border: 1px solid #dfd9cf; border-radius: 14px; box-shadow: var(--shadow-float); padding: 18px; margin: 0 auto 22px; max-width: 820px; }
+.eyebrow { margin: 0 0 5px; color: var(--text-3); font-size: 10px; letter-spacing: .13em; font-weight: 700; }
+.draft-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.draft-heading h3 { font-size: 17px; letter-spacing: -.01em; }
+.draft-heading .draft-src { margin: 4px 0 0; color: var(--text-2); font-size: 11px; }
+.state-badge { border-radius: 999px; padding: 5px 8px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.state-badge.amber { color: var(--warn); background: var(--warn-soft); }
+.state-badge.green { color: var(--ok); background: var(--ok-soft); }
+.state-badge.red { color: var(--fail); background: var(--fail-soft); }
+.draft-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+.draft-section { padding: 13px; border-radius: 10px; background: var(--soft); }
+.draft-section h4 { margin: 0 0 9px; font-size: 12px; }
+.kv { margin: 0; }
+.kv > div { display: grid; grid-template-columns: 82px 1fr; gap: 8px; padding: 7px 0; border-top: 1px solid #e4e0d9; }
+.kv dt { color: var(--text-2); font-size: 10px; }
+.kv dd { margin: 0; font-size: 11.5px; line-height: 1.45; }
+.draft-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; align-items: center; flex-wrap: wrap; }
+.draft-actions input[type=text] { border: 1px solid var(--border); border-radius: var(--rounded-sm); padding: 6px 8px; font: inherit; width: 220px; }
+.composer-note { text-align: center; color: var(--text-2); font-size: 10.5px; margin-top: 4px; }
+
+/* 杜邦式指标树（分模块 + 公式勾稽） */
+.module { margin-bottom: 14px; }
+.module > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--rounded-sm); font-weight: 600; font-size: 13.5px; }
+.module > summary::-webkit-details-marker { display: none; }
+.module > summary .cat-dot { width: 8px; height: 8px; border-radius: 999px; }
+.module > summary .tree-count { color: var(--text-3); font-weight: 400; font-size: 11.5px; }
+.cat-scale .cat-dot { background: var(--accent); }
+.cat-quality .cat-dot { background: var(--ok); }
+.cat-structure .cat-dot { background: var(--warn); }
+.cat-efficiency .cat-dot { background: var(--queue); }
+.cat-journey .cat-dot { background: var(--text-3); }
+.tree { padding: 14px 6px 4px; overflow-x: auto; }
+/* 超宽树防裁切：ul 宽度取内容宽，窄时 margin auto 居中、宽时贴左可滚动（justify-content:center 会让左溢出不可达） */
+.tree ul { display: flex; width: max-content; margin-left: auto; margin-right: auto; padding-top: 18px; position: relative; list-style: none; }
+.tree li { display: flex; flex-direction: column; align-items: center; padding: 18px 6px 0; position: relative; }
+.tree li::before, .tree li::after { content: ""; position: absolute; top: 0; width: 50%; height: 18px; border-top: 1px solid var(--border-strong); }
+.tree li::before { left: 0; border-right: 1px solid var(--border-strong); border-radius: 0 6px 0 0; }
+.tree li::after { right: 0; }
+.tree li:only-child::before, .tree li:only-child::after { display: none; }
+.tree li:only-child { padding-top: 14px; }
+.tree li:first-child::before, .tree li:last-child::after { border: 0 none; }
+.tree li:last-child::before { border-right: 0 none; border-radius: 0; }
+.tree ul ul::before { content: ""; position: absolute; top: 0; left: 50%; width: 1px; height: 18px; background: var(--border-strong); }
+.tnode { background: var(--surface); border: 1px solid var(--border); border-left-width: 3px; border-radius: var(--rounded-sm); padding: 6px 10px; min-width: 96px; max-width: 190px; text-align: center; position: relative; }
+.tnode .t-name { font-size: 12.5px; font-weight: 500; }
+.tnode .t-id { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); overflow-wrap: anywhere; }
+.tnode .t-expr { font-family: var(--mono); font-size: 10px; color: var(--accent-strong); background: var(--accent-soft); border-radius: 4px; padding: 0 4px; margin-top: 3px; display: inline-block; }
+.tnode-root { border-left-color: var(--accent); background: var(--accent-soft); }
+.tnode-llm { border-color: var(--warn-line); background: var(--warn-soft); }
+.tnode-modified { border-color: var(--accent-line); }
+.op { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 999px; font-size: 11px; color: var(--text-2); padding: 0 6px; z-index: 1; }
+.ns-head { display: flex; gap: 10px; align-items: flex-start; }
+.ns-badge { background: var(--accent-soft); color: var(--accent-strong); border: 1px solid var(--accent-line); border-radius: var(--rounded-sm); padding: 6px 10px; font-size: 12px; }
+.loose-nodes { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Web 闭环增量：向导 / 工作流引导 / 草案进度（零脚本，纯服务端表单） */
+.fld input[type=password] { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rounded-sm); padding: 6px 8px; font: 400 13px var(--font); width: 100%; }
+.radio-line { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 4px 0; }
+.radio-line label { font-weight: 400; font-size: 13px; color: var(--text); display: inline-flex; gap: 5px; align-items: center; }
+.flow-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.flow-step { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+.flow-step .step-no { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-strong); border: 1px solid var(--accent-line); font-size: 11px; font-weight: 700; margin-bottom: 6px; }
+.flow-step h4 { font-size: 12.5px; margin-bottom: 3px; }
+.flow-step p { color: var(--text-2); font-size: 11.5px; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pulse-dot { width: 9px; height: 9px; border-radius: 999px; background: var(--accent); display: inline-block; animation: mf-pulse 1.2s ease-in-out infinite; margin-right: 8px; vertical-align: middle; }
+@keyframes mf-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+
+/* ===== 演示专用（非生产 UI）：状态切换器与演示标记，生产实现不得带入 ===== */
+.proto-bar { position: fixed; right: 14px; top: 74px; z-index: 40; width: 178px; background: var(--surface); border: 1px dashed var(--queue-line); border-radius: var(--rounded-base); box-shadow: var(--shadow-float); padding: 10px; }
+.proto-bar h5 { font-size: 10.5px; color: var(--queue-ink); letter-spacing: .06em; margin-bottom: 6px; }
+.proto-bar button { display: block; width: 100%; text-align: left; margin-bottom: 4px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--rounded-sm); padding: 4px 8px; font: 600 11.5px var(--font); color: var(--text-2); cursor: pointer; }
+.proto-bar button:hover { border-color: var(--text-3); }
+.proto-bar button[aria-pressed="true"] { background: var(--queue-soft); border-color: var(--queue-line); color: var(--queue-ink); }
+.demo-only { border: 1px dashed var(--queue-line); background: var(--queue-soft); color: var(--queue-ink); border-radius: var(--rounded-sm); padding: 5px 10px; font: 600 11.5px var(--font); cursor: pointer; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand" aria-label="JuanerAI，持续做出更好的决策；Metric Factory">
+    <span class="brand-mark"><img src="../../assets/juanerai-logo-slogan.png" alt=""></span>
+    <span class="brand-copy"><strong>JuanerAI</strong><small>持续做出更好的决策</small></span>
+    <span class="product-name">Metric Factory</span>
+  </div>
+  <div></div>
+  <div class="top-actions">
+    <span class="badge-local">本机运行 · 凭据仅存本机</span>
+    <div class="avatar" aria-label="本地用户">MF</div>
+  </div>
+</header>
+<div class="app">
+  <aside class="sidebar">
+    <nav class="nav">
+      <a href="#">工作台</a>
+      <a href="#">模板库</a>
+      <a href="#" class="active">我的实例</a>
+      <a href="#">AI 草案</a>
+      <a href="#">审核中心</a>
+      <a href="#">设置</a>
+    </nav>
+    <div class="boundary">写操作仅限本地实例与映射文件<br>页面无脚本 · 纯服务端表单</div>
+  </aside>
+  <main class="main">
+
+    <!-- ==================== 页面 A：实例页（GET /instance） ==================== -->
+    <div data-page="instance">
+      <h1 class="page-title">我的实例</h1>
+      <p class="page-desc" id="inst-desc">基模板 ecommerce-marketplace@0.1.0 · 下方可微调（口径开关/增删改）并写回，写回前经全量校验。</p>
+
+      <div class="card">
+        <div class="card-h">实例概览 · <span class="mono">shop-demo/instance.yaml</span></div>
+        <p>基模板 <span class="mono">ecommerce-marketplace@0.1.0</span> · 有效指标 <span class="num">54</span> 个
+          · 口径调整 1 · 字段修改 0 · 删除 0 · 新增 1
+          · <span class="chip chip-ok">无待审核</span></p>
+        <p style="margin-top:8px" class="btn-row">
+          <a class="btn" href="#">审核中心</a>
+          <a class="btn btn-primary" href="#">导出 MetricFlow YAML</a>
+          <a class="btn" href="#">导出 Excel 字典</a>
+          <a class="btn" href="#">导出 Mermaid 指标树</a>
+          <a class="btn" href="#">导出 SAP 语义包</a>
+        </p>
+        <p style="color:var(--text-3);font-size:11.5px;margin-top:8px">SAP 语义包：JuanerAI 语义资产包（YAML，含指纹与出处）</p>
+      </div>
+
+      <div class="view-title">相对模板的变更（fork diff）</div>
+      <div class="card" style="padding:0;overflow-x:auto"><table class="tbl">
+        <thead><tr><th>类型</th><th>对象</th><th>明细</th></tr></thead>
+        <tbody>
+          <tr><td>口径</td><td class="mono">gmv.include_refund</td><td>关 → <strong>开</strong></td></tr>
+          <tr><td>新增</td><td class="mono">vip_gmv_share</td><td>VIP 成交占比（manual · 已审核）</td></tr>
+        </tbody></table></div>
+
+      <div class="view-title">指标树 · 杜邦式分解（按模块分组，× ÷ 为公式算符）</div>
+      <div class="card"><div class="card-h">🎯 北极星候选</div>
+        <div class="ns-head">
+          <div class="ns-badge">成交总额 <span class="mono">gmv</span></div>
+          <div class="ns-badge">付费用户数 <span class="mono">paid_user_count</span></div>
+        </div>
+        <p style="margin-top:8px;color:var(--text-2);font-size:12px">决策指引：交易平台优先 GMV；品牌 DTC 优先复购收入</p></div>
+      <details class="module cat-scale" open>
+        <summary><span class="cat-dot"></span>规模<span class="tree-count">1 棵分解树（示例节选）</span></summary>
+        <div class="tree"><ul>
+          <li>
+            <div class="tnode tnode-root">
+              <div class="t-name">成交总额</div>
+              <div class="t-id">gmv</div>
+              <span class="t-expr" title="指标级公式">uv × cvr × aov</span>
+            </div>
+            <ul>
+              <li><div class="tnode"><div class="t-name">访客数</div><div class="t-id">uv</div></div></li>
+              <li><span class="op" data-op="×">×</span><div class="tnode"><div class="t-name">下单转化率</div><div class="t-id">cvr</div></div></li>
+              <li><span class="op" data-op="×">×</span><div class="tnode"><div class="t-name">客单价</div><div class="t-id">aov</div></div></li>
+            </ul>
+          </li>
+        </ul></div>
+      </details>
+
+      <form action="/instance/patch" method="post">
+        <div class="view-title">微调实例（写回前经全量校验，失败零写盘）</div>
+        <div class="card" style="padding:0;overflow-x:auto"><table class="tbl">
+          <thead><tr><th>指标</th><th>口径开关</th><th>模板默认</th><th>取值</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">gmv</td><td class="mono">include_refund</td><td>关</td>
+              <td><label style="margin-right:10px;font-weight:400"><input type="radio" name="caliber__gmv__include_refund" value="skip"> 不变</label><label style="margin-right:10px;font-weight:400"><input type="radio" name="caliber__gmv__include_refund" value="on" checked> 覆盖为开</label><label style="margin-right:10px;font-weight:400"><input type="radio" name="caliber__gmv__include_refund" value="off"> 覆盖为关</label></td></tr>
+            <tr><td class="mono">gmv</td><td class="mono">include_shipping</td><td>关</td>
+              <td><label style="margin-right:10px;font-weight:400"><input type="radio" name="caliber__gmv__include_shipping" value="skip" checked> 不变</label><label style="margin-right:10px;font-weight:400"><input type="radio" name="caliber__gmv__include_shipping" value="on"> 覆盖为开</label><label style="margin-right:10px;font-weight:400"><input type="radio" name="caliber__gmv__include_shipping" value="off"> 覆盖为关</label></td></tr>
+          </tbody></table></div>
+        <div class="card">
+          <div class="fld"><label>删除指标（每行一个指标名，对应 removed 段）</label><textarea name="removed" placeholder=""></textarea></div>
+          <div class="fld"><label>新增指标（JSON 数组，必须含 provenance；与已有新增按名合并——移除已合入指标请用审核中心拒绝或直接编辑 YAML）</label><textarea name="added" placeholder="[]">[
+  {
+    "name": "vip_gmv_share",
+    "display_name": "VIP 成交占比",
+    "type": "ratio",
+    "definition": "统计周期内 VIP 用户成交额占 GMV 的比例",
+    "dimensions": ["channel", "region"],
+    "owner_role": "电商业务负责人",
+    "provenance": { "origin": "manual", "reviewed_by": "huang" }
+  }
+]</textarea></div>
+          <div class="fld"><label>修改指标（JSON 数组：name + 可选 display_name/definition/owner_role，替换 modified 段）</label><textarea name="modified" placeholder="[]">[]</textarea></div>
+          <button class="btn btn-primary" type="submit">校验并写回实例</button>
+        </div>
+      </form>
+
+      <!-- ========== 新增区块：决策场景（实例页最后一块，契约 §0） ========== -->
+
+      <!-- S1 列表态 -->
+      <div data-scn="list">
+        <div class="view-title">决策场景 · 分析体系</div>
+        <p class="page-desc" style="margin-bottom:10px">把「这个业务问题应该怎样分析」固化为配置：决策用途、问题树、指标角色、方法引用。场景随实例写盘并进入 SAP 语义包；写回前经全量校验，失败零写盘。</p>
+        <div class="card" style="padding:0;overflow-x:auto">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border)">
+            <div class="card-h" style="margin:0">场景列表（<span class="num">2</span>）</div>
+            <a class="btn btn-primary" href="/instance/scenarios/new" data-go="new">新建场景</a>
+          </div>
+          <table class="tbl">
+            <thead><tr><th>场景</th><th>决策用途</th><th>指标角色</th><th>来源</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><strong>GMV 差距诊断</strong><br><span class="mono">gmv_gap_diagnosis</span></td>
+                <td>定位月度 GMV 未达预期的主因（流量、转化、客单价哪一端拖累），决定下周资源投放与补货优先级。</td>
+                <td><span class="num">5</span> 个（outcome 1 · driver 3 · guardrail 1）</td>
+                <td><span class="chip chip-ok">模板种子</span></td>
+                <td><a class="btn" href="/instance/scenarios/gmv_gap_diagnosis/edit" data-go="edit">编辑</a></td>
+              </tr>
+              <tr>
+                <td><strong>大促 ROI 复盘</strong><br><span class="mono">promo_roi_review</span></td>
+                <td>大促结束 7 天内复盘补贴效率与增量成交，决定下次大促的预算与补贴节奏。</td>
+                <td><span class="num">3</span> 个（outcome 1 · driver 1 · guardrail 1）</td>
+                <td><span class="chip chip-accent">实例新增</span></td>
+                <td><a class="btn" href="/instance/scenarios/promo_roi_review/edit" data-go="edit">编辑</a></td>
+              </tr>
+            </tbody></table>
+        </div>
+      </div>
+
+      <!-- S2 空态 -->
+      <div data-scn="empty" hidden>
+        <div class="view-title">决策场景 · 分析体系</div>
+        <p class="page-desc" style="margin-bottom:10px">把「这个业务问题应该怎样分析」固化为配置：决策用途、问题树、指标角色、方法引用。场景随实例写盘并进入 SAP 语义包；写回前经全量校验，失败零写盘。</p>
+        <div class="empty">暂无决策场景<br><span style="font-size:12px">决策场景回答「怎样分析这个问题」：先写清决策用途，再拆问题树、挂指标角色。</span><br><a class="btn btn-primary" href="/instance/scenarios/new" data-go="new">新建场景</a></div>
+      </div>
+
+      <!-- S5 保存成功回列表（较 S1 多出刚写回的 takeoff_diagnosis 行） -->
+      <div data-scn="saved" hidden>
+        <div class="view-title">决策场景 · 分析体系</div>
+        <p class="page-desc" style="margin-bottom:10px">把「这个业务问题应该怎样分析」固化为配置：决策用途、问题树、指标角色、方法引用。场景随实例写盘并进入 SAP 语义包；写回前经全量校验，失败零写盘。</p>
+        <div class="card" style="padding:0;overflow-x:auto">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border)">
+            <div class="card-h" style="margin:0">场景列表（<span class="num">3</span>）</div>
+            <a class="btn btn-primary" href="/instance/scenarios/new" data-go="new">新建场景</a>
+          </div>
+          <table class="tbl">
+            <thead><tr><th>场景</th><th>决策用途</th><th>指标角色</th><th>来源</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><strong>GMV 差距诊断</strong><br><span class="mono">gmv_gap_diagnosis</span></td>
+                <td>定位月度 GMV 未达预期的主因（流量、转化、客单价哪一端拖累），决定下周资源投放与补货优先级。</td>
+                <td><span class="num">5</span> 个（outcome 1 · driver 3 · guardrail 1）</td>
+                <td><span class="chip chip-ok">模板种子</span></td>
+                <td><a class="btn" href="/instance/scenarios/gmv_gap_diagnosis/edit" data-go="edit">编辑</a></td>
+              </tr>
+              <tr>
+                <td><strong>大促 ROI 复盘</strong><br><span class="mono">promo_roi_review</span></td>
+                <td>大促结束 7 天内复盘补贴效率与增量成交，决定下次大促的预算与补贴节奏。</td>
+                <td><span class="num">3</span> 个（outcome 1 · driver 1 · guardrail 1）</td>
+                <td><span class="chip chip-accent">实例新增</span></td>
+                <td><a class="btn" href="/instance/scenarios/promo_roi_review/edit" data-go="edit">编辑</a></td>
+              </tr>
+              <tr>
+                <td><strong>新品爬坡诊断</strong><br><span class="mono">takeoff_diagnosis</span></td>
+                <td>新品类上架 8 周内判断是否加倍投入：验证流量获取与售罄速度是否同时达标。</td>
+                <td><span class="num">3</span> 个（outcome 1 · driver 1 · guardrail 1）</td>
+                <td><span class="chip chip-accent">实例新增</span></td>
+                <td><a class="btn" href="/instance/scenarios/takeoff_diagnosis/edit" data-go="edit">编辑</a></td>
+              </tr>
+            </tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 页面 B：场景表单页（GET new / GET :id/edit / POST 422 重渲染） ==================== -->
+
+    <!-- S3 新建表单态（GET /instance/scenarios/new） -->
+    <div data-page="form" data-form="new" hidden>
+      <h1 class="page-title">决策场景 · 新建</h1>
+      <p class="page-desc">新建决策场景并写回实例（写回前经全量校验，失败零写盘）。</p>
+      <form action="/instance/scenarios" method="post">
+        <p style="color:var(--text-3);font-size:11.5px;margin-bottom:10px">ScenarioSpec v0.1 · version 0.1.0 由服务端固定</p>
+        <div class="card">
+          <div class="card-h">基本信息</div>
+          <div class="fld"><label for="new-id">场景 id（snake_case，实例内唯一，创建后不可修改）</label>
+            <input type="text" id="new-id" name="id" value="takeoff_diagnosis" placeholder="gmv_gap_diagnosis"></div>
+          <div class="fld"><label for="new-title">标题 title（非空）</label>
+            <input type="text" id="new-title" name="title" value="新品爬坡诊断"></div>
+          <div class="fld"><label for="new-purpose">决策用途 decision_purpose（非空——无决策用途不可保存）</label>
+            <textarea id="new-purpose" name="decision_purpose">新品类上架 8 周内判断是否加倍投入：验证流量获取与售罄速度是否同时达标。</textarea></div>
+        </div>
+        <div class="card">
+          <div class="card-h">问题树与指标角色（逐行 DSL，服务端解析校验）</div>
+          <div class="fld"><label for="new-tree">问题树 question_tree（逐行 id|label|parent|metric，空槽留空；parent 留空即根节点）</label>
+            <textarea id="new-tree" name="question_tree" rows="5" wrap="off">root|新品爬坡|
+demand|需求端|root|uv
+supply|供给端|root|sell_through_rate</textarea>
+            <p style="color:var(--text-3);font-size:11.5px">例：root|GMV 差距诊断|　·　traffic|流量端|root|uv　（节点id|节点label|父节点id|指标名）</p></div>
+          <div class="fld"><label for="new-usages">指标角色 metric_usages（逐行 指标名|role|note，role 须为 outcome | driver | guardrail，note 可留空）</label>
+            <textarea id="new-usages" name="metric_usages" rows="4" wrap="off">sell_through_rate|outcome|爬坡成功标准
+uv|driver|需求验证
+out_of_stock_rate|guardrail|供不应求误判防线</textarea>
+            <p style="color:var(--text-3);font-size:11.5px">例：gmv|outcome|月度缺口归因　·　uv|driver|流量端抓手　·　refund_rate|guardrail|防以退款换增长</p></div>
+        </div>
+        <div class="card">
+          <div class="card-h">方法与治理</div>
+          <div class="fld"><label for="new-methods">方法引用 method_refs（逐行一个自由串，可空，如 dame.m2.driver_decomposition@1.0.0）</label>
+            <textarea id="new-methods" name="method_refs">dame.m2.driver_decomposition@1.0.0</textarea></div>
+          <div class="fld"><label for="new-evidence">证据要求 evidence_requirements（文本段，可空）</label>
+            <textarea id="new-evidence" name="evidence_requirements">每周取近 8 周分渠道 UV 与动销率，口径与指标字典一致；上架首周记录基线。</textarea></div>
+          <div class="fld"><label for="new-output">输出 output_spec（文本段，可空）</label>
+            <textarea id="new-output" name="output_spec">一页爬坡判定：需求/供给两端达标矩阵 + 加倍/观察/收缩建议。</textarea></div>
+          <div class="fld"><label for="new-review">复盘规则 review_rules（文本段，可空）</label>
+            <textarea id="new-review" name="review_rules">第 8 周复盘判定结论与实际投入偏差，更新本场景。</textarea></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" type="submit" data-go="saved">校验并写回场景</button>
+          <a class="btn" href="/instance" data-go="list">取消</a>
+        </div>
+        <p style="margin-top:10px"><button type="button" class="demo-only" data-go="fail">演示专用：以此表单触发 422 校验失败</button></p>
+      </form>
+    </div>
+
+    <!-- S4 编辑表单态（GET /instance/scenarios/gmv_gap_diagnosis/edit，编辑模板种子） -->
+    <div data-page="form" data-form="edit" hidden>
+      <h1 class="page-title">决策场景 · 编辑</h1>
+      <p class="page-desc">编辑决策场景（写回前经全量校验，失败零写盘）。保存后此场景以实例版本生效（覆盖模板种子）。</p>
+      <form action="/instance/scenarios/gmv_gap_diagnosis" method="post">
+        <p style="color:var(--text-3);font-size:11.5px;margin-bottom:10px">ScenarioSpec v0.1 · version 0.1.0 由服务端固定</p>
+        <div class="card">
+          <div class="card-h">基本信息</div>
+          <div class="fld"><label>场景 id（snake_case，实例内唯一，创建后不可修改）</label>
+            <p class="mono" style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--rounded-sm);padding:6px 8px">gmv_gap_diagnosis</p>
+            <input type="hidden" name="id" value="gmv_gap_diagnosis"></div>
+          <div class="fld"><label for="edit-title">标题 title（非空）</label>
+            <input type="text" id="edit-title" name="title" value="GMV 差距诊断"></div>
+          <div class="fld"><label for="edit-purpose">决策用途 decision_purpose（非空——无决策用途不可保存）</label>
+            <textarea id="edit-purpose" name="decision_purpose">定位月度 GMV 未达预期的主因（流量、转化、客单价哪一端拖累），决定下周资源投放与补货优先级。</textarea></div>
+        </div>
+        <div class="card">
+          <div class="card-h">问题树与指标角色（逐行 DSL，服务端解析校验）</div>
+          <div class="fld"><label for="edit-tree">问题树 question_tree（逐行 id|label|parent|metric，空槽留空；parent 留空即根节点）</label>
+            <textarea id="edit-tree" name="question_tree" rows="5" wrap="off">root|GMV 差距诊断|
+traffic|流量端|root|uv
+conversion|转化端|root|cvr
+price|客单价端|root|aov</textarea>
+            <p style="color:var(--text-3);font-size:11.5px">例：root|GMV 差距诊断|　·　traffic|流量端|root|uv　（节点id|节点label|父节点id|指标名）</p></div>
+          <div class="fld"><label for="edit-usages">指标角色 metric_usages（逐行 指标名|role|note，role 须为 outcome | driver | guardrail，note 可留空）</label>
+            <textarea id="edit-usages" name="metric_usages" rows="6" wrap="off">gmv|outcome|月度缺口归因
+uv|driver|流量端抓手
+cvr|driver|转化端抓手
+aov|driver|客单价端抓手
+refund_rate|guardrail|防止以退款换增长</textarea>
+            <p style="color:var(--text-3);font-size:11.5px">例：gmv|outcome|月度缺口归因　·　uv|driver|流量端抓手　·　refund_rate|guardrail|防以退款换增长</p></div>
+        </div>
+        <div class="card">
+          <div class="card-h">方法与治理</div>
+          <div class="fld"><label for="edit-methods">方法引用 method_refs（逐行一个自由串，可空，如 dame.m2.driver_decomposition@1.0.0）</label>
+            <textarea id="edit-methods" name="method_refs">dame.m2.driver_decomposition@1.0.0</textarea></div>
+          <div class="fld"><label for="edit-evidence">证据要求 evidence_requirements（文本段，可空）</label>
+            <textarea id="edit-evidence" name="evidence_requirements">每周一取数：近 8 周分渠道 UV/CVR/AOV 与月度目标线；口径与指标字典一致。</textarea></div>
+          <div class="fld"><label for="edit-output">输出 output_spec（文本段，可空）</label>
+            <textarea id="edit-output" name="output_spec">一页诊断结论：主因端排序 + 各端贡献度 + 下周动作建议。</textarea></div>
+          <div class="fld"><label for="edit-review">复盘规则 review_rules（文本段，可空）</label>
+            <textarea id="edit-review" name="review_rules">每月复盘一次归因结论与实际动作效果的偏差。</textarea></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" type="submit" data-go="saved">校验并写回场景</button>
+          <a class="btn" href="/instance" data-go="list">取消</a>
+        </div>
+      </form>
+    </div>
+
+    <!-- S6 校验失败 422（POST /instance/scenarios 重渲染：错误列表置顶 + 值保留 + DSL 行号） -->
+    <div data-page="form" data-form="fail" hidden>
+      <h1 class="page-title">决策场景 · 新建</h1>
+      <p class="page-desc">全量校验未通过（零写盘）——修正下列问题后重试。</p>
+      <div class="card">
+        <div class="card-h" style="color:var(--fail)">校验失败</div>
+        <ul class="error-list" role="alert" id="scn-errors">
+          <li>[scenario-purpose] scenarios[gmv_gap_diagnosis].decision_purpose: 决策用途不能为空（无决策用途不可保存）</li>
+          <li>[scenario-id] scenarios: 场景 id "gmv_gap_diagnosis" 已存在（实例内唯一；编辑已有场景请从列表「编辑」进入）</li>
+          <li>[scenario-tree-ref] question_tree 第 3 行: parent "conversoin" 不存在（须引用同场景内已定义的节点 id）</li>
+          <li>[scenario-tree-ref] question_tree 第 4 行: 格式须为 id|label|parent|metric（4 槽竖线分隔，空槽留空）</li>
+          <li>[scenario-metric-ref] metric_usages 第 1 行: metric "gmv_growth" 不是物化指标（可用指标见指标树与指标字典）</li>
+          <li>[scenario-metric-ref] metric_usages 第 2 行: role "north" 无效（须为 outcome | driver | guardrail）</li>
+        </ul>
+      </div>
+      <form action="/instance/scenarios" method="post">
+        <p style="color:var(--text-3);font-size:11.5px;margin-bottom:10px">ScenarioSpec v0.1 · version 0.1.0 由服务端固定</p>
+        <div class="card">
+          <div class="card-h">基本信息</div>
+          <div class="fld"><label for="fail-id">场景 id（snake_case，实例内唯一，创建后不可修改）</label>
+            <input type="text" id="fail-id" name="id" value="gmv_gap_diagnosis" placeholder="gmv_gap_diagnosis"></div>
+          <div class="fld"><label for="fail-title">标题 title（非空）</label>
+            <input type="text" id="fail-title" name="title" value="GMV 差距诊断（副本）"></div>
+          <div class="fld"><label for="fail-purpose">决策用途 decision_purpose（非空——无决策用途不可保存）</label>
+            <textarea id="fail-purpose" name="decision_purpose"></textarea></div>
+        </div>
+        <div class="card">
+          <div class="card-h">问题树与指标角色（逐行 DSL，服务端解析校验）</div>
+          <div class="fld"><label for="fail-tree">问题树 question_tree（逐行 id|label|parent|metric，空槽留空；parent 留空即根节点）</label>
+            <textarea id="fail-tree" name="question_tree" rows="5" wrap="off" aria-describedby="scn-errors">root|GMV 差距|
+traffic|流量端|root|uv
+conversion|转化端|conversoin|cvr
+price 客单价端 root aov</textarea>
+            <p style="color:var(--text-3);font-size:11.5px">例：root|GMV 差距诊断|　·　traffic|流量端|root|uv　（节点id|节点label|父节点id|指标名）——错误行号按本域行序（wrap 已关闭，视觉行=物理行）</p></div>
+          <div class="fld"><label for="fail-usages">指标角色 metric_usages（逐行 指标名|role|note，role 须为 outcome | driver | guardrail，note 可留空）</label>
+            <textarea id="fail-usages" name="metric_usages" rows="3" wrap="off" aria-describedby="scn-errors">gmv_growth|outcome|目标指标
+uv|north|角色手滑</textarea>
+            <p style="color:var(--text-3);font-size:11.5px">例：gmv|outcome|月度缺口归因　·　uv|driver|流量端抓手　·　refund_rate|guardrail|防以退款换增长</p></div>
+        </div>
+        <div class="card">
+          <div class="card-h">方法与治理</div>
+          <div class="fld"><label for="fail-methods">方法引用 method_refs（逐行一个自由串，可空，如 dame.m2.driver_decomposition@1.0.0）</label>
+            <textarea id="fail-methods" name="method_refs">dame.m2.driver_decomposition@1.0.0</textarea></div>
+          <div class="fld"><label for="fail-evidence">证据要求 evidence_requirements（文本段，可空）</label>
+            <textarea id="fail-evidence" name="evidence_requirements">每周一取数：近 8 周分渠道 UV/CVR/AOV 与月度目标线。</textarea></div>
+          <div class="fld"><label for="fail-output">输出 output_spec（文本段，可空）</label>
+            <textarea id="fail-output" name="output_spec">一页诊断结论：主因端排序 + 各端贡献度。</textarea></div>
+          <div class="fld"><label for="fail-review">复盘规则 review_rules（文本段，可空）</label>
+            <textarea id="fail-review" name="review_rules">每月复盘一次归因结论与实际动作效果的偏差。</textarea></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" type="submit" data-go="saved">校验并写回场景</button>
+          <a class="btn" href="/instance" data-go="list">取消</a>
+        </div>
+      </form>
+    </div>
+
+  </main>
+</div>
+<div class="statusbar"><span>Metric Factory 工作台</span><span>模板 7 个 · 当前实例 shop-demo/instance.yaml</span><span>本机 127.0.0.1</span></div>
+
+<!-- 演示专用状态切换器（非生产 UI；生产为零脚本服务端渲染） -->
+<aside class="proto-bar" aria-label="原型演示控制（非生产 UI）">
+  <h5>原型 · 状态切换（演示专用）</h5>
+  <button type="button" data-state="list" aria-pressed="true">S1 列表态</button>
+  <button type="button" data-state="empty" aria-pressed="false">S2 空态</button>
+  <button type="button" data-state="new" aria-pressed="false">S3 新建表单</button>
+  <button type="button" data-state="edit" aria-pressed="false">S4 编辑表单</button>
+  <button type="button" data-state="saved" aria-pressed="false">S5 保存成功回列表</button>
+  <button type="button" data-state="fail" aria-pressed="false">S6 422 逐行错误</button>
+</aside>
+
+<script>
+// 演示专用：仅切换六个冻结状态，不代表生产行为（生产零脚本，契约 N1）
+(function () {
+  var PAGES = { list: "instance", empty: "instance", saved: "instance", new: "form", edit: "form", fail: "form" };
+  var TITLES = {
+    list: "我的实例 · Metric Factory",
+    empty: "我的实例 · Metric Factory",
+    saved: "我的实例 · Metric Factory",
+    new: "决策场景 · 新建 — Metric Factory",
+    edit: "决策场景 · 编辑 — Metric Factory",
+    fail: "决策场景 · 新建 — Metric Factory"
+  };
+  var DESCS = {
+    list: "基模板 ecommerce-marketplace@0.1.0 · 下方可微调（口径开关/增删改）并写回，写回前经全量校验。",
+    empty: "基模板 digital-marketing@0.1.0（无种子模板示例）· 下方可微调（口径开关/增删改）并写回，写回前经全量校验。",
+    saved: "基模板 ecommerce-marketplace@0.1.0 · 下方可微调（口径开关/增删改）并写回，写回前经全量校验。"
+  };
+  function show(state) {
+    var page = PAGES[state];
+    document.querySelectorAll("[data-page]").forEach(function (el) { el.hidden = el.getAttribute("data-page") !== page; });
+    document.querySelectorAll("[data-scn]").forEach(function (el) { el.hidden = el.getAttribute("data-scn") !== state; });
+    document.querySelectorAll("[data-form]").forEach(function (el) { el.hidden = el.getAttribute("data-form") !== state; });
+    document.querySelectorAll(".proto-bar button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-state") === state)); });
+    document.title = TITLES[state];
+    var desc = document.getElementById("inst-desc");
+    if (desc && DESCS[state]) desc.textContent = DESCS[state];
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll(".proto-bar button").forEach(function (b) {
+    b.addEventListener("click", function () { show(b.getAttribute("data-state")); });
+  });
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest("[data-go]");
+    if (t) { e.preventDefault(); show(t.getAttribute("data-go")); }
+  });
+  document.addEventListener("submit", function (e) { e.preventDefault(); });
+})();
+</script>
+</body></html>

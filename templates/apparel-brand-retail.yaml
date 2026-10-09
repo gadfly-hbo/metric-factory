@@ -1822,3 +1822,53 @@ metrics:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
       note: 口径改写自某服饰品牌企业指标字典（2026-09 导出，已脱敏）
+
+scenarios:
+  - id: monthly_business_review
+    version: 0.1.0
+    title: 月度经营复盘
+    decision_purpose: 复盘当月终端达成与商品售罄健康度，决定下月补货、折扣与开店资源分配
+    question_tree:
+      - id: review_root
+        label: 当月达成差距在哪
+        metric: terminal_sales
+      - id: traffic_gap
+        label: 客流与进店是否不足
+        parent: review_root
+        metric: store_traffic
+      - id: conv_gap
+        label: 成交转化是否走低
+        parent: review_root
+        metric: conversion_rate
+      - id: upt_gap
+        label: 连带购买是否不足
+        parent: review_root
+        metric: upt
+      - id: sell_through_health
+        label: 库存售罄是否健康
+        parent: review_root
+        metric: sell_through_rate
+    metric_usages:
+      - metric: terminal_sales
+        role: outcome
+        note: 月度达成复盘的量化对象（终端口径）
+      - metric: store_traffic
+        role: driver
+        note: 门店流量侧拆解
+      - metric: conversion_rate
+        role: driver
+        note: 成交效率侧拆解
+      - metric: upt
+        role: driver
+        note: 客单结构侧拆解（连带率）
+      - metric: sell_through_rate
+        role: guardrail
+        note: 折扣与补货动作不得透支商品售罄率
+      - metric: inventory_turnover_days
+        role: guardrail
+        note: 复盘结论不得恶化库存周转天数
+    method_refs:
+      - dame.m2.driver_decomposition@1.0.0
+    evidence_requirements: 近 6 个完整月的月度指标序列与当月目标值
+    output_spec: 月度复盘一页纸：达成差距归因 + 下月补货/折扣/开店动作清单
+    review_rules: 商品负责人与渠道负责人会签售罄与折扣结论

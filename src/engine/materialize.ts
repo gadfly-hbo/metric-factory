@@ -1,6 +1,7 @@
 import type { Template, Metric } from "../schema/template.js";
 import type { Instance } from "../schema/instance.js";
 import type { MappingEntry } from "../schema/mapping.js";
+import type { Scenario } from "../schema/scenario.js";
 
 export interface CaliberChange {
   metric: string;
@@ -14,6 +15,7 @@ export interface InstanceDiff {
   removed: string[];
   modified: { name: string; fields: string[] }[];
   caliber: CaliberChange[];
+  scenarios: { added: number };
 }
 
 export interface MaterializedInstance {
@@ -24,6 +26,7 @@ export interface MaterializedInstance {
   trees: Template["trees"];
   north_star: Template["north_star"];
   dimensions: string[];
+  scenarios: Scenario[];
   diff: InstanceDiff;
   /** 已确认的数仓映射（CLI export 装配；导出器用真实模型/列名替换占位） */
   mapping?: MappingEntry[];
@@ -65,6 +68,11 @@ export function materialize(template: Template, instance: Instance): Materialize
     decision_guide: template.north_star.decision_guide
   };
 
+  // 场景收集（GRILL Q3）：模板种子 ∪ added_scenarios，同 id 实例覆盖模板（fork 语义）
+  const scenarios = new Map<string, Scenario>();
+  for (const s of template.scenarios) scenarios.set(s.id, s);
+  for (const s of instance.added_scenarios) scenarios.set(s.id, s);
+
   // diff：口径变更带模板默认值（from）与实例覆盖值（to）；仅保留真实变化，无变化的覆盖不算 diff
   const caliber: CaliberChange[] = [];
   for (const [metricName, switches] of Object.entries(instance.caliber_switches)) {
@@ -83,7 +91,8 @@ export function materialize(template: Template, instance: Instance): Materialize
         (f) => (m as Record<string, unknown>)[f] !== undefined
       )
     })),
-    caliber
+    caliber,
+    scenarios: { added: instance.added_scenarios.length }
   };
 
   return {
@@ -94,6 +103,7 @@ export function materialize(template: Template, instance: Instance): Materialize
     trees,
     north_star,
     dimensions: template.dimensions,
+    scenarios: [...scenarios.values()],
     diff
   };
 }

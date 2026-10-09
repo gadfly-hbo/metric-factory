@@ -159,3 +159,77 @@ test("structure：bindings 条目不合 MappingEntry 形状（缺 model/column�
   expect(issues[0]!.rule).toBe("structure");
   expect(issues[0]!.path).toMatch(/^bindings/);
 });
+
+// ---------- scenarios 段收紧（切片 2：ScenarioSpec v0.1 + 引用一致性镜像） ----------
+
+const SCENARIO = {
+  id: "monthly_review",
+  version: "0.1.0",
+  title: "月度经营复盘",
+  decision_purpose: "对照月度目标定位缺口并决定下月经营动作",
+  question_tree: [
+    { id: "review_root", label: "月度目标达成情况" },
+    { id: "scale_gap", label: "规模侧缺口", parent: "review_root", metric: "gmv" },
+    { id: "traffic_gap", label: "流量侧缺口", parent: "review_root", metric: "uv" }
+  ],
+  metric_usages: [
+    { metric: "gmv", role: "outcome" },
+    { metric: "uv", role: "driver" }
+  ],
+  method_refs: [],
+  evidence_requirements: "",
+  output_spec: "",
+  review_rules: ""
+};
+
+// 注入 scenarios 后按同规则重算指纹（scenarios 计入指纹），隔离单规则断言
+function packageWithScenarios(scenarios: unknown[]) {
+  const pkg = { ...validPackage(), scenarios };
+  return { ...pkg, package: { ...pkg.package, fingerprint: packageFingerprint(pkg) } };
+}
+
+test("正例：含合法场景的包过校验（scenarios 收紧不误伤）", () => {
+  expect(validateSapPackage(packageWithScenarios([SCENARIO]))).toEqual([]);
+});
+
+test("structure：场景 decision_purpose 为空拒绝（ScenarioSpec AT02 门）", () => {
+  expect(validateSapPackage(packageWithScenarios([{ ...SCENARIO, decision_purpose: "" }]))).toEqual([
+    { rule: "structure", path: "scenarios.0.decision_purpose", message: expect.stringContaining("决策用途") }
+  ]);
+});
+
+test("structure：场景 metric 悬空（tree/usages 引用包内不存在的指标）拒绝（引用一致性镜像）", () => {
+  const dangling = {
+    ...SCENARIO,
+    question_tree: [
+      ...SCENARIO.question_tree,
+      { id: "profit_gap", label: "利润侧缺口", parent: "review_root", metric: "profit" }
+    ],
+    metric_usages: [...SCENARIO.metric_usages, { metric: "cac", role: "guardrail" }]
+  };
+  expect(validateSapPackage(packageWithScenarios([dangling]))).toEqual([
+    {
+      rule: "structure",
+      path: "scenarios.monthly_review.question_tree.3.metric",
+      message: expect.stringContaining("profit")
+    },
+    {
+      rule: "structure",
+      path: "scenarios.monthly_review.metric_usages.2.metric",
+      message: expect.stringContaining("cac")
+    }
+  ]);
+});
+
+test("duplicate-identity：手构包场景重复 id（含同 version）拒绝（契约 §4 场景亦适用）", () => {
+  const pkg = validPackage();
+  const SCEN = {
+    id: "dup_scenario", version: "0.1.0", title: "重复场景", decision_purpose: "测试重复身份拒绝",
+    question_tree: [], metric_usages: [], method_refs: [],
+    evidence_requirements: "", output_spec: "", review_rules: ""
+  };
+  const dup = { ...pkg, scenarios: [SCEN, { ...SCEN }] };
+  const fixed = { ...dup, package: { ...dup.package, fingerprint: packageFingerprint(dup) } };
+  const issues = validateSapPackage(fixed);
+  expect(issues.some(i => i.rule === "duplicate-identity" && i.path.startsWith("scenarios."))).toBe(true);
+});

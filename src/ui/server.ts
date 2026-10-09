@@ -2,7 +2,8 @@ import { createServer, type Server } from "node:http";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadTemplate } from "../engine/loader.js";
-import { layout, templatesPage, templateDetailPage, instancePage, reviewPage, formErrorPage, escapeHtml } from "./render.js";
+import { layout, templatesPage, templateDetailPage, instancePage, reviewPage, formErrorPage, escapeHtml, emptyScenarioFormValues, scenarioFormPage, scenarioFormValues, type ScenarioFormValues } from "./render.js";
+import { parseQuestionTreeDsl, parseMetricUsagesDsl } from "./dsl.js";
 import { loadInstance } from "../engine/loader.js";
 import { materialize } from "../engine/materialize.js";
 import { validateInstance } from "../engine/validate.js";
@@ -35,6 +36,7 @@ import { SapAssemblyError } from "../sap/assemble.js";
 import { ExportBlockedError } from "../export/gate.js";
 import type { Exporter } from "../export/types.js";
 import { MappingSchema } from "../schema/mapping.js";
+import type { Scenario } from "../schema/scenario.js";
 export interface UiOptions {
   instancePath?: string;
   templatesDir: string;
@@ -161,6 +163,87 @@ async function loadPendingDraft(draftFile: string): Promise<DraftLoad | { ok: fa
     };
   }
   return { ok: true, draft: parsed.data };
+}
+
+
+// ===== 决策场景提交管线（v5 切片 4；与 patch 表单同构：DSL 解析 → 合入 added_scenarios → schema → materialize → 引擎 validate 全过 → 写盘）=====
+// 任一步失败零写盘；错误串按 ui-contract §4 逐字（E-01/E-02 与 DSL 行级 E-03…E-08 在此层产出，
+// schema 层错误按既有 `path: message` 格式、引擎层按 `[rule] path: message` 格式透出）
+
+function readScenarioFormValues(form: URLSearchParams): ScenarioFormValues {
+  const get = (k: string) => form.get(k) ?? "";
+  return {
+    id: get("id").trim(),
+    title: get("title").trim(),
+    decision_purpose: get("decision_purpose").trim(),
+    question_tree: get("question_tree"),
+    metric_usages: get("metric_usages"),
+    method_refs: get("method_refs"),
+    evidence_requirements: get("evidence_requirements").trim(),
+    output_spec: get("output_spec").trim(),
+    review_rules: get("review_rules").trim()
+  };
+}
+
+function submitScenario(
+  ctx: InstanceContext,
+  values: ScenarioFormValues,
+  mode: "new" | "edit"
+): { ok: true; instance: Instance } | { ok: false; errors: string[] } {
+  // E-07 对照集 = 当前实例物化指标名（模板指标可能已被 removed）
+  const knownMetrics = new Set(materialize(ctx.base, ctx.instance).metrics.map((m) => m.name));
+  const errors: string[] = [];
+
+  if (!values.decision_purpose) {
+    errors.push(`[scenario-purpose] scenarios[${values.id}].decision_purpose: 决策用途不能为空（无决策用途不可保存）`);
+  }
+  if (mode === "new") {
+    const existing = new Set([...ctx.base.scenarios.map((s) => s.id), ...ctx.instance.added_scenarios.map((s) => s.id)]);
+    if (values.id && existing.has(values.id)) {
+      errors.push(`[scenario-id] scenarios: 场景 id "${values.id}" 已存在（实例内唯一；编辑已有场景请从列表「编辑」进入）`);
+    }
+  }
+
+  const tree = parseQuestionTreeDsl(values.question_tree, knownMetrics);
+  const usages = parseMetricUsagesDsl(values.metric_usages, knownMetrics);
+  errors.push(...tree.errors, ...usages.errors);
+  if (errors.length > 0) return { ok: false, errors };
+
+  const scenario: Scenario = {
+    id: values.id,
+    version: "0.1.0",
+    title: values.title,
+    decision_purpose: values.decision_purpose,
+    question_tree: tree.nodes,
+    metric_usages: usages.usages,
+    method_refs: values.method_refs.split(/\r?\n/).map((x) => x.trim()).filter(Boolean),
+    evidence_requirements: values.evidence_requirements,
+    output_spec: values.output_spec,
+    review_rules: values.review_rules
+  };
+  // 新建追加；编辑按 id 替换；id 是模板种子 id 时无既有条目可替换 → 追加即实例覆盖（D2）
+  const existingIdx = ctx.instance.added_scenarios.findIndex((s) => s.id === scenario.id);
+  const added =
+    mode === "new" || existingIdx < 0
+      ? [...ctx.instance.added_scenarios, scenario]
+      : ctx.instance.added_scenarios.map((s, i) => (i === existingIdx ? scenario : s));
+
+  const merged: Instance = { ...ctx.instance, added_scenarios: added };
+  const parsed = InstanceSchema.safeParse(merged);
+  if (!parsed.success) {
+    return { ok: false, errors: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
+  }
+  const materialized = materialize(ctx.base, parsed.data);
+  const issues = validateInstance(materialized, ctx.base, parsed.data, { skipReviewGate: true });
+  if (issues.length > 0) {
+    return { ok: false, errors: issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`) };
+  }
+  return { ok: true, instance: parsed.data };
+}
+
+// 场景合并集（模板种子 ∪ 实例 added，同 id 实例覆盖——与 materialize 同语义）
+function mergedScenarios(ctx: InstanceContext): Map<string, Scenario> {
+  return new Map([...ctx.base.scenarios, ...ctx.instance.added_scenarios].map((s) => [s.id, s] as const));
 }
 
 
@@ -393,8 +476,106 @@ export function createUiServer(opts: UiOptions): Server {
         }
         const materialized = materialize(ctx.base, ctx.instance);
         const html = layout("instance", "我的实例", `基模板 ${escapeHtml(ctx.instance.base)} · 下方可微调（口径开关/增删改）并写回，写回前经全量校验。`,
-          instancePage(materialized, ctx.instance, ctx.instancePath), statusInfo);
+          instancePage(materialized, ctx.instance, ctx.instancePath, ctx.base), statusInfo);
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
+        return;
+      }
+
+      // ===== 决策场景（v5 切片 4；ui-contract §0.1 路由钉死：独立表单页 + 原生 form POST，零客户端脚本）=====
+      if (path === "/instance/scenarios/new") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "无实例", "未指定实例。", formErrorPage("未指定实例", ["metric-factory ui --instance <path>"]), statusInfo)
+          );
+          return;
+        }
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(
+          layout("instance", "决策场景 · 新建", "新建决策场景并写回实例（写回前经全量校验，失败零写盘）。",
+            scenarioFormPage({ mode: "new", values: emptyScenarioFormValues() }), statusInfo)
+        );
+        return;
+      }
+
+      const scenarioEditMatch = path.match(/^\/instance\/scenarios\/([a-z][a-z0-9_]*)\/edit$/);
+      if (scenarioEditMatch && req.method === "GET") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "无实例", "未指定实例。", formErrorPage("未指定实例", ["metric-factory ui --instance <path>"]), statusInfo)
+          );
+          return;
+        }
+        const id = scenarioEditMatch[1]!;
+        const scn = mergedScenarios(ctx).get(id);
+        if (!scn) {
+          res.writeHead(404, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "未找到场景", `场景 ${escapeHtml(id)} 不存在。`,
+              `<div class="empty">场景不存在<br><span class="mono">${escapeHtml(id)}</span><br><a class="btn" href="/instance">返回实例</a></div>`, statusInfo)
+          );
+          return;
+        }
+        // fork 语义提示仅对未被实例覆盖的模板种子显示（T-04）
+        const isUntouchedSeed = ctx.base.scenarios.some((s) => s.id === id) && !ctx.instance.added_scenarios.some((s) => s.id === id);
+        const desc = `编辑决策场景（写回前经全量校验，失败零写盘）。${isUntouchedSeed ? "保存后此场景以实例版本生效（覆盖模板种子）。" : ""}`;
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(
+          layout("instance", "决策场景 · 编辑", desc, scenarioFormPage({ mode: "edit", values: scenarioFormValues(scn) }), statusInfo)
+        );
+        return;
+      }
+
+      if (path === "/instance/scenarios" && req.method === "POST") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "无实例", "未指定实例。", formErrorPage("未指定实例", ["metric-factory ui --instance <path>"]), statusInfo)
+          );
+          return;
+        }
+        const form = await readFormBody(req);
+        const values = readScenarioFormValues(form);
+        const result = submitScenario(ctx, values, "new");
+        if (!result.ok) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "决策场景 · 新建", "全量校验未通过（零写盘）——修正下列问题后重试。",
+              scenarioFormPage({ mode: "new", values, errors: result.errors }), statusInfo)
+          );
+          return;
+        }
+        await writeInstanceFile(ctx.instancePath, result.instance);
+        res.writeHead(303, { location: "/instance" }).end();
+        return;
+      }
+
+      const scenarioPostMatch = path.match(/^\/instance\/scenarios\/([a-z][a-z0-9_]*)$/);
+      if (scenarioPostMatch && req.method === "POST") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "无实例", "未指定实例。", formErrorPage("未指定实例", ["metric-factory ui --instance <path>"]), statusInfo)
+          );
+          return;
+        }
+        const id = scenarioPostMatch[1]!;
+        if (!mergedScenarios(ctx).has(id)) {
+          res.writeHead(404, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "未找到场景", `场景 ${escapeHtml(id)} 不存在。`,
+              `<div class="empty">场景不存在<br><span class="mono">${escapeHtml(id)}</span><br><a class="btn" href="/instance">返回实例</a></div>`, statusInfo)
+          );
+          return;
+        }
+        const form = await readFormBody(req);
+        const values = { ...readScenarioFormValues(form), id }; // id 以路径为准
+        const result = submitScenario(ctx, values, "edit");
+        if (!result.ok) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "决策场景 · 编辑", "全量校验未通过（零写盘）——修正下列问题后重试。",
+              scenarioFormPage({ mode: "edit", values, errors: result.errors }), statusInfo)
+          );
+          return;
+        }
+        await writeInstanceFile(ctx.instancePath, result.instance);
+        res.writeHead(303, { location: "/instance" }).end();
         return;
       }
 

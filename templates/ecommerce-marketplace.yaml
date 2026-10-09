@@ -932,3 +932,47 @@ metrics:
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
+
+scenarios:
+  - id: gmv_gap_diagnosis
+    version: 0.1.0
+    title: GMV 差距诊断
+    decision_purpose: 定位 GMV 与目标差距的量价来源，决定流量、转化、客单三侧的资源投放优先级
+    question_tree:
+      - id: gap_root
+        label: GMV 与目标差距多大
+        metric: gmv
+      - id: uv_gap
+        label: 访客规模是否拖累
+        parent: gap_root
+        metric: uv
+      - id: cvr_gap
+        label: 下单转化是否恶化
+        parent: gap_root
+        metric: cvr
+      - id: aov_gap
+        label: 客单价是否下滑
+        parent: gap_root
+        metric: aov
+    metric_usages:
+      - metric: gmv
+        role: outcome
+        note: 差距量化对象，对齐北极星候选 gmv 的模板口径
+      - metric: uv
+        role: driver
+        note: 规模侧第一层拆解（revenue 树：gmv = uv * cvr * aov）
+      - metric: cvr
+        role: driver
+      - metric: aov
+        role: driver
+      - metric: retention_30d
+        role: guardrail
+        note: 诊断期流量加码不得损伤 30 日留存
+      - metric: refund_rate
+        role: guardrail
+        note: 转化抢救动作不得推高退款率
+    method_refs:
+      - dame.m2.driver_decomposition@1.0.0
+    evidence_requirements: 近 13 周周粒度 gmv/uv/cvr/aov 序列与同期目标值
+    output_spec: 一页差距归因结论 + 流量/转化/客单三侧行动优先级清单
+    review_rules: 业务负责人确认目标口径与归因窗口后定稿

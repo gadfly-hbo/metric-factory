@@ -6,6 +6,7 @@ import { packageFingerprint } from "./canonical.js";
 import type { MaterializedInstance } from "../engine/materialize.js";
 import type { Template, Metric, ConceptRef } from "../schema/template.js";
 import type { MappingEntry } from "../schema/mapping.js";
+import type { Scenario } from "../schema/scenario.js";
 
 export interface SapAssemblyOptions {
   /** kebab-case 包 ID（调用方传入；CLI 侧取实例文件名 slug） */
@@ -33,7 +34,7 @@ export type SapPackageV01 = {
     fingerprint: string;
     namespace: string;
   };
-  scenarios: unknown[];
+  scenarios: Scenario[];
   metrics: Metric[];
   dimensions: string[];
   concept_refs: ConceptRef[];
@@ -109,7 +110,8 @@ export function assembleSap(
       fingerprint: "",
       namespace: `mf.${opts.packageId}`
     },
-    scenarios: [],
+    // 物化场景直接透传（引用完整性由 validateInstance 保证；装配不做二次语义校验，结构由 SapPackageSchema 兜底）
+    scenarios: [...materialized.scenarios],
     metrics: [...materialized.metrics],
     dimensions: [...template.dimensions],
     concept_refs: conceptRefs,

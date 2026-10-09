@@ -195,6 +195,64 @@ test("bindings 由调用方传入并透传（默认 []）", () => {
   expect(assembled().bindings).toEqual([]);
 });
 
+// ---------- scenarios 段（切片 2：物化场景透传进包） ----------
+
+const SEED_SCENARIO = {
+  id: "gmv_gap_diagnosis",
+  version: "0.1.0",
+  title: "GMV 差距诊断",
+  decision_purpose: "定位当期 GMV 与目标差距的来源并决定干预动作",
+  question_tree: [
+    { id: "gap_root", label: "GMV 差距有多大" },
+    { id: "uv_gap", label: "访客规模是否拖累", parent: "gap_root", metric: "uv" },
+    { id: "cvr_gap", label: "下单转化是否恶化", parent: "gap_root", metric: "gmv" }
+  ],
+  metric_usages: [
+    { metric: "gmv", role: "outcome", note: "差距量化对象" },
+    { metric: "uv", role: "driver" }
+  ],
+  method_refs: ["dame.m2.driver_decomposition@1.0.0"],
+  evidence_requirements: "近 90 天日粒度渠道数据",
+  output_spec: "差距归因一页报告",
+  review_rules: "月度复盘会评审"
+};
+
+function assembledWithScenarios(addedScenarios: unknown[]): ReturnType<typeof assembleSap> {
+  const template = TemplateSchema.parse({ ...makeTemplate(), scenarios: [SEED_SCENARIO] });
+  const instance = InstanceSchema.parse({ ...makeInstance(), added_scenarios: addedScenarios });
+  return assembleSap(materialize(template, instance), template, {
+    ...OPTS,
+    instanceConceptRefs: instance.concept_refs
+  });
+}
+
+test("装配正例：物化场景透传进 scenarios 段（模板种子 ∪ 实例 added，结构与数量）", () => {
+  const added = {
+    id: "channel_budget_review",
+    version: "0.1.0",
+    title: "渠道预算复盘",
+    decision_purpose: "决定下月各渠道的投放预算分配",
+    question_tree: [
+      { id: "roi_root", label: "各渠道投入产出如何" },
+      { id: "gmv_side", label: "渠道成交贡献", parent: "roi_root", metric: "gmv" }
+    ],
+    metric_usages: [{ metric: "gmv", role: "driver" }],
+    method_refs: [],
+    evidence_requirements: "渠道粒度月度数据",
+    output_spec: "",
+    review_rules: ""
+  };
+  const pkg = assembledWithScenarios([added]);
+  expect(pkg.scenarios.map((s) => s.id)).toEqual(["gmv_gap_diagnosis", "channel_budget_review"]);
+  expect(pkg.scenarios).toEqual([SEED_SCENARIO, added]);
+});
+
+test("覆盖语义：同 id 实例场景覆盖模板种子后包内 1 条且 title 为实例版", () => {
+  const pkg = assembledWithScenarios([{ ...SEED_SCENARIO, title: "GMV 差距诊断（本地修订）" }]);
+  expect(pkg.scenarios.length).toBe(1);
+  expect(pkg.scenarios[0]).toMatchObject({ id: "gmv_gap_diagnosis", title: "GMV 差距诊断（本地修订）" });
+});
+
 test("供应侧负例：物化指标重名抛 SapAssemblyError（rule=duplicate-identity，GRILL Q3）", () => {
   const template = makeTemplate();
   const instance = InstanceSchema.parse({

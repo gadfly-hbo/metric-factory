@@ -1,12 +1,13 @@
 // SAP 0.1 消费侧校验器（契约 §6 validate_import 的供应侧镜像 minus LLM 规则——
 // 未审核 LLM 条目由 export gate 执法（契约 §3.5），装配产物正常路径不可达，v6 消费侧重用时补此规则）。
-// 规则集：structure（zod 全段，含未知 sap 版本）/ runtime-state / fingerprint-mismatch /
+// 规则集：structure（zod 全段 + scenarios→metrics 引用一致性，含未知 sap 版本）/ runtime-state / fingerprint-mismatch /
 // duplicate-identity（指标重名、concept_refs 重复键）；任一命中即 issues 非空，导出器据非空 throw。
 import { z } from "zod";
 import { packageFingerprint, type SapPackage } from "./canonical.js";
 import { conceptRefKey } from "./assemble.js";
 import { MetricSchema, ConceptRefSchema } from "../schema/template.js";
 import { MappingEntrySchema } from "../schema/mapping.js";
+import { ScenarioSchema } from "../schema/scenario.js";
 import type { ValidateIssue } from "../engine/validate.js";
 
 // 契约 §3 全段：sap 字面 0.1、runtime_state 字面 design_only、必填段存在、
@@ -22,7 +23,7 @@ export const SapPackageSchema = z.object({
     fingerprint: z.string().regex(/^sha256:[0-9a-f]{64}$/, "package.fingerprint 必须是 sha256:<hex64>"),
     namespace: z.string().min(1)
   }),
-  scenarios: z.array(z.unknown()),
+  scenarios: z.array(ScenarioSchema), // v5 结构冻结：ScenarioSpec v0.1（契约 §3.1 预留 → §8-Q7 兑现）
   metrics: z.array(MetricSchema),
   dimensions: z.array(z.string().min(1)),
   concept_refs: z.array(ConceptRefSchema),
@@ -85,6 +86,43 @@ export function validateSapPackage(pkg: unknown): ValidateIssue[] {
       });
     }
     seenKeys.add(key);
+  }
+  // 契约 §4：重复 id@version（指标、场景、概念均同）——scenarios 段的纵深防御（正常装配经 Map 去重不可达）
+  const seenScen = new Set<string>();
+  for (const s of parsed.data.scenarios) {
+    const skey = `${s.id}@${s.version}`;
+    if (seenScen.has(skey)) {
+      issues.push({
+        rule: "duplicate-identity",
+        path: `scenarios.${s.id}`,
+        message: `场景 id@version 重复："${skey}"（重复身份，拒绝）`
+      });
+    }
+    seenScen.add(skey);
+  }
+
+  // scenarios→metrics 引用一致性（引擎 scenario-metric-ref 的包级镜像，路径风格同引擎按场景 id）：
+  // 包是闭包资产，问题树/角色登记表引用的指标必须存在于本包 metrics 段
+  const metricNames = new Set(parsed.data.metrics.map((m) => m.name));
+  for (const s of parsed.data.scenarios) {
+    for (const [j, n] of s.question_tree.entries()) {
+      if (n.metric && !metricNames.has(n.metric)) {
+        issues.push({
+          rule: "structure",
+          path: `scenarios.${s.id}.question_tree.${j}.metric`,
+          message: `场景 ${s.id} 节点 ${n.id} 引用了包内不存在的指标 "${n.metric}"（scenarios→metrics 引用一致性）`
+        });
+      }
+    }
+    for (const [j, u] of s.metric_usages.entries()) {
+      if (!metricNames.has(u.metric)) {
+        issues.push({
+          rule: "structure",
+          path: `scenarios.${s.id}.metric_usages.${j}.metric`,
+          message: `场景 ${s.id} 的 metric_usages 引用了包内不存在的指标 "${u.metric}"（scenarios→metrics 引用一致性）`
+        });
+      }
+    }
   }
 
   return issues;

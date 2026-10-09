@@ -12,6 +12,7 @@ export function buildInstance(template: Template, answers: Answers, now: string)
     added: [],
     removed: [],
     modified: [],
-    concept_refs: []
+    concept_refs: [],
+    added_scenarios: []
   };
 }

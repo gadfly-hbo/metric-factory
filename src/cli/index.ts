@@ -325,7 +325,8 @@ program
           display_name: m.display_name,
           provenance: m.provenance
         })),
-        caliber: d.caliber
+        caliber: d.caliber,
+        scenarios_added: d.scenarios.added
       };
       console.log(JSON.stringify(payload, null, 2));
       return;
@@ -340,6 +341,7 @@ program
     for (const name of d.removed) console.log(`  ${name}`);
     console.log(`\n【新增指标】${d.added.length ? "" : "（无）"}`);
     for (const m of d.added) console.log(`  ${m.name}（${m.display_name}）`);
+    console.log(`\n场景 scenarios: +${d.scenarios.added}（added）`);
   });
 
 program

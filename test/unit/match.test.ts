@@ -23,7 +23,8 @@ function saasMeta(): Template {
         provenance: { origin: "template", template_ref: "saas-subscription@0.1.0" },
         review: { required: false }
       }
-    ]
+    ],
+    scenarios: []
   };
 }
 

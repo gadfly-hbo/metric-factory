@@ -1,5 +1,6 @@
 import type { Template, Metric } from "../schema/template.js";
 import type { Instance } from "../schema/instance.js";
+import type { Scenario } from "../schema/scenario.js";
 import type { MaterializedInstance } from "./materialize.js";
 
 export interface ValidateIssue {
@@ -102,6 +103,99 @@ export function validateInstance(
             message: `指标 ${m.name} 的公式 "${tp.expr}" 引用了不存在（或已被删除）的指标 "${token}"`
           });
         }
+      }
+    }
+  }
+
+  // 场景规则（lint 的实例镜像）：模板种子 ∪ added_scenarios 合并（同 id 实例覆盖模板，fork 语义）
+  // metric 引用对照物化指标名集（模板指标可能已被实例 removed）
+  const mergedScenarios = new Map<string, Scenario>();
+  for (const s of template.scenarios) mergedScenarios.set(s.id, s);
+  for (const s of instance.added_scenarios) mergedScenarios.set(s.id, s);
+
+  const seenAddedIds = new Set<string>();
+  for (const [j, s] of instance.added_scenarios.entries()) {
+    if (seenAddedIds.has(s.id)) {
+      issues.push({
+        rule: "scenario-id",
+        path: `added_scenarios.${j}.id`,
+        message: `场景 id "${s.id}" 在 added_scenarios 中重复（同 id 覆盖模板种子只允许一条）`
+      });
+    } else {
+      seenAddedIds.add(s.id);
+    }
+  }
+
+  for (const s of mergedScenarios.values()) {
+    if (!s.decision_purpose?.trim()) {
+      issues.push({
+        rule: "scenario-purpose",
+        path: `scenarios.${s.id}.decision_purpose`,
+        message: `场景 ${s.id} 缺少决策用途（decision_purpose 为空）`
+      });
+    }
+
+    const nodes = s.question_tree;
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    const nodeById = new Map(nodes.map((n) => [n.id, n]));
+    const seenNodeIds = new Set<string>();
+    for (const [j, n] of nodes.entries()) {
+      if (seenNodeIds.has(n.id)) {
+        issues.push({
+          rule: "scenario-tree-ref",
+          path: `scenarios.${s.id}.question_tree.${j}.id`,
+          message: `场景 ${s.id} 的 question_tree 节点 id "${n.id}" 重复`
+        });
+      } else {
+        seenNodeIds.add(n.id);
+      }
+      if (n.metric && !materializedNames.has(n.metric)) {
+        issues.push({
+          rule: "scenario-metric-ref",
+          path: `scenarios.${s.id}.question_tree.${j}.metric`,
+          message: `场景 ${s.id} 节点 ${n.id} 引用了不存在（或已被删除）的指标 "${n.metric}"`
+        });
+      }
+      if (!n.parent) continue;
+      if (n.parent === n.id) {
+        issues.push({
+          rule: "scenario-tree-ref",
+          path: `scenarios.${s.id}.question_tree.${j}.parent`,
+          message: `场景 ${s.id} 节点 ${n.id} 的 parent 指向自身`
+        });
+        continue;
+      }
+      if (!nodeIds.has(n.parent)) {
+        issues.push({
+          rule: "scenario-tree-ref",
+          path: `scenarios.${s.id}.question_tree.${j}.parent`,
+          message: `场景 ${s.id} 节点 ${n.id} 的 parent "${n.parent}" 不在该场景 question_tree 中`
+        });
+        continue;
+      }
+      // 沿 parent 上溯步数超过节点总数仍未终止即成环
+      let cur: string | undefined = n.parent;
+      let steps = 0;
+      while (cur !== undefined && nodeById.has(cur)) {
+        steps += 1;
+        if (steps > nodes.length) {
+          issues.push({
+            rule: "scenario-tree-ref",
+            path: `scenarios.${s.id}.question_tree.${j}.parent`,
+            message: `场景 ${s.id} 节点 ${n.id} 的 parent 链成环`
+          });
+          break;
+        }
+        cur = nodeById.get(cur)!.parent;
+      }
+    }
+    for (const [j, u] of s.metric_usages.entries()) {
+      if (!materializedNames.has(u.metric)) {
+        issues.push({
+          rule: "scenario-metric-ref",
+          path: `scenarios.${s.id}.metric_usages.${j}.metric`,
+          message: `场景 ${s.id} 的 metric_usages 引用了不存在（或已被删除）的指标 "${u.metric}"`
+        });
       }
     }
   }

@@ -241,9 +241,11 @@ export function templateDetailPage(t: Template): string {
 
 import type { MaterializedInstance } from "../engine/materialize.js";
 import type { Instance } from "../schema/instance.js";
+import type { Scenario } from "../schema/scenario.js";
 import { findPendingReview } from "../engine/review.js";
+import { scenarioTreeToDsl, scenarioUsagesToDsl } from "./dsl.js";
 
-export function instancePage(materialized: MaterializedInstance, instance: Instance, instancePath: string): string {
+export function instancePage(materialized: MaterializedInstance, instance: Instance, instancePath: string, base: Template): string {
   const pending = findPendingReview(instance.added);
   const d = materialized.diff;
 
@@ -321,7 +323,148 @@ export function instancePage(materialized: MaterializedInstance, instance: Insta
     </div>
   </form>`;
 
-  return `${summary}${diffBlock}<div class="view-title">指标树 · 杜邦式分解（按模块分组，× ÷ 为公式算符）</div>${trees}${form}`;
+  return `${summary}${diffBlock}<div class="view-title">指标树 · 杜邦式分解（按模块分组，× ÷ 为公式算符）</div>${trees}${form}${scenariosBlock(materialized, instance, base)}`;
+}
+
+// ===== 决策场景区块（v5 切片 4；.flow/ui-contract.md 冻结件）=====
+
+export interface ScenarioFormValues {
+  id: string;
+  title: string;
+  decision_purpose: string;
+  question_tree: string;
+  metric_usages: string;
+  method_refs: string;
+  evidence_requirements: string;
+  output_spec: string;
+  review_rules: string;
+}
+
+export function emptyScenarioFormValues(): ScenarioFormValues {
+  return {
+    id: "",
+    title: "",
+    decision_purpose: "",
+    question_tree: "",
+    metric_usages: "",
+    method_refs: "",
+    evidence_requirements: "",
+    output_spec: "",
+    review_rules: ""
+  };
+}
+
+export function scenarioFormValues(s: Scenario): ScenarioFormValues {
+  return {
+    id: s.id,
+    title: s.title,
+    decision_purpose: s.decision_purpose,
+    question_tree: scenarioTreeToDsl(s.question_tree),
+    metric_usages: scenarioUsagesToDsl(s.metric_usages),
+    method_refs: s.method_refs.join("\n"),
+    evidence_requirements: s.evidence_requirements,
+    output_spec: s.output_spec,
+    review_rules: s.review_rules
+  };
+}
+
+// 实例页场景区块（S1 列表态 / S2 空态）：来源三态 = 模板种子 ∪ 实例 added（同 id 覆盖，GRILL Q3）
+export function scenariosBlock(materialized: MaterializedInstance, instance: Instance, base: Template): string {
+  const seedIds = new Set(base.scenarios.map((s) => s.id));
+  const addedIds = new Set(instance.added_scenarios.map((s) => s.id));
+
+  const rows = materialized.scenarios
+    .map((s) => {
+      const source = addedIds.has(s.id) ? (seedIds.has(s.id) ? "实例覆盖种子" : "实例新增") : "模板种子";
+      const counts = { outcome: 0, driver: 0, guardrail: 0 };
+      for (const u of s.metric_usages) counts[u.role] += 1;
+      return `<tr>
+      <td><strong>${escapeHtml(s.title)}</strong><br><span class="mono">${escapeHtml(s.id)}</span></td>
+      <td>${escapeHtml(s.decision_purpose)}</td>
+      <td><span class="num">${s.metric_usages.length}</span> 个（outcome ${counts.outcome} · driver ${counts.driver} · guardrail ${counts.guardrail}）</td>
+      <td>${chip(source === "模板种子" ? "ok" : "accent", source)}</td>
+      <td><a class="btn" href="/instance/scenarios/${escapeHtml(s.id)}/edit">编辑</a></td>
+    </tr>`;
+    })
+    .join("");
+
+  const head = `<div class="view-title">决策场景 · 分析体系</div>
+    <p class="page-desc" style="margin-bottom:10px">把「这个业务问题应该怎样分析」固化为配置：决策用途、问题树、指标角色、方法引用。场景随实例写盘并进入 SAP 语义包；写回前经全量校验，失败零写盘。</p>`;
+  if (materialized.scenarios.length === 0) {
+    return `${head}<div class="empty">暂无决策场景<br><span style="font-size:12px">决策场景回答「怎样分析这个问题」：先写清决策用途，再拆问题树、挂指标角色。</span><br><a class="btn btn-primary" href="/instance/scenarios/new">新建场景</a></div>`;
+  }
+  return `${head}<div class="card" style="padding:0;overflow-x:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border)">
+      <div class="card-h" style="margin:0">场景列表（<span class="num">${materialized.scenarios.length}</span>）</div>
+      <a class="btn btn-primary" href="/instance/scenarios/new">新建场景</a>
+    </div>
+    <table class="tbl">
+      <thead><tr><th>场景</th><th>决策用途</th><th>指标角色</th><th>来源</th><th>操作</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+  </div>`;
+}
+
+// 新建/编辑表单页（S3/S4 与 422 同页重渲染 S3′/S4′：错误卡置顶 + 全字段值保留）
+export function scenarioFormPage(opts: {
+  mode: "new" | "edit";
+  values: ScenarioFormValues;
+  errors?: string[];
+}): string {
+  const { mode, values } = opts;
+  const errors = opts.errors ?? [];
+  const hasErrors = errors.length > 0;
+  const describedBy = hasErrors ? ' aria-describedby="scn-errors"' : "";
+  const action = mode === "new" ? "/instance/scenarios" : `/instance/scenarios/${encodeURIComponent(values.id)}`;
+
+  const errorCard = hasErrors
+    ? `<div class="card"><div class="card-h" style="color:var(--fail)">校验失败</div>
+    <ul class="error-list" role="alert" id="scn-errors">${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join("")}</ul></div>`
+    : "";
+
+  // S4：id 只读（mono 文本 + hidden，不提交可见控件——D1）
+  const idField =
+    mode === "new"
+      ? `<div class="fld"><label for="scn-id">场景 id（snake_case，实例内唯一，创建后不可修改）</label>
+      <input type="text" id="scn-id" name="id" value="${escapeHtml(values.id)}" placeholder="gmv_gap_diagnosis"></div>`
+      : `<div class="fld"><label>场景 id（snake_case，实例内唯一，创建后不可修改）</label>
+      <p class="mono" style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--rounded-sm);padding:6px 8px">${escapeHtml(values.id)}</p>
+      <input type="hidden" name="id" value="${escapeHtml(values.id)}"></div>`;
+
+  return `${errorCard}<form action="${action}" method="post">
+    <p style="color:var(--text-3);font-size:11.5px;margin-bottom:10px">ScenarioSpec v0.1 · version 0.1.0 由服务端固定</p>
+    <div class="card">
+      <div class="card-h">基本信息</div>
+      ${idField}
+      <div class="fld"><label for="scn-title">标题 title（非空）</label>
+        <input type="text" id="scn-title" name="title" value="${escapeHtml(values.title)}"></div>
+      <div class="fld"><label for="scn-purpose">决策用途 decision_purpose（非空——无决策用途不可保存）</label>
+        <textarea id="scn-purpose" name="decision_purpose">${escapeHtml(values.decision_purpose)}</textarea></div>
+    </div>
+    <div class="card">
+      <div class="card-h">问题树与指标角色（逐行 DSL，服务端解析校验）</div>
+      <div class="fld"><label for="scn-tree">问题树 question_tree（逐行 id|label|parent|metric，空槽留空；parent 留空即根节点）</label>
+        <textarea id="scn-tree" name="question_tree" rows="5" wrap="off"${describedBy}>${escapeHtml(values.question_tree)}</textarea>
+        <p style="color:var(--text-3);font-size:11.5px">例：root|GMV 差距诊断|　·　traffic|流量端|root|uv　（节点id|节点label|父节点id|指标名）</p></div>
+      <div class="fld"><label for="scn-usages">指标角色 metric_usages（逐行 指标名|role|note，role 须为 outcome | driver | guardrail，note 可留空）</label>
+        <textarea id="scn-usages" name="metric_usages" rows="4" wrap="off"${describedBy}>${escapeHtml(values.metric_usages)}</textarea>
+        <p style="color:var(--text-3);font-size:11.5px">例：gmv|outcome|月度缺口归因　·　uv|driver|流量端抓手　·　refund_rate|guardrail|防以退款换增长</p></div>
+    </div>
+    <div class="card">
+      <div class="card-h">方法与治理</div>
+      <div class="fld"><label for="scn-methods">方法引用 method_refs（逐行一个自由串，可空，如 dame.m2.driver_decomposition@1.0.0）</label>
+        <textarea id="scn-methods" name="method_refs">${escapeHtml(values.method_refs)}</textarea></div>
+      <div class="fld"><label for="scn-evidence">证据要求 evidence_requirements（文本段，可空）</label>
+        <textarea id="scn-evidence" name="evidence_requirements">${escapeHtml(values.evidence_requirements)}</textarea></div>
+      <div class="fld"><label for="scn-output">输出 output_spec（文本段，可空）</label>
+        <textarea id="scn-output" name="output_spec">${escapeHtml(values.output_spec)}</textarea></div>
+      <div class="fld"><label for="scn-review">复盘规则 review_rules（文本段，可空）</label>
+        <textarea id="scn-review" name="review_rules">${escapeHtml(values.review_rules)}</textarea></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" type="submit">校验并写回场景</button>
+      <a class="btn" href="/instance">取消</a>
+    </div>
+  </form>`;
 }
 
 export function reviewPage(instance: Instance, instancePath: string): string {

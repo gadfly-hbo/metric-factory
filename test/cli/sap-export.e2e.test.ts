@@ -64,7 +64,13 @@ test("export sap：契约段齐全（sap 0.1 / design_only / fingerprint / names
   expect(doc.review.unreviewed).toEqual([]);
   expect(doc.metrics.length).toBe(53);
   expect(doc.dimensions.length).toBeGreaterThan(0);
-  expect(doc.scenarios).toEqual([]);
+  // 场景段（v5 预留转正式）：fixture 无 added_scenarios → 包内恰 ecommerce 种子 gmv_gap_diagnosis；
+  // usages 含 outcome=gmv（GRILL Q4：种子必含 ≥1 个 outcome，量价拆解的量化对象）
+  expect(doc.scenarios.length).toBe(1);
+  expect(doc.scenarios[0].id).toBe("gmv_gap_diagnosis");
+  expect(doc.scenarios[0].decision_purpose.length).toBeGreaterThan(0);
+  const outcome = doc.scenarios[0].metric_usages.find((u: any) => u.role === "outcome");
+  expect(outcome?.metric).toBe("gmv");
   expect(doc.bindings).toEqual([]);
 });
 
@@ -106,6 +112,55 @@ test("指纹跨运行一致（忽略 created_at，GRILL Q1）：两次导出规�
     return d;
   };
   expect(freeze(a)).toEqual(freeze(b));
+});
+
+test("场景段 fork 语义：added_scenarios 同 id 覆盖模板种子 → 包内为实例版（GRILL Q3）", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "mf-sap-scn-override-"));
+  const instancePath = join(tmp, "scn-override.yaml");
+  writeFileSync(
+    instancePath,
+    `instance:
+  created_at: "2026-10-08T00:00:00.000Z"
+base: ecommerce-marketplace@0.1.0
+answers:
+  revenue_model: 交易抽佣
+  user_structure: 双边市场
+  core_loop: 交易
+  caliber: {}
+caliber_switches: {}
+removed: []
+modified: []
+added: []
+added_scenarios:
+  - id: gmv_gap_diagnosis
+    version: 0.1.0
+    title: GMV 差距诊断（区域版）
+    decision_purpose: 按区域拆解 GMV 差距来源，决定各区域补货与投放预算的再分配
+    question_tree:
+      - id: root
+        label: 差距多大
+        metric: gmv
+      - id: region_gap
+        label: 哪些区域拖累
+        parent: root
+        metric: uv
+    metric_usages:
+      - metric: gmv
+        role: outcome
+      - metric: uv
+        role: driver
+`,
+    "utf8"
+  );
+  const outDir = join(tmp, "out");
+  const r = runExport(instancePath, outDir);
+  expect(r.status, `stdout: ${r.stdout}\nstderr: ${r.stderr}`).toBe(0);
+
+  const doc = readExported(outDir, "scn-override.sap.yaml");
+  // 覆盖不追加：包内仍恰 1 条 gmv_gap_diagnosis，且为实例版（title 是实例文本，非种子「GMV 差距诊断」）
+  expect(doc.scenarios.length).toBe(1);
+  expect(doc.scenarios[0].id).toBe("gmv_gap_diagnosis");
+  expect(doc.scenarios[0].title).toBe("GMV 差距诊断（区域版）");
 });
 
 const L1_INSTANCE = `instance:

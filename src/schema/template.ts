@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ScenarioSchema } from "./scenario.js";
 
 export const ProvenanceSchema = z
   .object({
@@ -134,7 +135,8 @@ export const TemplateSchema = z.object({
     )
     .min(1),
   dimensions: z.array(z.string().min(1)).min(1),
-  metrics: z.array(MetricSchema).min(1)
+  metrics: z.array(MetricSchema).min(1),
+  scenarios: z.array(ScenarioSchema).default([])
 });
 
 export type Metric = z.infer<typeof MetricSchema>;

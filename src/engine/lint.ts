@@ -135,5 +135,91 @@ export function lintTemplate(t: Template): LintIssue[] {
     }
   }
 
+  // 场景规则（模板镜像）：schema 挡正规路径，此处兜底 YAML 直读 + 模板指标语境
+  const scenarios = t.scenarios ?? [];
+  const seenScenarioIds = new Set<string>();
+  for (const [i, s] of scenarios.entries()) {
+    if (!s.decision_purpose?.trim()) {
+      issues.push({
+        rule: "scenario-purpose",
+        path: `scenarios.${i}.decision_purpose`,
+        message: `场景 ${s.id} 缺少决策用途（decision_purpose 为空）`
+      });
+    }
+    if (seenScenarioIds.has(s.id)) {
+      issues.push({
+        rule: "scenario-id",
+        path: `scenarios.${i}.id`,
+        message: `场景 id "${s.id}" 在模板内重复`
+      });
+    } else {
+      seenScenarioIds.add(s.id);
+    }
+
+    const nodes = s.question_tree ?? [];
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    const nodeById = new Map(nodes.map((n) => [n.id, n]));
+    const seenNodeIds = new Set<string>();
+    for (const [j, n] of nodes.entries()) {
+      if (seenNodeIds.has(n.id)) {
+        issues.push({
+          rule: "scenario-tree-ref",
+          path: `scenarios.${i}.question_tree.${j}.id`,
+          message: `场景 ${s.id} 的 question_tree 节点 id "${n.id}" 重复`
+        });
+      } else {
+        seenNodeIds.add(n.id);
+      }
+      if (n.metric && !metricNames.has(n.metric)) {
+        issues.push({
+          rule: "scenario-metric-ref",
+          path: `scenarios.${i}.question_tree.${j}.metric`,
+          message: `场景 ${s.id} 节点 ${n.id} 引用了模板不存在的指标 "${n.metric}"`
+        });
+      }
+      if (!n.parent) continue;
+      if (n.parent === n.id) {
+        issues.push({
+          rule: "scenario-tree-ref",
+          path: `scenarios.${i}.question_tree.${j}.parent`,
+          message: `场景 ${s.id} 节点 ${n.id} 的 parent 指向自身`
+        });
+        continue;
+      }
+      if (!nodeIds.has(n.parent)) {
+        issues.push({
+          rule: "scenario-tree-ref",
+          path: `scenarios.${i}.question_tree.${j}.parent`,
+          message: `场景 ${s.id} 节点 ${n.id} 的 parent "${n.parent}" 不在该场景 question_tree 中`
+        });
+        continue;
+      }
+      // 沿 parent 上溯步数超过节点总数仍未终止即成环
+      let cur: string | undefined = n.parent;
+      let steps = 0;
+      while (cur !== undefined && nodeById.has(cur)) {
+        steps += 1;
+        if (steps > nodes.length) {
+          issues.push({
+            rule: "scenario-tree-ref",
+            path: `scenarios.${i}.question_tree.${j}.parent`,
+            message: `场景 ${s.id} 节点 ${n.id} 的 parent 链成环`
+          });
+          break;
+        }
+        cur = nodeById.get(cur)!.parent;
+      }
+    }
+    for (const [j, u] of (s.metric_usages ?? []).entries()) {
+      if (!metricNames.has(u.metric)) {
+        issues.push({
+          rule: "scenario-metric-ref",
+          path: `scenarios.${i}.metric_usages.${j}.metric`,
+          message: `场景 ${s.id} 的 metric_usages 引用了模板不存在的指标 "${u.metric}"`
+        });
+      }
+    }
+  }
+
   return issues;
 }
