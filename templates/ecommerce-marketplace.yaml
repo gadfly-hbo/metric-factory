@@ -66,6 +66,9 @@ metrics:
       exclude_inner_channel: true
     type_params:
       expr: "uv * cvr * aov"
+    caliber_type:
+      - refund_adjustment
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -79,6 +82,8 @@ metrics:
     owner_role: 电商业务负责人
     caliber_switches:
       include_refund: false
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -93,6 +98,9 @@ metrics:
     owner_role: 增长负责人
     caliber_switches:
       exclude_inner_channel: true
+    caliber_type:
+      - scope_inclusion
+      - validity_threshold
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -109,6 +117,10 @@ metrics:
     type_params:
       numerator: order_user_count
       denominator: uv
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -126,6 +138,12 @@ metrics:
     type_params:
       numerator: gmv
       denominator: order_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -150,6 +168,8 @@ metrics:
     time_grains: [day, week, month]
     owner_role: 增长负责人
     caliber_switches: {}
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -213,6 +233,8 @@ metrics:
       include_refund: false
     type_params:
       expr: "gmv * take_rate"
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -237,6 +259,8 @@ metrics:
     time_grains: [month, quarter]
     owner_role: 用户运营负责人
     caliber_switches: {}
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -249,6 +273,8 @@ metrics:
     time_grains: [month]
     owner_role: 增长负责人
     caliber_switches: {}
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -265,6 +291,12 @@ metrics:
     type_params:
       numerator: repeat_buyer_count
       denominator: order_user_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -278,6 +310,12 @@ metrics:
     owner_role: 增长负责人
     caliber_switches:
       active_by_pay: false
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -291,6 +329,12 @@ metrics:
     owner_role: 电商业务负责人
     caliber_switches:
       include_pending_refund: false
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -303,6 +347,12 @@ metrics:
     time_grains: [week, month]
     owner_role: 电商业务负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -315,6 +365,10 @@ metrics:
     time_grains: [day, week, month]
     owner_role: 电商业务负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -327,6 +381,12 @@ metrics:
     time_grains: [week, month]
     owner_role: 商品质量负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -339,6 +399,10 @@ metrics:
     time_grains: [month]
     owner_role: 商品质量负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -363,6 +427,12 @@ metrics:
     time_grains: [week, month]
     owner_role: 供应链负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -376,6 +446,8 @@ metrics:
     time_grains: [month]
     owner_role: 供应链负责人
     caliber_switches: {}
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -388,6 +460,10 @@ metrics:
     time_grains: [week, month]
     owner_role: 供应链负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -400,6 +476,10 @@ metrics:
     time_grains: [month]
     owner_role: 客服负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -413,6 +493,8 @@ metrics:
     time_grains: [quarter]
     owner_role: 用户运营负责人
     caliber_switches: {}
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -426,6 +508,12 @@ metrics:
     time_grains: [month, quarter]
     owner_role: 增长负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -438,6 +526,10 @@ metrics:
     time_grains: [month, quarter]
     owner_role: 平台运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -450,6 +542,10 @@ metrics:
     time_grains: [month, quarter]
     owner_role: 平台运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -462,6 +558,12 @@ metrics:
     time_grains: [month, quarter]
     owner_role: 平台运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -474,6 +576,12 @@ metrics:
     time_grains: [month]
     owner_role: 增长负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -486,6 +594,10 @@ metrics:
     time_grains: [month]
     owner_role: 增长负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -498,6 +610,12 @@ metrics:
     time_grains: [month, quarter]
     owner_role: 用户运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -511,6 +629,10 @@ metrics:
     time_grains: [month]
     owner_role: 平台运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -523,6 +645,10 @@ metrics:
     time_grains: [month, quarter]
     owner_role: 供应链负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -539,6 +665,12 @@ metrics:
     type_params:
       numerator: commission_revenue
       denominator: gmv
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -554,6 +686,10 @@ metrics:
     type_params:
       numerator: gmv
       denominator: active_seller_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -571,6 +707,12 @@ metrics:
     type_params:
       numerator: gmv
       denominator: app_dau
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -583,6 +725,12 @@ metrics:
     time_grains: [month]
     owner_role: 增长负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - attribution_window
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -595,6 +743,12 @@ metrics:
     time_grains: [month]
     owner_role: 电商业务负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -608,6 +762,12 @@ metrics:
     owner_role: 平台财务负责人
     caliber_switches:
       include_platform_subsidy: false
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - fee_composition
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -620,6 +780,10 @@ metrics:
     time_grains: [month]
     owner_role: 供应链负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -632,6 +796,10 @@ metrics:
     time_grains: [month]
     owner_role: 客服负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -645,6 +813,12 @@ metrics:
     time_grains: [week, month]
     owner_role: 增长负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -657,6 +831,10 @@ metrics:
     time_grains: [week, month]
     owner_role: 增长负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -669,6 +847,10 @@ metrics:
     time_grains: [day, week]
     owner_role: 搜索负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -681,6 +863,10 @@ metrics:
     time_grains: [day, week]
     owner_role: 用户运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -693,6 +879,10 @@ metrics:
     time_grains: [day, week]
     owner_role: 用户运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -705,6 +895,13 @@ metrics:
     time_grains: [month]
     owner_role: 用户运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -717,6 +914,10 @@ metrics:
     time_grains: [month]
     owner_role: 用户运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0
@@ -729,6 +930,8 @@ metrics:
     time_grains: [week, month]
     owner_role: 增长负责人
     caliber_switches: {}
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: ecommerce-marketplace@0.1.0

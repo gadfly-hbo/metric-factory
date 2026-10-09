@@ -70,6 +70,9 @@ metrics:
     caliber_switches:
       include_trial: false
       annual_proration: true
+    caliber_type:
+      - scope_inclusion
+      - proration_rule
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -86,6 +89,8 @@ metrics:
       annual_proration: true
     type_params:
       expr: "mrr * 12"
+    caliber_type:
+      - proration_rule
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -147,6 +152,10 @@ metrics:
     time_grains: [month, quarter]
     owner_role: CEO / 财务负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -184,6 +193,8 @@ metrics:
     owner_role: 增长负责人
     caliber_switches:
       count_free_seats: false
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -197,6 +208,8 @@ metrics:
     time_grains: [month]
     owner_role: 产品负责人
     caliber_switches: {}
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -222,6 +235,8 @@ metrics:
     time_grains: [day, week, month]
     owner_role: 增长负责人
     caliber_switches: {}
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -234,6 +249,8 @@ metrics:
     time_grains: [week, month]
     owner_role: 增长负责人
     caliber_switches: {}
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -262,6 +279,10 @@ metrics:
     type_params:
       numerator: trial_converted_count
       denominator: trial_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -290,6 +311,10 @@ metrics:
     type_params:
       numerator: churned_account_count
       denominator: paid_account_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -318,6 +343,12 @@ metrics:
     type_params:
       numerator: churned_mrr
       denominator: mrr
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -331,6 +362,8 @@ metrics:
     time_grains: [quarter]
     owner_role: 客户成功负责人
     caliber_switches: {}
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -356,6 +389,8 @@ metrics:
     time_grains: [week, month]
     owner_role: 支持负责人
     caliber_switches: {}
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -368,6 +403,9 @@ metrics:
     time_grains: [month]
     owner_role: 支持负责人
     caliber_switches: {}
+    caliber_type:
+      - measurement_anchor
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -380,6 +418,12 @@ metrics:
     time_grains: [month]
     owner_role: 研发负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -392,6 +436,8 @@ metrics:
     time_grains: [month]
     owner_role: 研发负责人
     caliber_switches: {}
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -404,6 +450,12 @@ metrics:
     time_grains: [month]
     owner_role: 客户成功负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -417,6 +469,10 @@ metrics:
     time_grains: [quarter]
     owner_role: 销售负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -429,6 +485,12 @@ metrics:
     time_grains: [quarter]
     owner_role: 增长负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -441,6 +503,10 @@ metrics:
     time_grains: [quarter]
     owner_role: 财务负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -453,6 +519,12 @@ metrics:
     time_grains: [quarter]
     owner_role: 销售负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -465,6 +537,12 @@ metrics:
     time_grains: [quarter]
     owner_role: 财务负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -477,6 +555,10 @@ metrics:
     time_grains: [quarter]
     owner_role: 渠道负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -494,6 +576,10 @@ metrics:
     type_params:
       numerator: mrr
       denominator: paid_account_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -506,6 +592,8 @@ metrics:
     time_grains: [quarter]
     owner_role: 客户成功负责人
     caliber_switches: {}
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -522,6 +610,8 @@ metrics:
       apply_gross_margin: false
     type_params:
       expr: "arpa * avg_customer_lifetime_months"
+    caliber_type:
+      - fee_composition
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -550,6 +640,10 @@ metrics:
     type_params:
       numerator: sales_marketing_spend
       denominator: new_customer_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -564,6 +658,10 @@ metrics:
     caliber_switches: {}
     type_params:
       expr: "ltv / cac"
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -578,6 +676,10 @@ metrics:
     caliber_switches: {}
     type_params:
       expr: "cac / arpa"
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -590,6 +692,10 @@ metrics:
     time_grains: [month, quarter]
     owner_role: 财务负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -606,6 +712,10 @@ metrics:
     type_params:
       numerator: mrr
       denominator: mau
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -618,6 +728,10 @@ metrics:
     time_grains: [month]
     owner_role: 支持负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -631,6 +745,12 @@ metrics:
     time_grains: [month]
     owner_role: 增长负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -643,6 +763,10 @@ metrics:
     time_grains: [month]
     owner_role: 客户成功负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -656,6 +780,12 @@ metrics:
     owner_role: 客户成功负责人
     caliber_switches:
       active_threshold_days: false
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0
@@ -684,6 +814,10 @@ metrics:
     type_params:
       numerator: wau
       denominator: mau
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: saas-subscription@0.1.0

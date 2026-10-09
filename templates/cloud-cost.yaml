@@ -57,6 +57,8 @@ metrics:
     caliber_switches:
       net_of_discount: true
       include_internal_labor: false
+    caliber_type:
+      - fee_composition
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -202,6 +204,10 @@ metrics:
     time_grains: [month]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -215,6 +221,8 @@ metrics:
     owner_role: FinOps 负责人
     caliber_switches:
       anomaly_threshold_30pct: true
+    caliber_type:
+      - cap_anomaly_rule
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -227,6 +235,8 @@ metrics:
     time_grains: [month]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -240,6 +250,12 @@ metrics:
     owner_role: 平台工程负责人
     caliber_switches:
       cpu_threshold_5pct_7d: true
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -252,6 +268,10 @@ metrics:
     time_grains: [month]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -264,6 +284,10 @@ metrics:
     time_grains: [month]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -276,6 +300,10 @@ metrics:
     time_grains: [month, quarter]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -288,6 +316,8 @@ metrics:
     time_grains: [month]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -301,6 +331,10 @@ metrics:
     time_grains: [month]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -313,6 +347,10 @@ metrics:
     time_grains: [month]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -325,6 +363,10 @@ metrics:
     time_grains: [month]
     owner_role: 平台工程负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -337,6 +379,10 @@ metrics:
     time_grains: [month]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -349,6 +395,10 @@ metrics:
     time_grains: [quarter]
     owner_role: 架构负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -364,6 +414,10 @@ metrics:
     caliber_switches: {}
     type_params:
       expr: "business_revenue / total_cloud_cost"
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -379,6 +433,10 @@ metrics:
     type_params:
       numerator: total_cloud_cost
       denominator: transaction_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -391,6 +449,10 @@ metrics:
     time_grains: [month]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -403,6 +465,10 @@ metrics:
     time_grains: [month]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -415,6 +481,10 @@ metrics:
     time_grains: [month]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -427,6 +497,10 @@ metrics:
     time_grains: [month]
     owner_role: 平台工程负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -439,6 +513,10 @@ metrics:
     time_grains: [month, quarter]
     owner_role: 平台工程负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -451,6 +529,10 @@ metrics:
     time_grains: [quarter]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -463,6 +545,10 @@ metrics:
     time_grains: [month]
     owner_role: 平台工程负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -476,6 +562,10 @@ metrics:
     time_grains: [month]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -488,6 +578,10 @@ metrics:
     time_grains: [month]
     owner_role: 平台工程负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -500,6 +594,10 @@ metrics:
     time_grains: [month, quarter]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -512,6 +610,8 @@ metrics:
     time_grains: [month, quarter]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -524,6 +624,10 @@ metrics:
     time_grains: [quarter]
     owner_role: FinOps 负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
@@ -539,6 +643,10 @@ metrics:
     type_params:
       numerator: storage_cost
       denominator: storage_capacity_tb
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0

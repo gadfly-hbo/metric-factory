@@ -58,6 +58,8 @@ metrics:
     caliber_switches:
       include_tax: false
       include_agency_fee: true
+    caliber_type:
+      - fee_composition
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -71,6 +73,8 @@ metrics:
     owner_role: 投放负责人
     caliber_switches:
       viewability_1s: true
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -84,6 +88,8 @@ metrics:
     owner_role: 投放负责人
     caliber_switches:
       exclude_misclick_2s: true
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -108,6 +114,10 @@ metrics:
     time_grains: [week]
     owner_role: 投放负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -121,6 +131,8 @@ metrics:
     owner_role: 获客负责人
     caliber_switches:
       exclude_invalid_leads: true
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -161,6 +173,8 @@ metrics:
     caliber_switches:
       attribution_7d_click: true
       attribution_1d_view: false
+    caliber_type:
+      - attribution_window
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -174,6 +188,8 @@ metrics:
     owner_role: 投放负责人
     caliber_switches:
       attribution_7d_click: true
+    caliber_type:
+      - attribution_window
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -191,6 +207,10 @@ metrics:
     type_params:
       numerator: click_count
       denominator: impression_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -207,6 +227,10 @@ metrics:
     type_params:
       numerator: conversion_count
       denominator: click_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -222,6 +246,10 @@ metrics:
     type_params:
       numerator: mql_count
       denominator: lead_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -237,6 +265,10 @@ metrics:
     type_params:
       numerator: sql_count
       denominator: mql_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -249,6 +281,12 @@ metrics:
     time_grains: [week]
     owner_role: 落地页负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -261,6 +299,10 @@ metrics:
     time_grains: [week, month]
     owner_role: 反作弊负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -273,6 +315,10 @@ metrics:
     time_grains: [month]
     owner_role: 品牌负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -285,6 +331,12 @@ metrics:
     time_grains: [week]
     owner_role: 优化师负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -297,6 +349,10 @@ metrics:
     time_grains: [week]
     owner_role: 优化师负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -310,6 +366,10 @@ metrics:
     time_grains: [month]
     owner_role: 投放负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -322,6 +382,10 @@ metrics:
     time_grains: [month]
     owner_role: 投放负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -334,6 +398,12 @@ metrics:
     time_grains: [month]
     owner_role: 投放负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -346,6 +416,10 @@ metrics:
     time_grains: [month]
     owner_role: 优化师负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -358,6 +432,10 @@ metrics:
     time_grains: [month]
     owner_role: 优化师负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -374,6 +452,10 @@ metrics:
     caliber_switches: {}
     type_params:
       expr: "converted_revenue / ad_spend"
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -390,6 +472,10 @@ metrics:
     type_params:
       numerator: ad_spend
       denominator: click_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -406,6 +492,10 @@ metrics:
     type_params:
       numerator: ad_spend
       denominator: impression_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -422,6 +512,10 @@ metrics:
     type_params:
       numerator: ad_spend
       denominator: conversion_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -438,6 +532,10 @@ metrics:
     type_params:
       numerator: ad_spend
       denominator: lead_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -453,6 +551,10 @@ metrics:
     type_params:
       numerator: ad_spend
       denominator: mql_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -466,6 +568,10 @@ metrics:
     time_grains: [month]
     owner_role: 财务负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -478,6 +584,10 @@ metrics:
     time_grains: [day, week]
     owner_role: 投放负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -490,6 +600,10 @@ metrics:
     time_grains: [day, week]
     owner_role: 优化师负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -503,6 +617,12 @@ metrics:
     time_grains: [week]
     owner_role: 投放负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -515,6 +635,10 @@ metrics:
     time_grains: [week]
     owner_role: 落地页负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -527,6 +651,10 @@ metrics:
     time_grains: [week]
     owner_role: 获客负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -539,6 +667,12 @@ metrics:
     time_grains: [week]
     owner_role: 落地页负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -551,6 +685,10 @@ metrics:
     time_grains: [week]
     owner_role: 落地页负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
@@ -563,6 +701,8 @@ metrics:
     time_grains: [month]
     owner_role: 投放负责人
     caliber_switches: {}
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0

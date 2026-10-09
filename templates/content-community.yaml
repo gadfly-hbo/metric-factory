@@ -60,6 +60,8 @@ metrics:
     owner_role: 增长负责人
     caliber_switches:
       active_threshold_5s: true
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -96,6 +98,8 @@ metrics:
     time_grains: [day, week, month]
     owner_role: 增长负责人
     caliber_switches: {}
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -133,6 +137,8 @@ metrics:
     owner_role: 内容运营负责人
     caliber_switches:
       valid_play_3s: true
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -158,6 +164,8 @@ metrics:
     owner_role: 商业化负责人
     caliber_switches:
       viewability_1s: true
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -171,6 +179,8 @@ metrics:
     owner_role: 商业化负责人
     caliber_switches:
       include_agency_rebate: false
+    caliber_type:
+      - fee_composition
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -220,6 +230,10 @@ metrics:
     time_grains: [day]
     owner_role: 增长负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -232,6 +246,10 @@ metrics:
     time_grains: [month]
     owner_role: 增长负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -244,6 +262,10 @@ metrics:
     time_grains: [day, week, month]
     owner_role: 产品负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -257,6 +279,12 @@ metrics:
     owner_role: 内容运营负责人
     caliber_switches:
       completion_threshold_80: true
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -272,6 +300,10 @@ metrics:
     type_params:
       numerator: interaction_count
       denominator: total_play_count
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -284,6 +316,10 @@ metrics:
     time_grains: [week]
     owner_role: 内容运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -296,6 +332,12 @@ metrics:
     time_grains: [month, quarter]
     owner_role: 创作者运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -308,6 +350,10 @@ metrics:
     time_grains: [day, week]
     owner_role: 内容安全负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -320,6 +366,10 @@ metrics:
     time_grains: [month]
     owner_role: 创作者运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -345,6 +395,10 @@ metrics:
     time_grains: [month]
     owner_role: 内容运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -357,6 +411,10 @@ metrics:
     time_grains: [month]
     owner_role: 创作者运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -369,6 +427,10 @@ metrics:
     time_grains: [month]
     owner_role: 内容运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -381,6 +443,10 @@ metrics:
     time_grains: [month]
     owner_role: 推荐负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -393,6 +459,12 @@ metrics:
     time_grains: [month]
     owner_role: 创作者运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -405,6 +477,10 @@ metrics:
     time_grains: [week, month]
     owner_role: 商业化负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -422,6 +498,10 @@ metrics:
     type_params:
       numerator: ad_revenue
       denominator: dau
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -436,6 +516,10 @@ metrics:
     caliber_switches: {}
     type_params:
       expr: "ad_revenue * 1000 / total_play_count"
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -451,6 +535,10 @@ metrics:
     caliber_switches: {}
     type_params:
       expr: "ad_revenue * 1000 / ad_impression_count"
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -463,6 +551,10 @@ metrics:
     time_grains: [month]
     owner_role: 技术负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -475,6 +567,10 @@ metrics:
     time_grains: [month, quarter]
     owner_role: 商业化负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -487,6 +583,10 @@ metrics:
     time_grains: [day, week]
     owner_role: 推荐负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -499,6 +599,10 @@ metrics:
     time_grains: [month]
     owner_role: 内容安全负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -512,6 +616,10 @@ metrics:
     time_grains: [day, week]
     owner_role: 推荐负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -524,6 +632,12 @@ metrics:
     time_grains: [day, week]
     owner_role: 内容运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -536,6 +650,10 @@ metrics:
     time_grains: [day, week]
     owner_role: 内容运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -548,6 +666,10 @@ metrics:
     time_grains: [month]
     owner_role: 创作者运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -560,6 +682,10 @@ metrics:
     time_grains: [week, month]
     owner_role: 创作者运营负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -572,6 +698,10 @@ metrics:
     time_grains: [week]
     owner_role: 增长负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
@@ -584,6 +714,10 @@ metrics:
     time_grains: [week]
     owner_role: 搜索负责人
     caliber_switches: {}
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: content-community@0.1.0
