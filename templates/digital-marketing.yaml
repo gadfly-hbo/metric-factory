@@ -718,3 +718,56 @@ metrics:
     provenance:
       origin: template
       template_ref: digital-marketing@0.1.0
+
+scenarios:
+  - id: channel_budget_allocation
+    version: 0.1.0
+    title: 渠道预算分配决策
+    decision_purpose: 定位整体与分渠道 ROAS 差距的来源，决定下周期预算在渠道间的增减幅度与分配优先级
+    question_tree:
+      - id: roi_root
+        label: 整体 ROAS 距目标差距多大
+        metric: roas
+      - id: revenue_side
+        label: 归因收入是否拖累
+        parent: roi_root
+        metric: converted_revenue
+      - id: spend_side
+        label: 消耗规模与结构是否失衡
+        parent: roi_root
+        metric: ad_spend
+      - id: channel_mix
+        label: 消耗是否集中在低效渠道
+        parent: spend_side
+        metric: channel_spend_share
+      - id: channel_cost
+        label: 渠道单次转化成本是否走高
+        parent: spend_side
+        metric: cpa
+    metric_usages:
+      - metric: roas
+        role: outcome
+        note: 效率总闸，对齐北极星候选 roas（efficiency 树 roas = converted_revenue / ad_spend）
+      - metric: converted_revenue
+        role: driver
+        note: 分子侧拆解（7 日点击归因口径）
+      - metric: ad_spend
+        role: driver
+        note: 分母侧拆解，消耗规模与投放节奏
+      - metric: channel_spend_share
+        role: driver
+        note: 预算结构现状（structure 树），分配调整的基线
+      - metric: cpa
+        role: driver
+        note: 渠道成本效率对比，增减预算的直接依据
+      - metric: lead_qualified_rate
+        role: guardrail
+        note: 预算向规模渠道倾斜不得稀释线索合格率
+      - metric: creative_fatigue_rate
+        role: guardrail
+        note: 加投不得加速素材疲劳
+    method_refs:
+      - dame.m2.driver_decomposition@1.0.0
+    evidence_requirements: 近 13 周周粒度分渠道 roas/cpa/消耗与线索质量序列
+    output_spec: 渠道预算增减一页结论 + 下周期渠道分配优先级清单
+    review_rules: 投放负责人确认归因口径与渠道边界后定稿

@@ -675,3 +675,56 @@ metrics:
     provenance:
       origin: template
       template_ref: supply-chain-logistics@0.1.0
+
+scenarios:
+  - id: inventory_replenishment_priority
+    version: 0.1.0
+    title: 库存结构与补货优先级诊断
+    decision_purpose: 诊断库存周转恶化的缺货与呆滞来源，决定下周期补货、调拨与清库动作的优先级排序
+    question_tree:
+      - id: turnover_root
+        label: 库存周转是否恶化
+        metric: inventory_turnover_days
+      - id: stockout_side
+        label: 缺货是否吃掉履约
+        parent: turnover_root
+        metric: stockout_rate
+      - id: backorder_depth
+        label: 缺货待补深度多大
+        parent: stockout_side
+        metric: backorder_rate
+      - id: slow_moving_side
+        label: 呆滞库存是否堆积
+        parent: turnover_root
+        metric: slow_moving_inventory_share
+      - id: capacity_side
+        label: 仓容是否制约调拨
+        parent: turnover_root
+        metric: capacity_utilization_rate
+    metric_usages:
+      - metric: inventory_turnover_days
+        role: outcome
+        note: 资金效率总闸，对齐北极星候选 inventory_turnover_days（inventory 树）
+      - metric: stockout_rate
+        role: driver
+        note: 缺货侧拆解，补货优先级的直接输入
+      - metric: backorder_rate
+        role: driver
+        note: 缺货待补深度，补货紧迫度排序依据
+      - metric: slow_moving_inventory_share
+        role: driver
+        note: 呆滞侧拆解（库龄 >90 天无动销），调拨与清库优先级输入
+      - metric: capacity_utilization_rate
+        role: driver
+        note: 调拨目标仓容约束（network 树，健康线 70–85%）
+      - metric: otif
+        role: guardrail
+        note: 补货与调拨动作不得恶化准时足量交付（北极星另一候选）
+      - metric: forecast_accuracy_rate
+        role: guardrail
+        note: 补货量修正以需求预测准确率为置信边界
+    method_refs:
+      - dame.m2.driver_decomposition@1.0.0
+    evidence_requirements: 近 6 个月月粒度分仓分品类周转/缺货/呆滞序列与仓容利用率
+    output_spec: 库存结构归因一页纸 + 补货/调拨/清库动作优先级清单
+    review_rules: 库存计划负责人与履约负责人会签补货与调拨结论

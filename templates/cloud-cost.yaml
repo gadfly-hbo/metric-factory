@@ -650,3 +650,60 @@ metrics:
     provenance:
       origin: template
       template_ref: cloud-cost@0.1.0
+
+scenarios:
+  - id: cost_optimization_priority
+    version: 0.1.0
+    title: 成本优化优先级决策
+    decision_purpose: 定位云成本效率恶化的成本侧来源，决定闲置清理、承诺加码与环境收敛等优化项的先后排序
+    question_tree:
+      - id: efficiency_root
+        label: 成本效率比是否恶化
+        metric: cost_efficiency_ratio
+      - id: cost_side
+        label: 云成本总额是否失控
+        parent: efficiency_root
+        metric: total_cloud_cost
+      - id: idle_lever
+        label: 闲置资源可回收多少
+        parent: cost_side
+        metric: idle_resource_rate
+      - id: commitment_lever
+        label: 承诺覆盖是否不足
+        parent: cost_side
+        metric: ondemand_vs_reserved_share
+      - id: env_lever
+        label: 非生产环境占比是否偏高
+        parent: cost_side
+        metric: prod_vs_nonprod_share
+      - id: revenue_side
+        label: 业务收入是否萎缩
+        parent: efficiency_root
+        metric: business_revenue
+    metric_usages:
+      - metric: cost_efficiency_ratio
+        role: outcome
+        note: 效率总闸，对齐北极星候选（unit_economics 树 business_revenue / total_cloud_cost）
+      - metric: total_cloud_cost
+        role: driver
+        note: 成本侧第一层拆解（账单净额口径）
+      - metric: idle_resource_rate
+        role: driver
+        note: 优化机会一：闲置资源清理（governance 树，CPU <5% 持续 7 天）
+      - metric: ondemand_vs_reserved_share
+        role: driver
+        note: 优化机会二：承诺覆盖加码的结构信号
+      - metric: prod_vs_nonprod_share
+        role: driver
+        note: 优化机会三：非生产环境收敛（健康线 ≤25%）
+      - metric: budget_variance_rate
+        role: guardrail
+        note: 优化排序以预算偏差回落健康线（偏差 ≤5%）为约束（北极星另一候选）
+      - metric: savings_plan_utilization
+        role: guardrail
+        note: 承诺加码不得造成节省计划抵扣浪费
+    method_refs:
+      - dame.m2.driver_decomposition@1.0.0
+    evidence_requirements: 近 6 个月月粒度云成本/收入/闲置与承诺覆盖序列及优化机会清单金额
+    output_spec: 优化项排序一页纸（机会金额 × 实施难度）+ 本迭代执行清单
+    review_rules: FinOps 负责人与平台工程负责人会签优化排序与止损线

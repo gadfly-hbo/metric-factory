@@ -721,3 +721,56 @@ metrics:
     provenance:
       origin: template
       template_ref: content-community@0.1.0
+
+scenarios:
+  - id: creator_ecosystem_health
+    version: 0.1.0
+    title: 创作者生态健康度诊断
+    decision_purpose: 诊断创作者供给侧的活跃与留存健康度，决定创作者激励、新创作者扶持与内容运营资源的投放优先级
+    question_tree:
+      - id: ecosystem_root
+        label: 创作者生态活跃是否恶化
+        metric: creator_active_rate
+      - id: retention_side
+        label: 存量创作者是否在流失
+        parent: ecosystem_root
+        metric: creator_retention_90d
+      - id: new_supply_side
+        label: 新创作者内容是否得不到分发
+        parent: ecosystem_root
+        metric: new_creator_content_share
+      - id: conversion_side
+        label: 消费到创作的转化是否走低
+        parent: ecosystem_root
+        metric: browse_to_publish_rate
+      - id: first_publish_side
+        label: 新用户首发是否受阻
+        parent: ecosystem_root
+        metric: first_publish_within_7d_rate
+    metric_usages:
+      - metric: creator_active_rate
+        role: outcome
+        note: 生态健康度总闸，分母为存量注册创作者（quality 树）
+      - metric: creator_retention_90d
+        role: driver
+        note: 存量留存侧拆解，首发后 90 日再发布占比
+      - metric: new_creator_content_share
+        role: driver
+        note: 新供给分发侧拆解（structure 树）
+      - metric: browse_to_publish_rate
+        role: driver
+        note: 消费转创作转化（journey 树）
+      - metric: first_publish_within_7d_rate
+        role: driver
+        note: 新用户 7 日首发转化（journey 树）
+      - metric: head_creator_content_share
+        role: guardrail
+        note: 扶持动作不得进一步推高头部创作者内容集中度
+      - metric: creator_income_share
+        role: guardrail
+        note: 激励加码受分成比例预算约束，不得透支商业化效率
+    method_refs:
+      - dame.m2.driver_decomposition@1.0.0
+    evidence_requirements: 近 6 个月月粒度 creator_active_rate/creator_retention_90d/new_creator_content_share 序列与创作者分层明细
+    output_spec: 生态健康归因一页纸 + 激励/扶持/分发三类运营资源优先级清单
+    review_rules: 创作者运营负责人与商业化负责人会签激励与分发结论
