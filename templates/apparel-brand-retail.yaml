@@ -165,6 +165,9 @@ metrics:
       include_view_as_sale: true
       include_o2o: true
       include_live_stream: true
+    caliber_type:
+      - refund_adjustment
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -189,6 +192,9 @@ metrics:
       - week
       - month
     owner_role: 零售业务负责人
+    caliber_type:
+      - refund_adjustment
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -213,6 +219,8 @@ metrics:
       - week
       - month
     owner_role: 零售业务负责人
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -235,6 +243,8 @@ metrics:
     owner_role: 零售业务负责人
     type_params:
       expr: terminal_sales - retail_refund_amount
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -255,6 +265,8 @@ metrics:
       - week
       - month
     owner_role: 零售业务负责人
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -274,6 +286,10 @@ metrics:
       - week
       - month
     owner_role: 零售业务负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -294,6 +310,8 @@ metrics:
       - week
       - month
     owner_role: 零售业务负责人
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -317,6 +335,9 @@ metrics:
       - week
       - month
     owner_role: 零售业务负责人
+    caliber_type:
+      - refund_adjustment
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -363,6 +384,10 @@ metrics:
       - week
       - month
     owner_role: 零售业务负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -381,6 +406,8 @@ metrics:
       - week
       - month
     owner_role: 零售业务负责人
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -399,6 +426,8 @@ metrics:
       - week
       - month
     owner_role: 零售业务负责人
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -420,6 +449,10 @@ metrics:
     type_params:
       numerator: store_receipts
       denominator: store_traffic
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -442,6 +475,10 @@ metrics:
     type_params:
       numerator: retail_volume
       denominator: store_receipts
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -463,6 +500,9 @@ metrics:
       - week
       - month
     owner_role: 零售业务负责人
+    caliber_type:
+      - refund_adjustment
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -481,6 +521,8 @@ metrics:
       - week
       - month
     owner_role: 零售业务负责人
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -502,6 +544,9 @@ metrics:
       - month
       - quarter
     owner_role: 零售业务负责人
+    caliber_type:
+      - measurement_anchor
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -525,6 +570,9 @@ metrics:
       - month
       - quarter
     owner_role: 零售业务负责人
+    caliber_type:
+      - validity_threshold
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -563,6 +611,10 @@ metrics:
       - month
       - quarter
     owner_role: 零售业务负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -584,6 +636,8 @@ metrics:
       - week
       - month
     owner_role: 零售业务负责人
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -603,6 +657,8 @@ metrics:
       - week
       - month
     owner_role: 商品负责人
+    caliber_type:
+      - fee_composition
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -628,6 +684,8 @@ metrics:
     owner_role: 商品负责人
     type_params:
       expr: retail_volume * tag_price
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -649,6 +707,10 @@ metrics:
     owner_role: 经营分析
     type_params:
       expr: retail_sales / (retail_volume * tag_price)
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -674,6 +736,9 @@ metrics:
     owner_role: 商品负责人
     caliber_switches:
       include_franchise_inventory: true
+    caliber_type:
+      - scope_inclusion
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -697,6 +762,8 @@ metrics:
       - week
       - month
     owner_role: 商品负责人
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -716,6 +783,9 @@ metrics:
       - week
       - month
     owner_role: 经营分析
+    caliber_type:
+      - refund_adjustment
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -760,6 +830,8 @@ metrics:
       - week
       - month
     owner_role: 商品负责人
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -779,6 +851,9 @@ metrics:
       - week
       - month
     owner_role: 经营分析
+    caliber_type:
+      - refund_adjustment
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -805,6 +880,10 @@ metrics:
     owner_role: 商品负责人
     type_params:
       expr: retail_value / (retail_value + inventory_value)
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -831,6 +910,12 @@ metrics:
     type_params:
       expr: cumulative_retail_value / (cumulative_retail_value +
         on_hand_inventory_value)
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -862,6 +947,13 @@ metrics:
     owner_role: 商品负责人
     type_params:
       expr: cumulative_retail_value / purchase_inbound_value
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions:
+        - channel
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -885,6 +977,12 @@ metrics:
       - week
       - month
     owner_role: 商品负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -908,6 +1006,12 @@ metrics:
       - week
       - month
     owner_role: 商品负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -927,6 +1031,12 @@ metrics:
       - week
       - month
     owner_role: 商品负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -957,6 +1067,9 @@ metrics:
       - week
       - month
     owner_role: 商品负责人
+    caliber_type:
+      - scope_inclusion
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -984,6 +1097,13 @@ metrics:
       - week
       - month
     owner_role: 商品负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1004,6 +1124,8 @@ metrics:
       - month
       - quarter
     owner_role: 会员运营负责人
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1027,6 +1149,10 @@ metrics:
     type_params:
       numerator: member_sales
       denominator: retail_sales
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1047,6 +1173,12 @@ metrics:
       - month
       - quarter
     owner_role: 经营分析
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1067,6 +1199,10 @@ metrics:
       - month
       - quarter
     owner_role: 会员运营负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1083,6 +1219,12 @@ metrics:
       - month
       - quarter
     owner_role: 供应链负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1099,6 +1241,13 @@ metrics:
       - month
       - quarter
     owner_role: 供应链负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - measurement_anchor
+      - validity_threshold
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1115,6 +1264,13 @@ metrics:
       - month
       - quarter
     owner_role: 供应链负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - measurement_anchor
+      - validity_threshold
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1131,6 +1287,8 @@ metrics:
       - month
       - quarter
     owner_role: 供应链负责人
+    caliber_type:
+      - scope_inclusion
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1147,6 +1305,12 @@ metrics:
       - month
       - quarter
     owner_role: 供应链负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1163,6 +1327,12 @@ metrics:
       - month
       - quarter
     owner_role: 供应链负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1179,6 +1349,10 @@ metrics:
       - month
       - quarter
     owner_role: 供应链负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1195,6 +1369,10 @@ metrics:
       - month
       - quarter
     owner_role: 供应链负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1211,6 +1389,10 @@ metrics:
       - month
       - quarter
     owner_role: 商品负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1227,6 +1409,10 @@ metrics:
       - month
       - quarter
     owner_role: 供应链负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1245,6 +1431,8 @@ metrics:
       - day
       - week
     owner_role: 物流负责人
+    caliber_type:
+      - validity_threshold
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1281,6 +1469,8 @@ metrics:
       - day
       - week
     owner_role: 物流负责人
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1299,6 +1489,8 @@ metrics:
       - day
       - week
     owner_role: 物流负责人
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1317,6 +1509,8 @@ metrics:
       - day
       - week
     owner_role: 物流负责人
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1335,6 +1529,8 @@ metrics:
       - day
       - week
     owner_role: 物流负责人
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1353,6 +1549,8 @@ metrics:
       - day
       - week
     owner_role: 物流负责人
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1371,6 +1569,8 @@ metrics:
       - day
       - week
     owner_role: 物流负责人
+    caliber_type:
+      - measurement_anchor
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1391,6 +1591,12 @@ metrics:
       - day
       - week
     owner_role: 物流负责人
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
+    caliber_type:
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1408,6 +1614,9 @@ metrics:
       - month
       - quarter
     owner_role: 财务负责人
+    caliber_type:
+      - fee_composition
+      - refund_adjustment
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1426,6 +1635,8 @@ metrics:
       - month
       - quarter
     owner_role: 财务负责人
+    caliber_type:
+      - fee_composition
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1446,6 +1657,10 @@ metrics:
     type_params:
       numerator: gross_profit
       denominator: operating_revenue
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1483,6 +1698,10 @@ metrics:
     type_params:
       numerator: total_profit
       denominator: operating_revenue
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1500,6 +1719,8 @@ metrics:
       - month
       - quarter
     owner_role: 财务负责人
+    caliber_type:
+      - fee_composition
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1520,6 +1741,10 @@ metrics:
     type_params:
       numerator: expense
       denominator: operating_revenue
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1535,6 +1760,8 @@ metrics:
       - month
       - quarter
     owner_role: 财务负责人
+    caliber_type:
+      - fee_composition
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1550,6 +1777,8 @@ metrics:
       - month
       - quarter
     owner_role: 财务负责人
+    caliber_type:
+      - fee_composition
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
@@ -1585,6 +1814,10 @@ metrics:
     type_params:
       numerator: dealership_gross_profit
       denominator: dealership_revenue
+    aggregation:
+      allowed_dimensions: []
+      disallowed_dimensions: []
+      ratio_policy: recompute_from_parts
     provenance:
       origin: template
       template_ref: apparel-brand-retail@0.1.0
