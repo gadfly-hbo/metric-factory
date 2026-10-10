@@ -46,7 +46,7 @@ export function settingsPage(status: LlmStatus, opts: { errors?: string[]; value
 
   const clear = `<form action="/settings/clear" method="post" class="card">
     <div class="card-h">清除配置</div>
-    <p style="color:var(--text-2);font-size:12px">删除本页管理的模型、密钥与网关条目（.env.local 中其他内容不受影响）。</p>
+    <p style="color:var(--text-2);font-size:0.82rem">删除本页管理的模型、密钥与网关条目（.env.local 中其他内容不受影响）。</p>
     <button class="btn btn-danger" type="submit">清除本页管理的配置</button>
   </form>`;
 

@@ -20,7 +20,7 @@ function draftMetricCard(m: Draft["added"][number]): string {
     <div class="draft-heading">
       <div>
         <p class="eyebrow">CANDIDATE METRIC DRAFT</p>
-        <h3>${escapeHtml(m.display_name)} <span class="mono" style="font-size:11px;color:var(--text-2)">${escapeHtml(m.name)}</span></h3>
+        <h3>${escapeHtml(m.display_name)} <span class="mono" style="font-size:0.78rem;color:var(--text-2)">${escapeHtml(m.name)}</span></h3>
         <p class="draft-src">来源：${escapeHtml(m.provenance.origin)}（${escapeHtml(m.provenance.model ?? "")} · prompt ${escapeHtml(m.provenance.prompt_version ?? "")}）</p>
       </div>
       <span class="state-badge amber">待采纳 · 无业务写入</span>
@@ -54,7 +54,7 @@ export function draftsPage(args: {
   values?: { describe?: string; instruction?: string };
 }): string {
   if (!args.hasInstance) {
-    return `<div class="empty">AI 草案基于当前实例生成<br><span style="font-size:12px">先创建或打开一个实例，再回到这里</span><br><a class="btn" href="/init">创建实例</a>&nbsp;<a class="btn" href="/">打开已有实例</a></div>`;
+    return `<div class="empty">AI 草案基于当前实例生成<br><span style="font-size:0.82rem">先创建或打开一个实例，再回到这里</span><br><a class="btn" href="/init">创建实例</a>&nbsp;<a class="btn" href="/">打开已有实例</a></div>`;
   }
 
   const errorsHtml = args.errors?.length
@@ -76,7 +76,7 @@ export function draftsPage(args: {
     <form action="/drafts/generate" method="post">
       <div class="card">
         <div class="card-h">生成候选指标</div>
-        <p style="color:var(--text-2);font-size:12px;margin-bottom:8px">描述你的业务特点，AI 基于当前实例与行业模板出候选指标草案（模板锚定，不会大而全）。</p>
+        <p style="color:var(--text-2);font-size:0.82rem;margin-bottom:8px">描述你的业务特点，AI 基于当前实例与行业模板出候选指标草案（模板锚定，不会大而全）。</p>
         <div class="fld"><label>业务描述</label>
           <textarea name="describe" placeholder="例：我们是跨境电商，主打低价秒杀，用户价格敏感、决策快，退货率是核心风险…">${escapeHtml(args.values?.describe ?? "")}</textarea></div>
         <button class="btn btn-primary" type="submit">生成草案</button>
@@ -85,7 +85,7 @@ export function draftsPage(args: {
     <form action="/drafts/refine" method="post">
       <div class="card">
         <div class="card-h">自然语言微调</div>
-        <p style="color:var(--text-2);font-size:12px;margin-bottom:8px">用一句话改现有实例：改口径、删指标、加口径开关，AI 出变更草案。</p>
+        <p style="color:var(--text-2);font-size:0.82rem;margin-bottom:8px">用一句话改现有实例：改口径、删指标、加口径开关，AI 出变更草案。</p>
         <div class="fld"><label>调整指令</label>
           <textarea name="instruction" placeholder="例：GMV 口径改为含退款；删掉 NPS；客单价默认剔除运费">${escapeHtml(args.values?.instruction ?? "")}</textarea></div>
         <button class="btn" type="submit">生成微调草案</button>
@@ -106,7 +106,7 @@ export function draftsPage(args: {
         ? `<div class="fld"><label>删除（${d.removed.length}）</label><p class="mono">${escapeHtml(d.removed.join("、"))}</p></div>`
         : "",
       Object.keys(d.caliber).length
-        ? `<div class="fld"><label>口径开关（${Object.keys(d.caliber).length} 个指标）</label><p class="mono" style="font-size:11.5px">${escapeHtml(Object.entries(d.caliber).map(([m, ks]) => `${m}: ${Object.entries(ks).map(([k, v]) => `${k}=${v}`).join(", ")}`).join("；"))}</p></div>`
+        ? `<div class="fld"><label>口径开关（${Object.keys(d.caliber).length} 个指标）</label><p class="mono" style="font-size:0.8rem">${escapeHtml(Object.entries(d.caliber).map(([m, ks]) => `${m}: ${Object.entries(ks).map(([k, v]) => `${k}=${v}`).join(", ")}`).join("；"))}</p></div>`
         : ""
     ].join("");
     pendingHtml = `<div class="view-title">待采纳草案（${d.generator.model} · ${escapeHtml(d.generator.describe.slice(0, 60))}${d.generator.describe.length > 60 ? "…" : ""}）</div>

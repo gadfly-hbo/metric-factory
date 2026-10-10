@@ -192,4 +192,4 @@ node dist/cli.js ui --instance my-instance/instance.yaml --port 4173
 4. **审核与导出**：审核中心批准 LLM 指标（fail-closed：未批准导出被硬阻断）；实例页一键下载 MetricFlow YAML / Excel 字典 / Mermaid 指标树 / SAP 语义包（与 CLI export 同语义：mapping 自动发现 + 导出前全量校验）
 5. **场景编辑**（v5）：实例页「场景」区块——浏览决策场景（来源：模板种子/实例新增/实例覆盖）、新建与编辑（表单 + 逐行 DSL），保存走引擎校验，失败逐行回显零写盘
 
-本地单用户：仅监听 127.0.0.1；写操作仅限工作区实例、`draft.pending.yaml` 草案与 `.env.local`（均过引擎校验）；实例打开限工作区扫描白名单。界面对齐 JuanerAI 最新 UI 标准（2026-09-28 Case 助手增量契约：品牌栏 + 待采纳草案卡 + 橘 accent 视觉），零客户端脚本、纯服务端表单。
+本地单用户：仅监听 127.0.0.1；写操作仅限工作区实例、`draft.pending.yaml` 草案与 `.env.local`（均过引擎校验）；实例打开限工作区扫描白名单。界面对齐全局 UI 基线（`~/.agents/ui-design/DESIGN.md`「中文专业工作台 UI 基线」：浅色中性表面 + 克制绿主动作 + 紧凑布局 + 语义状态色，品牌栏 + 待采纳草案卡 + 场景区块），零客户端脚本、纯服务端表单。

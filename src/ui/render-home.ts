@@ -52,8 +52,8 @@ export function homePage(args: {
             .map(
               (d, i) => `<label style="display:flex;gap:8px;align-items:center;padding:6px 8px;border:1px solid var(--border);border-radius:var(--rounded-sm)">
               <input type="radio" name="path" value="${escapeHtml(d.path)}" ${i === 0 ? "checked" : ""}>
-              <span class="mono" style="font-size:12px">${escapeHtml(d.path)}</span>
-              <span style="color:var(--text-3);font-size:11.5px">基模板 ${escapeHtml(d.base)}</span></label>`
+              <span class="mono" style="font-size:0.82rem">${escapeHtml(d.path)}</span>
+              <span style="color:var(--text-3);font-size:0.8rem">基模板 ${escapeHtml(d.base)}</span></label>`
             )
             .join("")}
           </div><p style="margin-top:8px"><button class="btn" type="submit">打开该实例</button></p></form>`

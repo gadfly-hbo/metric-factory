@@ -470,7 +470,7 @@ export function createUiServer(opts: UiOptions): Server {
         if (!ctx) {
           res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(
             layout("instance", "我的实例", "当前没有打开的实例。",
-              `<div class="empty">还没有实例<br><span style="font-size:12px">用问卷向导创建，或在首页打开已有实例</span><br><a class="btn btn-primary" href="/init">创建实例</a>&nbsp;<a class="btn" href="/">返回工作台</a></div>`, statusInfo)
+              `<div class="empty">还没有实例<br><span style="font-size:0.82rem">用问卷向导创建，或在首页打开已有实例</span><br><a class="btn btn-primary" href="/init">创建实例</a>&nbsp;<a class="btn" href="/">返回工作台</a></div>`, statusInfo)
           );
           return;
         }

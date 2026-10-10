@@ -94,7 +94,7 @@ export function wizardStep2Page(
         <span><strong style="font-weight:500">${escapeHtml(t.template.industry)} · ${escapeHtml(m.templateId)}</strong>
         <span style="color:var(--text-3)"> · 指标 ${t.metrics.length} 个</span>
         ${m.score > 0 ? `<span class="chip chip-accent" style="margin-left:6px">${m.score}/3</span>` : ""}
-        ${m.reasons.length ? `<br><span style="font-size:11.5px;color:var(--text-2)">${escapeHtml(m.reasons.join("；"))}</span>` : ""}</span>
+        ${m.reasons.length ? `<br><span style="font-size:0.8rem;color:var(--text-2)">${escapeHtml(m.reasons.join("；"))}</span>` : ""}</span>
       </label>`;
     })
     .join("");
