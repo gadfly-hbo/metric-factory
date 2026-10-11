@@ -179,6 +179,8 @@ node dist/cli.js track my-instance/instance.yaml --out out
 
 ### Web 工作台
 
+> 使用者操作手册见 [docs/工作台使用指南.md](./docs/工作台使用指南.md)（面向业务人员：创建实例/微调/场景/AI 草案/审核导出全流程）。
+
 ```bash
 node dist/cli.js ui --instance my-instance/instance.yaml --port 4173
 # 或双击仓库根目录「启动工作台.command」/ zsh scripts/start-ui.sh（自动装依赖、构建、开浏览器）
