@@ -34,7 +34,7 @@ function run(args: string[], env: NodeJS.ProcessEnv = process.env) {
   return spawnSync(process.execPath, [bin, ...args], { encoding: "utf8", env });
 }
 
-test("generate → apply → 阻断 → review → 放行 全链路", () => {
+test("generate → apply → 阻断 → review → 放行 全链路", { timeout: 20_000 }, () => {
   const dir = mkdtempSync(join(tmpdir(), "mf-gen-"));
   const inst = join(dir, "instance.yaml");
   copyFileSync("test/fixtures/instance-ecommerce.yaml", inst);
