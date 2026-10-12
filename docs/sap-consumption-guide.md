@@ -64,7 +64,7 @@
 
 - 指标：`gmv`（开关翻为 `include_refund: true` 含退款）、`refund_amount`（退款额；`refund_to_payment_period` 默认开 = 归属支付期间；`include_pending_refund` 默认关）、`net_sales`（`expr: "gmv - refund_amount"`）
 - **勾稽前提**：`net_sales` 公式成立要求 `gmv.include_refund = true`——模板默认是关（剔除退款），直接套公式会**双重扣减**。消费端核验时应检查该前提（definition 内已声明）。
-- **合法口径修改示例**：把 `refund_amount.refund_to_payment_period` 翻为 `false`（归属退款完成期间）→ 发布新版本 → 同一批数据的 `net_sales` 计算结果真实变化（退款计入不同期间）。这是验收「合法修改退款时间口径后计算真实变化」的样板操作。
+- **合法口径修改示例**：把 `refund_amount.refund_to_payment_period` 翻为 `false`（归属退款完成期间）→ 发布新版本 → 同一批数据的 `net_sales` 计算结果真实变化（退款计入不同期间）。**该演示已发布**：`net-sales-instance@1.0.1`（v1.0.0 = 归属支付期间，v1.0.1 = 归属退款完成期间；内容指纹不同，v1.0.0 快照字节不变），消费端可直接用两版做"合法改口径 → 计算真实变化"的对照验收。
 - 场景：`net_sales_review`（净销售额 ← 销售侧 gmv / 退款侧 refund_amount；guardrail `refund_rate`）。问题树是参考骨架——Agent 发现退款数据缺失或归属歧义时应转向调查（如先补数据），不得硬算。
 
 ## 7. adoption receipt（采用回执，格式冻结）

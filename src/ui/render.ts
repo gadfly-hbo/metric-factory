@@ -334,7 +334,119 @@ export function releaseBlock(state: ReleaseUiState): string {
   ${banner}${form}`;
 }
 
-export function instancePage(materialized: MaterializedInstance, instance: Instance, instancePath: string, base: Template, release: ReleaseUiState = { kind: "form", values: { version: "", note: "" } }): string {
+// ===== 采用回执区块（批次 A+B 切片 5；.flow/ui-contract.md RC0–RC6 冻结件）=====
+
+export interface ReceiptListItem {
+  task_id: string;
+  version: string;
+  status: string; // 对账一致 | 对账不一致
+  adopted: number; // adopted 指标数（T-04 列头口径；场景数不计入）
+  issues: number;
+  received_at: string;
+}
+
+export interface ReceiptsUiState {
+  list: ReceiptListItem[]; // 当前实例包过滤后，received_at 倒序
+  showList: boolean; // 工作区存在 releases/ → 列表部分渲染（RC0 为 false）
+  packageId: string; // 当前实例包 id（T-02/T-06 内插）
+  values: { yaml: string };
+  /** RC4/RC6：区块级错误卡（列表之下表单之上） */
+  issues?: string[];
+  issuesTitle?: string;
+  /** RC5：textarea 字段级内联错误（T-12） */
+  yamlError?: string;
+}
+
+export function receiptsBlock(state: ReceiptsUiState): string {
+  const pkg = escapeHtml(state.packageId);
+  const t02 = `消费端完成真实任务后按契约 §6.2 格式回传采用回执；登记时对照 releases/index.yaml 对账——内容指纹一致 → 对账一致，不一致或条目不存在 → 对账不一致（记录不拒绝，失真回执也是反馈）。回执收编至 releases/receipts/（与 CLI receipt add 同一登记规则），列表按登记时间倒序展示当前包（${pkg}）的已登记回执。`;
+
+  // 列表部分（RC0 不渲染 / RC1 空态 / RC2 条目）
+  let listPart = "";
+  if (state.showList) {
+    if (state.list.length === 0) {
+      listPart = `<div class="empty">当前包（${pkg}）尚无采用回执<br><span style="font-size:0.82rem">消费端完成真实任务后按契约 §6.2 格式回传 YAML，在下方登记回执；也可用 CLI receipt add &lt;file&gt; 登记。</span></div>`;
+    } else {
+      const rows = state.list
+        .map(
+          (r) => `<tr>
+          <td class="mono">${escapeHtml(r.task_id)}</td>
+          <td class="mono">${escapeHtml(pkg)}@${escapeHtml(r.version)}</td>
+          <td>${chip(r.status === "对账一致" ? "ok" : "warn", r.status)}</td>
+          <td class="num">${r.adopted} 个</td>
+          <td class="num">${r.issues} 个</td>
+          <td class="mono">${escapeHtml(r.received_at)}</td>
+        </tr>`
+        )
+        .join("");
+      listPart = `<div class="card" style="padding:0;overflow-x:auto">
+        <div class="card-h" style="padding:10px 14px">已登记回执（${state.list.length}）</div>
+        <table class="tbl">
+          <thead><tr><th>任务（task_id）</th><th>包@版本</th><th>对账状态</th><th>adopted 指标数</th><th>issues 数</th><th>登记时间（received_at）</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    }
+  }
+
+  // 错误卡（RC4/RC6）：区块内、列表之下、表单之上
+  let errorCard = "";
+  if (state.issues && state.issues.length > 0) {
+    errorCard = `<div class="card">
+      <div class="card-h" style="color:var(--fail)">${escapeHtml(state.issuesTitle ?? "回执未通过校验（零写盘）")}</div>
+      <ul class="error-list" role="alert" id="receipt-issues">${state.issues.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>
+    </div>`;
+  }
+
+  // 字段级内联错误（RC5）
+  const inline = state.yamlError
+    ? `<p id="receipt-yaml-error" role="alert" style="color:var(--fail);font-size:0.86rem;margin:4px 0 0">${escapeHtml(state.yamlError)}</p>`
+    : "";
+  const aria = state.yamlError
+    ? ' aria-invalid="true" aria-describedby="receipt-yaml-error"'
+    : state.issues && state.issues.length > 0
+      ? ' aria-describedby="receipt-issues"'
+      : "";
+
+  const placeholder = `task_id: 消费端任务唯一标识
+package:
+  id: 包 id
+  version: 1.0.0
+  content_fingerprint: sha256:…
+  package_fingerprint: sha256:…
+adopted_metrics:
+  - name: 指标名
+adopted_scenarios:
+  - id: 场景 id
+issues_found:
+  - kind: caliber_ambiguity | missing_data | trial_issue
+    detail: 一句话问题描述
+computed_at: ISO-8601`;
+
+  const form = `<form action="/instance/receipts" method="post">
+    <div class="card">
+      <div class="fld"><label for="receipt-yaml">回执 YAML（粘贴契约 §6.2 格式的采用回执，必填）</label>
+        <textarea id="receipt-yaml" name="receipt" required rows="12" placeholder="${escapeHtml(placeholder)}"${aria}>${escapeHtml(state.values.yaml)}</textarea>
+        ${inline}
+        <p style="color:var(--text-3);font-size:11.5px;margin:4px 0 0">回执按包全局登记，此处仅展示当前包；登记时自动对照 releases/index.yaml 对账（内容指纹一致 → 对账一致），失败零写盘。</p>
+      </div>
+      <button class="btn btn-primary" type="submit">登记回执</button>
+    </div>
+  </form>`;
+
+  return `<div class="view-title">采用回执</div>
+  <p class="page-desc">${t02}</p>
+  ${listPart}${errorCard}${form}`;
+}
+
+export function instancePage(
+  materialized: MaterializedInstance,
+  instance: Instance,
+  instancePath: string,
+  base: Template,
+  release: ReleaseUiState = { kind: "form", values: { version: "", note: "" } },
+  receipts: ReceiptsUiState = { list: [], showList: false, packageId: "", values: { yaml: "" } }
+): string {
   const pending = findPendingReview(instance.added);
   const d = materialized.diff;
 
@@ -412,7 +524,7 @@ export function instancePage(materialized: MaterializedInstance, instance: Insta
     </div>
   </form>`;
 
-  return `${summary}${diffBlock}<div class="view-title">指标树 · 杜邦式分解（按模块分组，× ÷ 为公式算符）</div>${trees}${form}${scenariosBlock(materialized, instance, base)}${releaseBlock(release)}`;
+  return `${summary}${diffBlock}<div class="view-title">指标树 · 杜邦式分解（按模块分组，× ÷ 为公式算符）</div>${trees}${form}${scenariosBlock(materialized, instance, base)}${releaseBlock(release)}${receiptsBlock(receipts)}`;
 }
 
 // ===== 决策场景区块（v5 切片 4；.flow/ui-contract.md 冻结件）=====

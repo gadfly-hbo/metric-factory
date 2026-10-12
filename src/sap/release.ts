@@ -2,14 +2,14 @@
 // 管线复用既有导出全链（loadInstance → 基模板 → materialize → 全量校验 → export gate → assembleSap →
 // validateSapPackage），零第二套规则；发布动作 = 登记侧写盘（快照 + append-only index），SAP 包结构与契约冻结面零改动。
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { z } from "zod";
-import { loadInstance, loadTemplate, type LoadError } from "../engine/loader.js";
+import { loadInstance, loadTemplatesFromDir, type LoadError } from "../engine/loader.js";
+import { defaultMappingPath, loadMappingFile } from "../engine/io.js";
 import { materialize } from "../engine/materialize.js";
 import { validateInstance } from "../engine/validate.js";
-import { MappingSchema, type Mapping } from "../schema/mapping.js";
+import type { Mapping } from "../schema/mapping.js";
 import type { Template } from "../schema/template.js";
 import { assertExportable } from "../export/gate.js";
 import { buildGenerator, packageIdFromInstancePath } from "../export/sap.js";
@@ -102,47 +102,47 @@ function formatLoadErrors(path: string, errors: LoadError[]): string {
   return errors.map((e) => `[schema] ${path} ${e.path}: ${e.message}`).join("\n");
 }
 
-// 与 cli/server 的模板目录扫描同语义：目录内任一模板损坏即 fail-closed（lint 门管目录健康）
+// 模板目录装载走共享核（F6）：release 策略 = 首个坏文件即 template-invalid（行为与重构前一致）
 async function findBaseTemplate(templatesDir: string, baseId: string): Promise<Template> {
-  let entries: string[];
-  try {
-    entries = (await readdir(templatesDir)).filter((n) => n.endsWith(".yaml")).sort();
-  } catch (e) {
-    throw new ReleaseError("templates-dir", `无法读取模板目录 ${templatesDir}：${(e as Error).message}`);
-  }
-  for (const f of entries) {
-    const path = join(templatesDir, f);
-    const loaded = await loadTemplate(path);
-    if (!loaded.ok) {
-      throw new ReleaseError("template-invalid", formatLoadErrors(path, loaded.errors), {
-        issues: loaded.errors.map((e) => `[schema] ${path} ${e.path}: ${e.message}`)
+  const result = await loadTemplatesFromDir(templatesDir);
+  if (!result.ok) {
+    if (result.kind === "read") {
+      throw new ReleaseError("templates-dir", `无法读取模板目录 ${templatesDir}：${result.message}`);
+    }
+    if (result.kind === "load") {
+      // 输出格式保持基线（f525be6）：首个坏文件的【全部】zod 错误，[schema] 前缀。
+      // 装载策略较基线收紧（F6 整目录健康门）：基线在坏文件排序位于目标模板之后时会跳过坏文件继续，
+      // 重构后统一为目录含任何坏文件即拒——收敛勘误见 .flow/prd.md GRILL F6。
+      const first = result.errors[0]!;
+      const firstFileErrors = result.errors.filter((e) => e.file === first.file);
+      const detail = firstFileErrors.map((e) => `[schema] ${e.file} ${e.error.path}: ${e.error.message}`).join("\n");
+      throw new ReleaseError("template-invalid", detail, {
+        issues: firstFileErrors.map((e) => `[schema] ${e.file} ${e.error.path}: ${e.error.message}`)
       });
     }
-    if (loaded.template.template.id === baseId) return loaded.template;
+    // empty：与基线一致——空目录走「找不到基模板」
   }
-  throw new ReleaseError("base-template-missing", `找不到基模板 ${baseId}（目录：${templatesDir}）`);
+  const base = (result.ok ? result.templates : []).find((t) => t.template.id === baseId);
+  if (!base) {
+    throw new ReleaseError("base-template-missing", `找不到基模板 ${baseId}（目录：${templatesDir}）`);
+  }
+  return base;
 }
 
-// 映射装配与 export 同语义：显式路径 = 必填（损坏即错）；自动发现 = 损坏静默视为无映射
-function loadMappingForRelease(mappingPath: string, required: boolean): Mapping {
-  let doc: unknown;
-  try {
-    doc = parseYaml(readFileSync(mappingPath, "utf8"));
-  } catch (e) {
+// 映射装载走共享核（F6）：显式路径 = 必填（损坏即错）；自动发现 = 损坏静默视为无映射（与 export 同语义）
+async function loadMappingForRelease(mappingPath: string, required: boolean): Promise<Mapping> {
+  const result = await loadMappingFile(mappingPath);
+  if (!result.ok) {
     if (required) {
-      throw new ReleaseError("mapping-invalid", `无法读取映射文件 ${mappingPath}：${(e as Error).message}`);
-    }
-    return { base: "", mappings: [] };
-  }
-  const parsed = MappingSchema.safeParse(doc);
-  if (!parsed.success) {
-    if (required) {
-      const detail = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+      if (result.kind === "read") {
+        throw new ReleaseError("mapping-invalid", `无法读取映射文件 ${mappingPath}：${result.message}`);
+      }
+      const detail = result.issues.map((i) => `${i.path}: ${i.message}`).join("; ");
       throw new ReleaseError("mapping-invalid", `映射文件不合法 ${mappingPath}：${detail}`);
     }
     return { base: "", mappings: [] };
   }
-  return parsed.data;
+  return result.mapping;
 }
 
 function readReleaseIndex(indexPath: string): ReleaseIndex {
@@ -207,8 +207,8 @@ export async function releaseInstance(opts: ReleaseOptions): Promise<ReleaseResu
   const base = await findBaseTemplate(opts.templatesDir, baseId);
   const materialized = materialize(base, instance);
 
-  const mappingPath = opts.mappingPath ?? opts.instancePath.replace(/\.yaml$/, ".mapping.yaml");
-  const mapping = loadMappingForRelease(mappingPath, Boolean(opts.mappingPath));
+  const mappingPath = opts.mappingPath ?? defaultMappingPath(opts.instancePath);
+  const mapping = await loadMappingForRelease(mappingPath, Boolean(opts.mappingPath));
   if (mapping.mappings.length > 0) {
     const names = new Set(materialized.metrics.map((m) => m.name));
     materialized.mapping = mapping.mappings.filter((m) => names.has(m.metric));

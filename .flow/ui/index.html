@@ -1,12 +1,12 @@
 <!doctype html>
 <!--
-  metric-factory · 批次 1 切片 1「实例发布」· UI-GATE 可点击原型 · 导航页
+  metric-factory · 批次 A+B · B1「采用回执登记/对账/查看」· UI-GATE 可点击原型 · 导航页
   · 契约源：.flow/ui-contract.md；每个状态一个可直接打开的静态 HTML（零 JS、零外部依赖）
   · 样式：render.css 逐字取自 src/ui/render.ts 顶部 CSS 块
-  · 演示数据为虚构（net-sales 演示实例）；指纹等运行时值均为示例
+  · 演示数据为虚构（net-sales 演绎）；net-sales-instance@1.0.0 双指纹取自仓库 releases/index.yaml 真实条目
 -->
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>发布 · UI 原型导航 · Metric Factory</title><link rel="stylesheet" href="render.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>采用回执 · UI 原型导航 · Metric Factory</title><link rel="stylesheet" href="render.css"></head>
 <body>
 <header class="topbar">
   <div class="brand" aria-label="JuanerAI，持续做出更好的决策；Metric Factory">
@@ -33,30 +33,31 @@
     <div class="boundary">写操作仅限本地实例、映射文件与 releases/ 发布登记<br>页面无脚本 · 纯服务端表单</div>
   </aside>
   <main class="main">
-    <h1 class="page-title">发布 · UI 原型导航</h1>
-    <p class="page-desc">实例页「发布」区块的七个冻结状态。每个文件为完整实例页快照（含发布区块），双击即可打开；全部零脚本。</p>
+    <h1 class="page-title">采用回执 · UI 原型导航</h1>
+    <p class="page-desc">实例页「采用回执」区块（第 7 块，发布区块之后）的冻结状态。每个文件为完整实例页快照（含第 6 块发布区块 R1 默认态复现），双击即可打开；全部零脚本。</p>
 
     <div class="card">
       <div class="card-h">契约状态 ↔ 原型文件</div>
       <table class="tbl">
         <thead><tr><th>状态</th><th>文件</th><th>一句话说明</th></tr></thead>
         <tbody>
-          <tr><td><strong>R1 表单默认态</strong></td><td><a href="release-form.html">release-form.html</a></td><td>版本号 + 变更说明 + 发布按钮（GET /instance）</td></tr>
-          <tr><td><strong>R2 发布成功态</strong></td><td><a href="release-success.html">release-success.html</a></td><td>快照路径、index 追加位置、双指纹（POST 200 重渲染，表单复位）</td></tr>
-          <tr><td><strong>R3 内容指纹警告态</strong></td><td><a href="release-warn.html">release-warn.html</a></td><td>发布成功 + 警告条（含既有条目 package@version 对照，不阻断）</td></tr>
-          <tr><td><strong>R4 校验失败态</strong></td><td><a href="release-invalid.html">release-invalid.html</a></td><td>实例校验问题逐行回显，零写盘，值保留（页面上下文含 2 个问题指标）</td></tr>
-          <tr><td><strong>R5 版本号非法态</strong></td><td><a href="release-semver.html">release-semver.html</a></td><td>非 semver 内联错误，值保留，零写盘</td></tr>
-          <tr><td><strong>R6 重复版本拒绝态</strong></td><td><a href="release-duplicate.html">release-duplicate.html</a></td><td>同 id@version 已发布：内联错误含「已发布于 …，请升级版本号」</td></tr>
-          <tr><td><strong>R7 index.yaml 损坏拒绝态</strong></td><td><a href="release-index-broken.html">release-index-broken.html</a></td><td>releases/index.yaml 解析/形状非法：拒绝发布，指引 git 恢复</td></tr>
+          <tr><td><strong>RC0 无列表态</strong></td><td><a href="receipts-no-releases.html">receipts-no-releases.html</a></td><td>工作区无 releases/ 且无回执：列表部分不渲染，表单恒渲染（GET /instance）</td></tr>
+          <tr><td><strong>RC1 列表空态</strong></td><td><a href="receipts-empty.html">receipts-empty.html</a></td><td>已发布、当前包尚无回执：空态文案 + 表单默认（GET /instance）</td></tr>
+          <tr><td><strong>RC2 列表有条目态</strong></td><td><a href="receipts-list.html">receipts-list.html</a></td><td>已登记回执按 received_at 倒序，含对账一致 / 对账不一致双徽标（GET /instance）</td></tr>
+          <tr><td><strong>RC3 登记成功态</strong></td><td><a href="receipts-success.html">receipts-success.html</a></td><td>登记成功（对账一致）：列表置顶新回执 + 表单清空（POST 200 重渲染）</td></tr>
+          <tr><td><strong>RC3m 成功 · 对账不一致</strong></td><td><a href="receipts-success-mismatch.html">receipts-success-mismatch.html</a></td><td>内容指纹不一致仍登记成功（记录不拒绝）：置顶行 warn 徽标（POST 200）</td></tr>
+          <tr><td><strong>RC4 回执未通过校验态</strong></td><td><a href="receipts-invalid.html">receipts-invalid.html</a></td><td>schema 违规逐行 [receipt] 错误，值保留，零写盘（POST 422）</td></tr>
+          <tr><td><strong>RC5 重复登记拒绝态</strong></td><td><a href="receipts-duplicate.html">receipts-duplicate.html</a></td><td>收编文件名冲突：内联错误含原 task_id 与已登记时间（POST 422）</td></tr>
+          <tr><td><strong>RC6 index 不可用拒绝态</strong></td><td><a href="receipts-index-broken.html">receipts-index-broken.html</a></td><td>releases/index.yaml 缺失或损坏：拒绝登记，指引先发布或 git 恢复（POST 422）</td></tr>
         </tbody>
       </table>
     </div>
 
     <div class="card">
       <div class="card-h">原型约定</div>
-      <p>CSS 逐字取自 <span class="mono">src/ui/render.ts</span> 顶部 CSS 块（<span class="mono">render.css</span>），零新增类；全部文件不含 <span class="mono">&lt;script&gt;</span>。演示数据为虚构的净销售实例（<span class="mono">examples/net-sales-instance.yaml</span> 情景演绎），指纹值为虚构示例。</p>
+      <p>CSS 逐字取自 <span class="mono">src/ui/render.ts</span> 顶部 CSS 块（<span class="mono">render.css</span>），零新增类；全部文件不含 <span class="mono">&lt;script&gt;</span>。演示数据为虚构的净销售实例（<span class="mono">examples/net-sales-instance.yaml</span> 情景演绎），其中 <span class="mono">net-sales-instance@1.0.0</span> 双指纹取自仓库 <span class="mono">releases/index.yaml</span> 真实条目；task_id、received_at 与 RC4 错误 message 体为虚构示例（zod 输出随实现落定）。</p>
     </div>
   </main>
 </div>
-<div class="statusbar"><span>Metric Factory 工作台</span><span>UI-GATE 原型 · 批次 1 切片 1</span><span>本机 127.0.0.1</span></div>
+<div class="statusbar"><span>Metric Factory 工作台</span><span>UI-GATE 原型 · 批次 A+B B1（采用回执）</span><span>本机 127.0.0.1</span></div>
 </body></html>

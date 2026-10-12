@@ -1,63 +1,66 @@
-# 批次 1 · 任务切片（tracer-bullet 纵切；自批准，砍线 ≤6）
+# 批次 A+B · 任务切片（tracer-bullet 纵切；自批准，砍线 ≤6）
 
-- [x] 1. 内容指纹 + `release` 命令全链（CLI 纵切）
-- [x] 2. `export --package-version` 显式版本旗标
-- [x] 3. UI 发布区块（七状态 + 服务端同一管线 + 写白名单扩展）
-- [x] 4. 净销售样板资产 + v1.0.0 发布入库
-- [x] 5. 消费指引文档 + adoption receipt 格式 + 使用指南边界更新
+- [x] 1. F6 前置：装载行为特征测试（cli 坏模板目录 / 坏映射文件）
+- [x] 2. F6 共享装载核重构（loader/io 共享核 + cli/release 薄包装；cli 多坏文件终态=全量打印〔GRILL 目标〕、release 坏模板/映射输出保持基线格式，均以 e2e 钉住）
+- [x] 3. F3 CLI release 输出补登记序号
+- [x] 4. receipt 核心 + CLI `receipt add/list`（schema/对账/收编/重复拒绝）
+- [x] 5. UI 回执区块（第 7 块：列表/徽标/粘贴登记，POST /instance/receipts）
+- [x] 6. B2 净销售 v1.0.1 预发布 + 指引补句
 
-## 1. 内容指纹 + release 命令全链
+## 1. F6 前置：装载行为特征测试
 
-**What to build**：`release <instance> <version>` CLI 命令（版本为位置参数，G1）：复用既有 SAP 导出全链（load → materialize → 全量校验 → export gate → 装配 → 整包校验），通过后计算**内容指纹**（规范化序列化置空五键（G10）：`package.fingerprint`/`package.created_at`/`review.exported_at`/`package.version`/`package.namespace`后 SHA-256；generator 不置空，红队 R1），写 `releases/<package-id>/<version>.sap.yaml` 快照 + `releases/index.yaml` append-only 数组条目（package/version/content_fingerprint/package_fingerprint/created_at/released_by/note/file 八字段）。不变量：同 id@version 已存在 → 拒绝（错误含「已发布于 <时间>，请升级版本号」）；index 存在但损坏 → 拒绝发布不静默重建（G3）；内容指纹与既有条目相同 → 允许但警告（G5，输出含既有 package@version 对照）；路径仅由 slug 化 id + semver version 构造，非法写盘前拒绝（R3）。`--note` 可选；`--out` 覆盖 releases 基目录（默认 cwd 相对 `releases/`）。
+**What to build**：重构前钉住 cli 装载行为的特征 e2e——(a) 坏模板目录（合法模板 + 损坏 YAML 同目录）跑 `validate <inst> -t <dir>`：非零退出、输出含坏文件路径与错误文本；(b) `export <inst> --format metricflow --mapping <损坏文件>`：非零退出、输出含 `[mapping]` 与路径。特征测试先行且通过（钉行为，非红绿）。
 
 **Acceptance criteria**：
-- [x] `release examples/... --version` 无效语法被 commander 拒绝；`release <inst> 1.0.0` 全链成功，快照与 index 落盘
-- [x] 单测：内容指纹置空五键（G10）；同构建重导出稳定；`MF_GIT_SHA` 变化 → 指纹变化且唯一差异为 generator
-- [x] e2e：重复 id@version 拒绝（含指引文案）；损坏 index 拒绝；非法 version（含路径分隔符）拒绝且零写盘；同内容指纹警告后继续
-- [x] index 为 append-only：二次发布不改写既有行
+- [ ] 两条特征测试通过并保留（重构后仍绿）
 
 **Blocked by**: None
 
-## 2. export --package-version 显式版本旗标
+## 2. F6 共享装载核重构
 
-**What to build**：`export --format sap --package-version <semver>` 可选旗标（缺省 0.1.0，不写登记——G2）；装配器 version 参数贯通；`createSapExporter` 与 UI 下载路径行为不变。golden artifact（examples/ecommerce-instance.sap.yaml）字节不受影响（再生成 = 0.1.0）。
-
-**Acceptance criteria**：
-- [x] e2e：`export --format sap --package-version 2.0.0` 产物 `package.version == "2.0.0"`
-- [x] 缺省导出与既有测试/golden artifact 零回归
-- [x] `--package-version abc` 被 semver 校验拒绝
-
-**Blocked by**: None（与 1 并行可做；release 管线不依赖本条）
-
-## 3. UI 发布区块
-
-**What to build**：实例页第 6 块「发布」（UI 契约 R1–R7，`.flow/ui-contract.md` 冻结）：表单（版本号 required pattern semver + 变更说明 textarea）POST `/instance/release` → 服务端复用 release 管线（与 CLI 同函数，零第二套规则）；成功/警告 200 重渲染（快照路径+index 位置+双指纹；警告条含既有对照），各类失败 422 同页重渲染 + 值保留 + 逐行错误；侧栏边界声明更新为含 releases/（D3）；写白名单显式扩展 releases/。零 JS、服务端校验权威。
+**What to build**：`src/engine/loader.ts` 增 `loadTemplatesFromDir(dir)`（扫描+loadTemplate+**收集全部错误**不短路，抛错变体含全部格式化错误）；`src/engine/io.ts` 增 `defaultMappingPath` 与 `loadMappingFile(path)`（result 风格解析校验核）。cli `discoverTemplates`、`loadMapping`/`defaultMappingPath` 与 release `findBaseTemplate`、`loadMappingForRelease` 全部改薄包装（各自错误策略不变：cli 打印全量+exit / release 转 ReleaseError）。`src/ui/server.ts` 拷贝不动。
 
 **Acceptance criteria**：
-- [x] UI e2e（真实 server + fetch，先例 test/ui/sap-download.test.ts）：R1 表单渲染、发布成功写盘+index 追加、重复版本 422 回显、非法 semver 422、实例校验失败零写盘、index 损坏 422
-- [x] 原型七状态与实现输出一一对应（术语逐字一致）
-- [x] 工作台写白名单外路径零写入（负面测试）
-
-**Blocked by**: 1（服务端复用 release 管线函数）
-
-## 4. 净销售样板资产 + v1.0.0 发布入库
-
-**What to build**：`examples/net-sales-instance.yaml`（fork ecommerce-marketplace@0.1.0）：added `refund_amount`（`refund_to_payment_period: true`、`include_pending_refund: false`）与 `net_sales`（derived，expr `gmv - refund_amount`，definition 写明 gmv 含退款前提）；实例口径 `gmv.include_refund: true`；added_scenarios `net_sales_review`（问题树 净销售额变化←销售额侧/退款侧；角色 net_sales=outcome、gmv/refund_amount=driver、refund_rate=guardrail；method_refs 引用标识）。不带 bindings。经 CLI 发布 v1.0.0，快照 + index 条目随 SHIP 入库（G9）。
-
-**Acceptance criteria**：
-- [x] `validate` / `diff` / `export --format sap` 对样板全通过（场景引用完整）
-- [x] `releases/net-sales-instance/1.0.0.sap.yaml` + index 条目真实存在、双指纹可对账
-- [x] 样板 definition 含「gmv 含退款」前提文字（红队 R4）
+- [ ] 切片 1 特征测试 + 全量既有测试零回归（cli/release 行为逐字不变）
+- [ ] release 的错误行为（首个坏文件、映射 required 损坏）有既有 e2e 背书
 
 **Blocked by**: 1
 
-## 5. 消费指引文档 + receipt 格式 + 边界更新
+## 3. F3 CLI release 输出补登记序号
 
-**What to build**：`docs/sap-consumption-guide.md`：取得（精确 id@version、禁 latest、从 releases/ 取）、校验（结构/双指纹/重复身份/未审 LLM；移植供应侧校验器需补 LLM 未审规则）、字段消费语义（caliber_switches 改变计算、type_params 公式、aggregation 与比例重算、bindings=设计态草案、任务 Binding 为准、question_tree=参考骨架非执行路径）、版本不可变与内容指纹对账（含 generator 漂移语义，红队 R1）、净销售样板勾稽示例。adoption receipt 格式冻结（task_id/package 双指纹/adopted_metrics/adopted_scenarios/issues_found[kind: caliber_ambiguity|missing_data|trial_issue]/computed_at）。`docs/工作台使用指南.md` 发布区块章节 + 边界声明同步。
+**What to build**：`release` 成功输出「登记」行改 `登记：<indexPath>（追加为第 N 条）`。
 
 **Acceptance criteria**：
-- [x] 指引覆盖 PRD Implementation Decisions #10/#11 全部语义点，术语与 UI 契约 T 表一致
-- [x] receipt 格式含 kind 枚举与双指纹
-- [x] 使用指南含发布流程与边界声明新文案
+- [ ] release e2e 断言 stdout 含「（追加为第 1 条）」
 
-**Blocked by**: 4（指引引用真实发布物）
+**Blocked by**: None
+
+## 4. receipt 核心 + CLI
+
+**What to build**：`src/sap/receipt.ts`：契约 v0.3 §6.2 zod schema（task_id 非空；package{id,version semver,content_fingerprint,package_fingerprint sha256:64hex}；adopted_metrics/adopted_scenarios 空数组合法；issues_found[]{kind 三枚举,metric?,detail 非空}；computed_at 非空；未知字段忽略）；对账（读 releases/index.yaml 查 id@version 比对 content_fingerprint → 对账一致/对账不一致）；`registerReceipt`（schema 校验→对账→收编副本 `releases/receipts/<slug(task_id)>.receipt.yaml` 含供应侧 received_at+reconciliation；重复文件名拒绝含原 task_id 与已登记时间；index 缺失/损坏拒绝提示先发布或 git 恢复；schema 违规逐行 `[receipt] path: message` 零写盘）；`listReceipts(packageId?)`（received_at 倒序）。CLI 嵌套子命令 `receipt add <file>` / `receipt list [--package <id>]`（列表六列：task_id/package@version/对账状态/adopted 数/issues 数/received_at）。
+
+**Acceptance criteria**：
+- [ ] 单测：schema 逐字段 + 未知字段忽略 + kind 枚举 + 空数组合法
+- [ ] e2e：add 成功（副本落盘含供应侧字段+对账一致）/重复拒绝/schema 违规零写盘/index 缺失拒绝/损坏拒绝/list 与 --package 过滤
+
+**Blocked by**: None
+
+## 5. UI 回执区块
+
+**What to build**：`.flow/ui-contract.md` RC0–RC6 逐字落地：`src/ui/render.ts` receiptsBlock（列表六列+chip-ok/chip-warn 徽标+空态；粘贴表单 textarea name=receipt 必填）挂实例页第 7 块；`src/ui/server.ts` POST `/instance/receipts`（成功 200 重渲染清空表单+列表含新行；失败 422 值保留逐行错误：schema `[receipt]`/重复含原 task_id+时间/index 缺失或损坏拒绝文案）。
+
+**Acceptance criteria**：
+- [ ] UI e2e：列表空态/条目+双徽标/RC3 清空表单/RC3m warn 徽标/RC4 值保留零写盘/RC5/RC6/G5 非本包回执不显示
+- [ ] 术语逐字（采用回执/登记回执/对账一致/对账不一致）；零 JS；boundary 文案不改（O1）
+
+**Blocked by**: 4
+
+## 6. B2 净销售 v1.0.1 预发布 + 指引补句
+
+**What to build**：`examples/net-sales-instance.yaml` 的 `refund_amount.refund_to_payment_period` true→false（实例保留翻转态，G10）；CLI 发布 v1.0.1（note="演示：退款归属期间翻转（支付期间→退款完成期间），供消费端验收计算变化"）；`docs/sap-consumption-guide.md` §6 补 v1.0.1 一句。仓库产物（快照+index）随 SHIP 入库。
+
+**Acceptance criteria**：
+- [ ] 发布输出无同内容警告；index 恰两条目且内容指纹不同；v1.0.0 快照字节不变（对账复核）
+- [ ] 指引 §6 含 v1.0.0/v1.0.1 差异说明
+
+**Blocked by**: None

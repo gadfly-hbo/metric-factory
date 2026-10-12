@@ -1,9 +1,9 @@
-import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { Command } from "commander";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { select, confirm } from "@inquirer/prompts";
-import { loadTemplate } from "../engine/loader.js";
+import { loadTemplate, loadTemplatesFromDir, type TemplatesDirResult } from "../engine/loader.js";
 import { lintTemplate } from "../engine/lint.js";
 import { matchTemplates } from "../engine/match.js";
 import { buildInstance } from "../engine/instantiate.js";
@@ -14,7 +14,7 @@ import { loadInstance } from "../engine/loader.js";
 import { materialize } from "../engine/materialize.js";
 import { validateInstance } from "../engine/validate.js";
 import { findPendingReview, applyApproval, applyRejection } from "../engine/review.js";
-import { writeInstanceFile } from "../engine/io.js";
+import { writeInstanceFile, defaultMappingPath, loadMappingFile } from "../engine/io.js";
 import { auditInstance } from "../engine/audit.js";
 import { deriveTrackingPlan, toJsonSchemas } from "../engine/tracking.js";
 import { buildGeneratePrompt, buildRefinePrompt } from "../llm/prompt.js";
@@ -23,7 +23,7 @@ import { createLlmClientFromEnv } from "../llm/index.js";
 import { generateDraft, generateRefineDraft } from "../engine/generate.js";
 import { applyDraft } from "../engine/apply.js";
 import { DraftSchema } from "../schema/draft.js";
-import { MapDraftSchema, MappingSchema } from "../schema/mapping.js";
+import { MapDraftSchema } from "../schema/mapping.js";
 import type { Mapping, MapDraft } from "../schema/mapping.js";
 import { parseDbtArtifacts } from "../warehouse/parse.js";
 import { recommendMappings } from "../warehouse/recommend.js";
@@ -32,8 +32,8 @@ import { metricflowExporter } from "../export/metricflow.js";
 import { excelExporter } from "../export/excel.js";
 import { mermaidExporter } from "../export/mermaid.js";
 import { createSapExporter, SapExportValidationError, packageIdFromInstancePath } from "../export/sap.js";
-import { releaseInstance } from "../sap/release.js";
-import { ReleaseError } from "../sap/release.js";
+import { releaseInstance, ReleaseError } from "../sap/release.js";
+import { registerReceipt, listReceipts, ReceiptError } from "../sap/receipt.js";
 import { SapAssemblyError } from "../sap/assemble.js";
 import { ExportBlockedError } from "../export/gate.js";
 import type { Exporter } from "../export/types.js";
@@ -41,32 +41,23 @@ import type { Template } from "../schema/template.js";
 import type { Answers } from "../schema/answers.js";
 
 
-function defaultMappingPath(instancePath: string): string {
-  return instancePath.replace(/\.yaml$/, ".mapping.yaml");
-}
-
 async function loadMapping(path: string, opts: { required?: boolean } = {}): Promise<Mapping> {
-  let doc: unknown;
-  try {
-    doc = parseYaml(await readFile(path, "utf8"));
-  } catch (e) {
+  const result = await loadMappingFile(path);
+  if (!result.ok) {
     if (opts.required) {
-      console.error(`ERROR 无法读取映射文件 ${path}：${(e as Error).message}`);
-      process.exit(1);
-    }
-    return { base: "", mappings: [] };
-  }
-  const parsed = MappingSchema.safeParse(doc);
-  if (!parsed.success) {
-    if (opts.required) {
-      for (const i of parsed.error.issues) {
-        console.error(`ERROR [mapping] ${path} ${i.path.join(".")}: ${i.message}`);
+      if (result.kind === "read") {
+        console.error(`ERROR 无法读取映射文件 ${path}：${result.message}`);
+      } else {
+        for (const i of result.issues) {
+          console.error(`ERROR [mapping] ${path} ${i.path}: ${i.message}`);
+        }
       }
       process.exit(1);
     }
     // 自动发现的默认名映射文件损坏 → 静默视为无映射（不阻断既有导出流程）
+    return { base: "", mappings: [] };
   }
-  return parsed.success ? parsed.data : { base: "", mappings: [] };
+  return result.mapping;
 }
 
 // 导出名册：help 枚举串与未知格式错误串的唯一来源（D1：新增格式必须同步这里）
@@ -95,29 +86,20 @@ async function loadAnswers(path: string): Promise<Answers> {
 }
 
 async function discoverTemplates(dir: string): Promise<Template[]> {
-  let entries: string[];
-  try {
-    entries = await readdir(dir);
-  } catch (e) {
-    console.error(`ERROR 无法读取模板目录 ${dir}：${(e as Error).message}`);
-    process.exit(1);
-  }
-  const templates: Template[] = [];
-  for (const f of entries.filter((n) => n.endsWith(".yaml")).sort()) {
-    const loaded = await loadTemplate(join(dir, f));
-    if (!loaded.ok) {
-      for (const e of loaded.errors) {
-        console.error(`ERROR [template] ${join(dir, f)} ${e.path}: ${e.message}`);
+  const result: TemplatesDirResult = await loadTemplatesFromDir(dir);
+  if (!result.ok) {
+    if (result.kind === "read") {
+      console.error(`ERROR 无法读取模板目录 ${result.dir}：${result.message}`);
+    } else if (result.kind === "empty") {
+      console.error(`ERROR 模板目录 ${result.dir} 中没有可用的 .yaml 模板`);
+    } else {
+      for (const { file, error } of result.errors) {
+        console.error(`ERROR [template] ${file} ${error.path}: ${error.message}`);
       }
-      process.exit(1);
     }
-    templates.push(loaded.template);
-  }
-  if (templates.length === 0) {
-    console.error(`ERROR 模板目录 ${dir} 中没有可用的 .yaml 模板`);
     process.exit(1);
   }
-  return templates;
+  return result.templates;
 }
 
 // 交互口径问卷：对模板中出现的去重口径开关逐个确认取值，再展开为按指标的覆盖值
@@ -993,7 +975,7 @@ program
       });
       console.log(`已发布：${result.packageId}@${result.version}`);
       console.log(`  快照：${result.snapshotPath}`);
-      console.log(`  登记：${result.indexPath}`);
+      console.log(`  登记：${result.indexPath}（追加为第 ${result.indexEntryNumber} 条）`);
       console.log(`  package_fingerprint: ${result.packageFingerprint}`);
       console.log(`  content_fingerprint: ${result.contentFingerprint}`);
       if (result.warning) {
@@ -1011,6 +993,64 @@ program
         process.exit(1);
       }
       throw e;
+    }
+  });
+
+const receiptCmd = program
+  .command("receipt")
+  .description("消费端采用回执登记与查看（adoption receipt；契约 v0.3 §6.2）");
+
+receiptCmd
+  .command("add <file>")
+  .description("登记回执文件（校验 + 对账 + 收编副本至 releases/receipts/）")
+  .option("--out <dir>", "releases 基目录（默认 ./releases）", "releases")
+  .action(async (file: string, opts: { out: string }) => {
+    let text: string;
+    try {
+      text = await readFile(file, "utf8");
+    } catch (e) {
+      console.error(`ERROR 无法读取回执文件 ${file}：${(e as Error).message}`);
+      process.exit(1);
+    }
+    try {
+      const result = registerReceipt({ receiptText: text, releasesDir: opts.out, now: new Date().toISOString() });
+      console.log(`已登记回执：${result.receipt.task_id}`);
+      console.log(`  包：${result.receipt.package.id}@${result.receipt.package.version}`);
+      console.log(`  对账：${result.status}`);
+      console.log(`  issues：${result.receipt.issues_found.length} 条`);
+      console.log(`  副本：${result.storedPath}`);
+    } catch (e) {
+      if (e instanceof ReceiptError) {
+        if (e.rule === "schema" && Array.isArray(e.info.issues)) {
+          console.error(`ERROR 回执未通过校验（零写盘）：`);
+          for (const i of e.info.issues as { path: string; message: string }[]) {
+            console.error(`[receipt] ${i.path}: ${i.message}`);
+          }
+        } else {
+          console.error(`ERROR [${e.rule}] ${e.message}`);
+        }
+        process.exit(1);
+      }
+      throw e;
+    }
+  });
+
+receiptCmd
+  .command("list")
+  .description("列出已登记回执（received_at 倒序）")
+  .option("--out <dir>", "releases 基目录（默认 ./releases）", "releases")
+  .option("--package <id>", "按包 id 过滤")
+  .action(async (opts: { out: string; package?: string }) => {
+    const list = listReceipts(opts.out, opts.package);
+    if (list.length === 0) {
+      console.log("无已登记回执");
+      return;
+    }
+    for (const r of list) {
+      const adopted = r.adopted_metrics.length + r.adopted_scenarios.length;
+      console.log(
+        `${r.received_at}  ${r.task_id}  ${r.package.id}@${r.package.version}  ${r.reconciliation.status}  adopted ${adopted}  issues ${r.issues_found.length}`
+      );
     }
   });
 

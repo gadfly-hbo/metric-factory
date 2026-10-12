@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadTemplate } from "../engine/loader.js";
-import { layout, templatesPage, templateDetailPage, instancePage, reviewPage, formErrorPage, escapeHtml, emptyScenarioFormValues, scenarioFormPage, scenarioFormValues, type ScenarioFormValues, type ReleaseUiState } from "./render.js";
+import { layout, templatesPage, templateDetailPage, instancePage, reviewPage, formErrorPage, escapeHtml, emptyScenarioFormValues, scenarioFormPage, scenarioFormValues, type ScenarioFormValues, type ReleaseUiState, type ReceiptsUiState } from "./render.js";
 import { parseQuestionTreeDsl, parseMetricUsagesDsl } from "./dsl.js";
 import { loadInstance } from "../engine/loader.js";
 import { materialize } from "../engine/materialize.js";
@@ -20,6 +20,7 @@ import { homePage } from "./render-home.js";
 import { AnswersSchema, type Answers } from "../schema/answers.js";
 import { matchTemplates } from "../engine/match.js";
 import { buildInstance } from "../engine/instantiate.js";
+import { existsSync } from "node:fs";
 import { mkdir, access, readdir, readFile, writeFile, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
@@ -34,6 +35,7 @@ import { mermaidExporter } from "../export/mermaid.js";
 import { createSapExporter, packageIdFromInstancePath, SapExportValidationError } from "../export/sap.js";
 import { SapAssemblyError } from "../sap/assemble.js";
 import { releaseInstance, ReleaseError } from "../sap/release.js";
+import { registerReceipt, listReceipts, ReceiptError } from "../sap/receipt.js";
 import { ExportBlockedError } from "../export/gate.js";
 import type { Exporter } from "../export/types.js";
 import { MappingSchema } from "../schema/mapping.js";
@@ -285,6 +287,21 @@ export function createUiServer(opts: UiOptions): Server {
       }
     })();
   };
+  // 回执区块状态构建（批次 A+B 切片 5）：登记副本为事实源，列表零 index 运行时依赖（G2）
+  const buildReceiptsState = (instancePath: string, values = { yaml: "" }, patch: Partial<ReceiptsUiState> = {}): ReceiptsUiState => {
+    const releasesDir = join(workspaceDir, "releases");
+    const packageId = packageIdFromInstancePath(instancePath);
+    const list = listReceipts(releasesDir, packageId).map((r) => ({
+      task_id: r.task_id,
+      version: r.package.version,
+      status: r.reconciliation.status,
+      adopted: r.adopted_metrics.length,
+      issues: r.issues_found.length,
+      received_at: r.received_at
+    }));
+    return { list, showList: existsSync(releasesDir), packageId, values, ...patch };
+  };
+
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     const path = url.pathname;
@@ -477,7 +494,7 @@ export function createUiServer(opts: UiOptions): Server {
         }
         const materialized = materialize(ctx.base, ctx.instance);
         const html = layout("instance", "我的实例", `基模板 ${escapeHtml(ctx.instance.base)} · 下方可微调（口径开关/增删改）并写回，写回前经全量校验。`,
-          instancePage(materialized, ctx.instance, ctx.instancePath, ctx.base), statusInfo);
+          instancePage(materialized, ctx.instance, ctx.instancePath, ctx.base, undefined, buildReceiptsState(ctx.instancePath)), statusInfo);
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
         return;
       }
@@ -690,7 +707,7 @@ export function createUiServer(opts: UiOptions): Server {
               "instance",
               "我的实例",
               `基模板 ${escapeHtml(ctx.instance.base)} · 下方可微调（口径开关/增删改）并写回，写回前经全量校验。`,
-              instancePage(materialized, ctx.instance, ctx.instancePath, ctx.base, release),
+              instancePage(materialized, ctx.instance, ctx.instancePath, ctx.base, release, buildReceiptsState(ctx.instancePath)),
               statusInfo
             )
           );
@@ -769,6 +786,66 @@ export function createUiServer(opts: UiOptions): Server {
           }
           if (e instanceof SapAssemblyError) {
             rerender({ kind: "validation-failed", values, issues: [`[${e.rule}] ${e.message}`] }, 422);
+            return;
+          }
+          throw e;
+        }
+        return;
+      }
+
+      // ===== 采用回执登记（批次 A+B 切片 5；ui-contract §0.1：成功 200 重渲染 / 失败 422 零写盘；与 CLI receipt add 同一 registerReceipt）=====
+      if (path === "/instance/receipts" && req.method === "POST") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "无实例", "未指定实例。", formErrorPage("无实例", ["metric-factory ui --instance <path>"]), statusInfo)
+          );
+          return;
+        }
+        const form = await readFormBody(req);
+        const yamlText = form.get("receipt") ?? "";
+        const values = { yaml: yamlText };
+        const receiptRerender = (patch: Partial<ReceiptsUiState>, status: number) => {
+          const materialized = materialize(ctx.base, ctx.instance);
+          res.writeHead(status, { "content-type": "text/html; charset=utf-8" }).end(
+            layout(
+              "instance",
+              "我的实例",
+              `基模板 ${escapeHtml(ctx.instance.base)} · 下方可微调（口径开关/增删改）并写回，写回前经全量校验。`,
+              instancePage(materialized, ctx.instance, ctx.instancePath, ctx.base, undefined, buildReceiptsState(ctx.instancePath, values, patch)),
+              statusInfo
+            )
+          );
+        };
+        const receiptIssue13 = (detail: string) =>
+          `releases/index.yaml 缺失或损坏（${detail}），无法对账，已拒绝登记（fail-closed，零写盘）。若从未发布过版本请先发布；若文件损坏请用 git 恢复后重试；登记不会自动重建或覆盖它。`;
+        try {
+          registerReceipt({ receiptText: yamlText, releasesDir: join(workspaceDir, "releases"), now: new Date().toISOString() });
+          receiptRerender({ values: { yaml: "" } }, 200);
+        } catch (e) {
+          if (e instanceof ReceiptError) {
+            if (e.rule === "schema" && Array.isArray(e.info.issues)) {
+              receiptRerender(
+                {
+                  issuesTitle: "回执未通过校验（零写盘）",
+                  issues: (e.info.issues as { path: string; message: string }[]).map((i) => `[receipt] ${i.path}: ${i.message}`)
+                },
+                422
+              );
+            } else if (e.rule === "duplicate") {
+              receiptRerender(
+                {
+                  yamlError: `task_id "${String(e.info.task_id)}" 已登记于 ${String(e.info.received_at || "未知时间")}，不可重复登记（append-only）；如为新任务请更换 task_id。`
+                },
+                422
+              );
+            } else if (e.rule === "index-missing") {
+              receiptRerender({ issuesTitle: "登记被拒绝 · releases/index.yaml 不可用", issues: [receiptIssue13("缺失，尚无任何发布版本")] }, 422);
+            } else if (e.rule === "index-corrupt") {
+              receiptRerender({ issuesTitle: "登记被拒绝 · releases/index.yaml 不可用", issues: [receiptIssue13(String(e.info.detail ?? "解析失败"))] }, 422);
+            } else {
+              receiptRerender({ issuesTitle: "登记失败", issues: [e.message] }, 422);
+            }
             return;
           }
           throw e;

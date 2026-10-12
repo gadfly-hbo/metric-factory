@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +36,7 @@ test("release：发布成功写快照 + index 登记八字段齐全，双指纹�
   const r = runRelease(ECOMMERCE, "1.0.0", rel, ["--note", "首个发布"]);
   expect(r.status, `stdout: ${r.stdout}\nstderr: ${r.stderr}`).toBe(0);
   expect(r.stdout).toContain("instance-ecommerce@1.0.0");
+  expect(r.stdout).toContain("（追加为第 1 条）");
 
   const snapshotPath = join(rel, "instance-ecommerce", "1.0.0.sap.yaml");
   expect(existsSync(snapshotPath)).toBe(true);
@@ -60,6 +61,35 @@ test("release：发布成功写快照 + index 登记八字段齐全，双指纹�
   expect(e.content_fingerprint).toBe(contentFingerprint(doc));
   expect(e.package_fingerprint).toBe(doc.package.fingerprint);
   expect(e.package_fingerprint).toBe(packageFingerprint(doc));
+});
+
+test("F6：release 坏模板目录 → template-invalid 保持基线格式（首个坏文件 [schema] 全量错误）+ 零写盘", () => {
+  const tplDir = mkdtempSync(join(tmpdir(), "mf-release-badtpl-"));
+  copyFileSync("templates/ecommerce-marketplace.yaml", join(tplDir, "good.yaml"));
+  writeFileSync(join(tplDir, "broken.yaml"), "broken: [ {", "utf8");
+  const rel = join(mkdtempSync(join(tmpdir(), "mf-release-tpl-")), "releases");
+
+  const r = runRelease(ECOMMERCE, "1.0.0", rel, ["-t", tplDir]);
+  expect(r.status).not.toBe(0);
+  const out = r.stdout + r.stderr;
+  // 基线格式（f525be6 逐字）：首个坏文件的【全部】zod 错误，[schema] 前缀
+  expect(out).toContain("broken.yaml");
+  expect(out).toContain("[schema]");
+  expect(existsSync(rel)).toBe(false);
+});
+
+test("F6：release --mapping 损坏（required）→ mapping-invalid + 非零退出", () => {
+  const dir = mkdtempSync(join(tmpdir(), "mf-release-badmap-"));
+  const mapping = join(dir, "broken.mapping.yaml");
+  writeFileSync(mapping, "mappings: [ { broken", "utf8");
+  const rel = join(mkdtempSync(join(tmpdir(), "mf-release-map-")), "releases");
+
+  const r = runRelease(ECOMMERCE, "1.0.0", rel, ["--mapping", mapping]);
+  expect(r.status).not.toBe(0);
+  const out = r.stdout + r.stderr;
+  expect(out).toContain("无法读取映射文件");
+  expect(out).toContain(mapping);
+  expect(existsSync(rel)).toBe(false);
 });
 
 test("G1：release 误用程序级 --version 旗标 → 只打印 CLI 版本，动作不执行零写盘", () => {

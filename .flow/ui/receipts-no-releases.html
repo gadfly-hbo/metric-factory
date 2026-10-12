@@ -1,0 +1,169 @@
+<!doctype html>
+<!--
+  metric-factory · 批次 A+B · B1「采用回执登记/对账/查看」· UI-GATE 可点击原型 · 状态 RC0 无列表态
+  · 契约源：.flow/ui-contract.md（本文件与契约 RC0 一一对应）
+  · 样式：render.css 逐字取自 src/ui/render.ts 顶部 CSS 块；零新增类
+  · 零脚本：本文件不含任何 script 标签；生产实现同为零客户端脚本
+  · 演示数据为虚构（net-sales 演绎）；net-sales-instance@1.0.0 双指纹取自仓库 releases/index.yaml 真实条目
+  · 双击即可打开（logo 走仓库内相对路径，零外部依赖）
+-->
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>我的实例 · Metric Factory</title><link rel="stylesheet" href="render.css"></head>
+<body>
+<header class="topbar">
+  <div class="brand" aria-label="JuanerAI，持续做出更好的决策；Metric Factory">
+    <span class="brand-mark"><img src="../../assets/juanerai-logo-slogan.png" alt=""></span>
+    <span class="brand-copy"><strong>JuanerAI</strong><small>持续做出更好的决策</small></span>
+    <span class="product-name">Metric Factory</span>
+  </div>
+  <div></div>
+  <div class="top-actions">
+    <span class="badge-local">本机运行 · 凭据仅存本机</span>
+    <div class="avatar" aria-label="本地用户">MF</div>
+  </div>
+</header>
+<div class="app">
+  <aside class="sidebar">
+    <nav class="nav">
+      <a href="#">工作台</a>
+      <a href="#">模板库</a>
+      <a href="#" class="active">我的实例</a>
+      <a href="#">AI 草案</a>
+      <a href="#">审核中心</a>
+      <a href="#">设置</a>
+    </nav>
+    <div class="boundary">写操作仅限本地实例、映射文件与 releases/ 发布登记<br>页面无脚本 · 纯服务端表单</div>
+  </aside>
+  <main class="main">
+    <h1 class="page-title">我的实例</h1>
+    <p class="page-desc">基模板 ecommerce-marketplace@0.1.0 · 下方可微调（口径开关/增删改）并写回，写回前经全量校验。</p>
+
+    <div class="card">
+      <div class="card-h">实例概览 · <span class="mono">examples/net-sales-instance.yaml</span></div>
+      <p>基模板 <span class="mono">ecommerce-marketplace@0.1.0</span> · 有效指标 <span class="num">56</span> 个
+        · 口径调整 1 · 字段修改 0 · 删除 0 · 新增 2
+        · <span class="chip chip-ok">无待审核</span></p>
+      <p style="margin-top:8px" class="btn-row">
+        <a class="btn" href="#">审核中心</a>
+        <a class="btn btn-primary" href="#">导出 MetricFlow YAML</a>
+        <a class="btn" href="#">导出 Excel 字典</a>
+        <a class="btn" href="#">导出 Mermaid 指标树</a>
+        <a class="btn" href="#">导出 SAP 语义包</a>
+      </p>
+      <p style="color:var(--text-3);font-size:11.5px;margin-top:8px">SAP 语义包：JuanerAI 语义资产包（YAML，含指纹与出处）</p>
+    </div>
+
+    <div class="view-title">相对模板的变更（fork diff）</div>
+    <div class="card" style="padding:0;overflow-x:auto"><table class="tbl">
+      <thead><tr><th>类型</th><th>对象</th><th>明细</th></tr></thead>
+      <tbody>
+        <tr><td>口径</td><td class="mono">gmv.include_refund</td><td>关 → <strong>开</strong></td></tr>
+        <tr><td>新增</td><td class="mono">refund_amount</td><td>退款额（manual · 已审核）</td></tr>
+        <tr><td>新增</td><td class="mono">net_sales</td><td>净销售额（manual · 已审核）</td></tr>
+      </tbody></table></div>
+
+    <div class="view-title">指标树 · 杜邦式分解（按模块分组，× ÷ 为公式算符）</div>
+    <div class="card"><div class="card-h">🎯 北极星候选</div>
+      <div class="ns-head">
+        <div class="ns-badge">成交总额 <span class="mono">gmv</span></div>
+        <div class="ns-badge">付费用户数 <span class="mono">paid_user_count</span></div>
+      </div>
+      <p style="margin-top:8px;color:var(--text-2);font-size:12px">决策指引：交易平台优先 GMV；品牌 DTC 优先复购收入</p></div>
+    <details class="module cat-scale" open>
+      <summary><span class="cat-dot"></span>规模<span class="tree-count">1 棵分解树（示例节选）</span></summary>
+      <div class="tree"><ul>
+        <li>
+          <div class="tnode tnode-root">
+            <div class="t-name">成交总额</div>
+            <div class="t-id">gmv</div>
+            <span class="t-expr" title="指标级公式">uv × cvr × aov</span>
+          </div>
+          <ul>
+            <li><div class="tnode"><div class="t-name">访客数</div><div class="t-id">uv</div></div></li>
+            <li><span class="op" data-op="×">×</span><div class="tnode"><div class="t-name">下单转化率</div><div class="t-id">cvr</div></div></li>
+            <li><span class="op" data-op="×">×</span><div class="tnode"><div class="t-name">客单价</div><div class="t-id">aov</div></div></li>
+          </ul>
+        </li>
+      </ul></div>
+    </details>
+    <details class="module" open><summary><span class="cat-dot" style="background:var(--warn)"></span>新增指标（未入树）<span class="tree-count">2 个待审/自增</span></summary>
+      <div class="loose-nodes" style="padding:12px">
+        <div class="tnode"><div class="t-name">退款额</div><div class="t-id">refund_amount</div></div>
+        <div class="tnode"><div class="t-name">净销售额</div><div class="t-id">net_sales</div><span class="t-expr" title="指标级公式">gmv - refund_amount</span></div>
+      </div></details>
+
+    <form action="/instance/patch" method="post">
+      <div class="view-title">微调实例（写回前经全量校验，失败零写盘）</div>
+      <div class="card" style="padding:0;overflow-x:auto"><table class="tbl">
+        <thead><tr><th>指标</th><th>口径开关</th><th>模板默认</th><th>取值</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">gmv</td><td class="mono">include_refund</td><td>关</td>
+            <td><label style="margin-right:10px;font-weight:400"><input type="radio" name="caliber__gmv__include_refund" value="skip"> 不变</label><label style="margin-right:10px;font-weight:400"><input type="radio" name="caliber__gmv__include_refund" value="on" checked> 覆盖为开</label><label style="margin-right:10px;font-weight:400"><input type="radio" name="caliber__gmv__include_refund" value="off"> 覆盖为关</label></td></tr>
+          <tr><td class="mono">gmv</td><td class="mono">include_shipping</td><td>关</td>
+            <td><label style="margin-right:10px;font-weight:400"><input type="radio" name="caliber__gmv__include_shipping" value="skip" checked> 不变</label><label style="margin-right:10px;font-weight:400"><input type="radio" name="caliber__gmv__include_shipping" value="on"> 覆盖为开</label><label style="margin-right:10px;font-weight:400"><input type="radio" name="caliber__gmv__include_shipping" value="off"> 覆盖为关</label></td></tr>
+        </tbody></table></div>
+      <div class="card">
+        <div class="fld"><label>删除指标（每行一个指标名，对应 removed 段）</label><textarea name="removed" placeholder=""></textarea></div>
+        <div class="fld"><label>新增指标（JSON 数组，必须含 provenance；与已有新增按名合并——移除已合入指标请用审核中心拒绝或直接编辑 YAML）</label><textarea name="added" placeholder="[]">[]</textarea></div>
+        <div class="fld"><label>修改指标（JSON 数组：name + 可选 display_name/definition/owner_role，替换 modified 段）</label><textarea name="modified" placeholder="[]">[]</textarea></div>
+        <button class="btn btn-primary" type="submit">校验并写回实例</button>
+      </div>
+    </form>
+
+    <div class="view-title">决策场景 · 分析体系</div>
+    <p class="page-desc" style="margin-bottom:10px">把「这个业务问题应该怎样分析」固化为配置：决策用途、问题树、指标角色、方法引用。场景随实例写盘并进入 SAP 语义包；写回前经全量校验，失败零写盘。</p>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border)">
+        <div class="card-h" style="margin:0">场景列表（<span class="num">2</span>）</div>
+        <a class="btn btn-primary" href="#">新建场景</a>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>场景</th><th>决策用途</th><th>指标角色</th><th>来源</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>GMV 差距诊断</strong><br><span class="mono">gmv_gap_diagnosis</span></td>
+            <td>定位月度 GMV 未达预期的主因（流量、转化、客单价哪一端拖累），决定下周资源投放与补货优先级。</td>
+            <td><span class="num">5</span> 个（outcome 1 · driver 3 · guardrail 1）</td>
+            <td><span class="chip chip-ok">模板种子</span></td>
+            <td><a class="btn" href="#">编辑</a></td>
+          </tr>
+          <tr>
+            <td><strong>净销售额复盘</strong><br><span class="mono">net_sales_review</span></td>
+            <td>月度复盘净销售额变化：区分销售额侧与退款侧的驱动，守住退款率防线，决定口径与运营动作。</td>
+            <td><span class="num">4</span> 个（outcome 1 · driver 2 · guardrail 1）</td>
+            <td><span class="chip chip-accent">实例新增</span></td>
+            <td><a class="btn" href="#">编辑</a></td>
+          </tr>
+        </tbody></table>
+    </div>
+
+    <!-- ===== 发布区块（批次 1 UI 契约冻结件原样复现；实例页第 6 块） · R1 表单默认态 ===== -->
+    <div class="view-title">发布</div>
+    <p class="page-desc" style="margin-bottom:10px">把当前实例发布为不可变快照（releases/&lt;package-id&gt;/&lt;version&gt;.sap.yaml）并追加登记 releases/index.yaml，供 JuanerAI 按精确 id@version 取得。与 CLI release 同一管线（全量校验 → export gate → SAP 装配 → 整包校验 → 内容指纹），失败零写盘。同一 id@version 不可重复发布；内容指纹与既有发布相同时发布成功并显示警告。</p>
+    <form action="/instance/release" method="post">
+      <div class="card">
+        <div class="fld"><label for="rel-version">版本号（semver 三段 X.Y.Z，必填，如 1.2.0）</label>
+          <input type="text" id="rel-version" name="version" value="" placeholder="1.0.0" required pattern="\d+\.\d+\.\d+" title="版本号须为 semver（三段数字 X.Y.Z，如 1.2.0）"></div>
+        <div class="fld"><label for="rel-note">变更说明（可空）</label>
+          <textarea id="rel-note" name="note" placeholder="本次发布包含的口径或场景变化"></textarea>
+          <p style="color:var(--text-3);font-size:11.5px">随发布登记保存（releases/index.yaml 条目的 note 字段）；发布人取环境约定（MF_REVIEWER / $USER），无需填写。</p></div>
+        <button class="btn btn-primary" type="submit">发布</button>
+      </div>
+    </form>
+
+    <!-- ===== 采用回执区块（批次 A+B · B1 新增；实例页第 7 块，发布区块之后） · RC0 无列表态（GET /instance · 工作区无 releases/ 且无回执：列表部分不渲染，表单恒渲染——PRD 决策 #7） ===== -->
+    <div class="view-title">采用回执</div>
+    <p class="page-desc" style="margin-bottom:10px">消费端完成真实任务后按契约 §6.2 格式回传采用回执；登记时对照 releases/index.yaml 对账——内容指纹一致 → 对账一致，不一致或条目不存在 → 对账不一致（记录不拒绝，失真回执也是反馈）。回执收编至 releases/receipts/（与 CLI receipt add 同一登记规则），列表按登记时间倒序展示当前包（net-sales-instance）的已登记回执。</p>
+    <form action="/instance/receipts" method="post">
+      <div class="card">
+        <div class="fld"><label for="receipt-yaml">回执 YAML（粘贴契约 §6.2 格式的采用回执，必填）</label>
+          <textarea id="receipt-yaml" name="receipt" rows="12" required placeholder="task_id: 消费端任务唯一标识&#10;package:&#10;  id: 包 id&#10;  version: 1.0.0&#10;  content_fingerprint: sha256:…&#10;  package_fingerprint: sha256:…&#10;adopted_metrics:&#10;  - name: 指标名&#10;adopted_scenarios:&#10;  - id: 场景 id&#10;issues_found:&#10;  - kind: caliber_ambiguity | missing_data | trial_issue&#10;    detail: 一句话问题描述&#10;computed_at: ISO-8601"></textarea>
+          <p style="color:var(--text-3);font-size:11.5px">回执按包全局登记，此处仅展示当前包；登记时自动对照 releases/index.yaml 对账（内容指纹一致 → 对账一致），失败零写盘。</p></div>
+        <button class="btn btn-primary" type="submit">登记回执</button>
+      </div>
+    </form>
+
+  </main>
+</div>
+<div class="statusbar"><span>Metric Factory 工作台</span><span>模板 7 个 · 当前实例 examples/net-sales-instance.yaml</span><span>本机 127.0.0.1</span></div>
+</body></html>

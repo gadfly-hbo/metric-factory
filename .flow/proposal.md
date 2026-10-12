@@ -1,67 +1,57 @@
-# 批次 1 · 发布与版本交付（工作台侧）· 方案（proposal）
+# 批次 A+B · 评审收尾与回执登记备料 · 方案（proposal）
 
-> 规格源：2026-10-12 会话定稿，用户四项裁决已确认。上游基线：metric-factory 现状评估（同日）+ 语义资产契约 v0.2（冻结面零破坏）+ PRODUCT_PLAN v0.2。本文件是后续 PRD/GRILL/ISSUES/REVIEW 的唯一规格源。
+> 规格源：2026-10-12 会话，用户裁决"做 A+B"。上游基线：批次 1 评审遗留（.flow/archive-b1-20261012/review-findings.md F3/F6）+ 消费指引 §7 回执格式（契约 v0.3 §6.2 升格正文）+ 批次 3 验收点 2 备料需求。本文件是后续 PRD/GRILL/ISSUES/REVIEW 的唯一规格源。
 
 ## 目标
 
-补齐「设计态半环」到「发布一个明确版本」的最小增量：用户在工作台建设分析体系与指标口径，发布明确版本到版本登记；为批次 2（JuanerAI 手动安装消费）提供可取得、可校验、可追溯的资产。全部零 schema 变更、零契约破坏。
+三件事：①清掉批次 1 评审遗留的两项 Low（F3 CLI 序号输出、F6 装载编排去重）；②把 adoption receipt 的**供应侧接收端**建起来（登记 + 对账 + 查看——不依赖 JuanerAI，消费端 2b 启动后直接对接）；③预发布净销售 v1.0.1 演示包（批次 3 验收点 2 备料）。
 
-## 用户裁决（2026-10-12，约束性）
+## 范围（四项）
 
-1. **消费模式**：导出 SAP 资产包 → 手动交付 → JuanerAI 安装并消费；暂不做 API/MCP 接口打通，待使用成熟后再议。
-2. **发布登记机制**：`releases/` 目录（快照文件 + index 登记，git 管理）。
-3. **退款归属期间**：用布尔开关表达（`refund_to_payment_period` 等），不改 schema。
-4. **净销售样板**：先做示例实例（`examples/`），不进行业模板；验收通过后再议是否入模板。
+### A-F3 · CLI release 输出补追加序号
 
-## 范围（三切片）
+- 成功输出的「登记」行补「追加为第 N 条」（N = `ReleaseResult.indexEntryNumber`，UI 侧已展示，CLI 缺）
+- e2e 断言补齐
 
-### 切片 1 · 版本与发布机制
+### A-F6 · 模板/映射装载编排去重
 
-- **新增 CLI `release` 命令**：`release <instance> --version <semver> [--note <text>]`
-- 管线复用现有 SAP 导出（loadInstance → materialize → validateInstance → export gate → assembleSap → validateSapPackage），不开第二套规则
-- 产出：`releases/<package-id>/<version>.sap.yaml` + 登记 `releases/index.yaml`
-- 登记条目字段：id、version、content_fingerprint、package_fingerprint、created_at、released_by（`MF_REVIEWER`/`$USER`/unknown 约定）、note、文件相对路径
-- **内容指纹**：规范化序列化后置空 `package.fingerprint`、`package.created_at`、`review.exported_at` 三键再取 SHA-256；同内容必同指纹（已实证这三处是重导出唯一差异源）；指纹只活在登记侧，SAP 包格式不动（**G10 修订 2026-10-12，用户批准**：现为置空五键——另含 `package.version` 与 `package.namespace`；`package.id` 与 `generator` 保留。理由与现行语义见 `.flow/prd.md` 决策 #4）
-- **不变量（fail-closed）**：
-  - 同 `id@version` 已存在 → 拒绝（不可变，即使内容相同）
-  - 内容指纹与已有版本相同 → 允许但警告（无业务变化的无意义版本递增）
-  - 发布动作本身不加审批（LLM 未审阻断门保留，是质量门）
-- `export --format sap` 加可选 `--version`（缺省 0.1.0，不破坏既有测试与 golden artifact 再生成）
-- UI 实例页发布入口（版本号 + 变更说明表单 → 服务端同一管线）；这是对工作台写白名单的一次显式扩展（现状仅实例/草案/.env.local，需加 releases/），同步更新使用指南边界声明
+- `src/engine/loader.ts` 增共享 `loadTemplatesFromDir(dir)`（扫描 + loadTemplate + 格式化错误，抛错变体）；`src/cli/index.ts` discoverTemplates 与 `src/sap/release.ts` findBaseTemplate 改为薄包装（各自保留错误策略：cli 打印退出 / release 转 ReleaseError）
+- 映射装载共享核移入 `src/engine/io.ts`（`defaultMappingPath` + 解析校验核心，result 风格）；cli loadMapping 与 release loadMappingForRelease 改薄包装
+- `src/ui/server.ts` 既有拷贝**本批不动**（记录后续合并）
+- 全量测试零回归（cli/server/release 行为不变）
 
-### 切片 2 · 净销售样板资产
+### B1 · adoption receipt 供应侧登记/对账/查看
 
-- `examples/net-sales-instance.yaml`（fork `ecommerce-marketplace@0.1.0`）：
-  - 新增 `refund_amount`（退款额；`refund_to_payment_period: true` 默认归属支付期间；`include_pending_refund: false`）
-  - 新增 `net_sales`（净销售额；derived，expr 引用 gmv 与 refund_amount；实例口径设 `gmv.include_refund: true` 含退款 GMV——勾稽教学点：gmv 默认剔除退款，不翻开关会双重扣减）
-  - 新增场景 `net_sales_review`：问题树（净销售额变化 ← 销售额侧/退款侧）；角色 net_sales=outcome、gmv/refund_amount=driver、refund_rate=guardrail；method_refs 保持引用标识
-- 不带 bindings（映射建议属具体任务，不进通用样板）
-- 同步产出该实例的 v1.0.0 发布，作为 releases/ 首个真实条目
+- **回执格式**：契约 v0.3 §6.2 已冻结（task_id / package 四件 / adopted_metrics / adopted_scenarios / issues_found[kind 三枚举] / computed_at），zod schema 落地
+- **登记**：回执文件放入约定目录（目录定名 GRILL 裁决，候选 `releases/receipts/`），CLI `receipt <file>` 校验后收编为 `<task_id>.receipt.yaml`；schema 违规拒绝零写盘；同 task_id 重复登记拒绝
+- **对账**：登记时对照 `releases/index.yaml`——package@version 存在且 content_fingerprint 一致 → 状态「对账一致」；不一致或包不在登记 → 状态「对账不一致」（**记录不拒绝**——失真回执也是反馈）
+- **查看**：CLI `receipt list`（列表：task/包/状态/issue 数）；UI 实例页新增回执区块（本包回执列表 + 对账状态徽标；登记入口 = 粘贴 YAML 表单，零 JS 服务端校验，失败保留值逐行报错）
+- 指纹对账用 G10 五键算法（既有 `contentFingerprint`）
 
-### 切片 3 · 消费指引文档 + 回执格式
+### B2 · 净销售 v1.0.1 演示包预发布
 
-- `docs/sap-consumption-guide.md`：取得（精确版本、禁 latest）、校验步骤（移植 `src/sap/validate.ts` 需补 LLM 未审规则）、字段消费语义（开关如何影响计算、question_tree 是参考骨架非执行路径、bindings 是设计态草案、任务 Binding 为准、聚合与比例重算规则）、版本与不可变规则、内容指纹对账方法
-- adoption receipt 格式定义（文档冻结；工作台侧登记命令放批次 2）：task_id / package（id@version + 双指纹）/ adopted_metrics[] / adopted_scenarios[] / issues_found[] / computed_at
+- 翻转 `refund_amount.refund_to_payment_period`（true → false，归属退款完成期间），发布 v1.0.1（note 说明演示用途）
+- 不变量自证：v1.0.0 快照字节不变、内容指纹不同、无同内容警告、index append-only
+- 消费指引 §6 补一句 v1.0.1 已发布（供批次 3 验收点 2 直接使用）
 
-## 验收标准（批次 1 完成定义）
+## 验收标准
 
-1. 净销售实例经 CLI 与 UI 各发布一次 v1.0.0，index 登记完整、双指纹可对账
-2. 同内容重导出 → 内容指纹不变；翻一个口径开关发布 v1.0.1 → 内容指纹变化，v1.0.0 快照文件字节不变
-3. 同 id@version 重复发布被拒绝（有测试覆盖）
-4. `validate` / `diff` / SAP 导出对样板全通过（场景引用完整）
-5. 现有全量测试与契约测试不回归
+1. `release` CLI 输出含「追加为第 N 条」（e2e）
+2. F6 重构后全量门零回归；cli/release 的错误行为逐条不变（有既有测试背书）
+3. receipt：合法回执登记成功（文件收编 + 状态「对账一致」）；schema 违规拒绝零写盘；重复 task_id 拒绝；对账不一致 → 记录 + 状态徽标；`receipt list` 可见
+4. UI 回执区块：列表/状态徽标/粘贴登记成功与失败（保留值 + 逐行错误）均有测试；术语与契约 v0.3 §6.2 一致
+5. v1.0.1 发布后：index 两条目、内容指纹不同、v1.0.0 字节不变
+6. 全量门（lint + typecheck + test + contract-test）不回归
 
 ## 显式不做（非目标）
 
-- 不改 MetricSchema/InstanceSchema/SAP 包结构；不动契约 v0.2 冻结面
-- 不做 API/MCP 消费接口、不做谱系 ID 机制、不做审批流
-- 不做批次 2（JuanerAI 侧安装/采用/回执实现、契约 v0.3 修订）与批次 3（净销售端到端验收）
-- 不做：结构化方法对象、假设库、enum 开关、维度字典、executable 状态、场景 removed/modified patch、本体对接
-- 版本登记不做服务化、不做注册表
+- 消费端（JuanerAI 侧）安装/采用实现——批次 2b 等通知
+- receipt 自动接收/网络回传——文件交付手工模式
+- server.ts 既有装载拷贝合并（记录，后续批次）
+- 假设库/策略库/结构化方法对象/enum 开关/维度字典/谱系 ID/场景 patch 段/executable 状态——维持后置裁决
+- 发布历史列表 UI（批次 1 负面清单 N5 维持）
 
-## 背景依据（现状评估结论，2026-10-12）
+## 背景依据
 
-- `package.version` 恒 "0.1.0"，CLI/UI 无版本输入（`src/cli/index.ts` export 段、`src/export/sap.ts`）
-- 时间戳计入指纹：同实例两次导出唯一差异为 created_at/exported_at/fingerprint 三行，指纹必不同（实证）
-- 无发布登记/版本清单/不可变发布管理；无采用回执机制
-- JuanerAI 全仓无 SAP 消费代码（实证，`~/JuanerAI`）；契约所称消费方基线（Blueprint v4.2/A-02/N04）与本机快照不符，列为批次 2 前的待核对依赖，不阻塞本批次
+- 批次 1 REVIEW#1 发现 #3/#4（F3/F6，记录未动）；用户 2026-10-12 裁决"做 A+B"
+- 契约 v0.3 §6.2 回执格式已冻结；批次 3 验收点 2 需要 v1.0.1 演示包
