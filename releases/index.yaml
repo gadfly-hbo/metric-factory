@@ -1,0 +1,9 @@
+releases:
+  - package: net-sales-instance
+    version: 1.0.0
+    content_fingerprint: sha256:f8a9d88e7c854b4b5d1ff1f7eda2fa9270e03f4e8207ba5e62225b040e0860f4
+    package_fingerprint: sha256:6330f6b0a0a4823d6d3ebc9bb046bad651ddf1f2cf0d99cac7fb7e02e890f284
+    created_at: 2026-10-12T03:49:25.064Z
+    released_by: huangbo
+    note: 净销售样板首个发布：销售额/退款额/净销售额与退款归属期间口径
+    file: net-sales-instance/1.0.0.sap.yaml

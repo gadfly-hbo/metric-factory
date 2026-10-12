@@ -1,6 +1,6 @@
 import { test, expect } from "vitest";
 import { parse } from "yaml";
-import { canonicalize, fingerprint, packageFingerprint } from "../../src/sap/canonical.js";
+import { canonicalize, fingerprint, packageFingerprint, contentFingerprint } from "../../src/sap/canonical.js";
 
 // golden vectors 期望值按 PRD「规范化序列化」段 + GRILL Q4 规则手工推导，不来自实现输出
 
@@ -194,4 +194,46 @@ test("指纹自引用: fingerprint 字段外任意内容改动哈希必变，仅
   expect(packageFingerprint(changedContent)).not.toBe(fp);
   const changedField = makePkg({ package: { ...base.package, fingerprint: "sha256:deadbeef" } });
   expect(packageFingerprint(changedField)).toBe(fp);
+});
+
+// 内容指纹（G10 五键：置空 fingerprint/created_at/exported_at/version/namespace；id 与 generator 保留）
+// 期望值按 PRD 决策 #4（G10 修订）行为推导：内容指纹 = 纯业务内容的对账键
+
+test("内容指纹: 仅导出时间戳不同的两次装配 → 内容指纹相同（packageFingerprint 不同）", () => {
+  const a = makePkg();
+  const b = makePkg({
+    package: { ...makePkg().package, created_at: "2026-10-12T09:00:00.000Z" },
+    review: { gate: "metric-factory-export-gate", exported_at: "2026-10-12T09:00:00.000Z", unreviewed: [] }
+  });
+  expect(a.package.created_at).not.toBe(b.package.created_at);
+  expect(packageFingerprint(a)).not.toBe(packageFingerprint(b));
+  expect(contentFingerprint(a)).toBe(contentFingerprint(b));
+});
+
+test("内容指纹: 版本递增但业务内容零变化 → 内容指纹不变（G10：否则同内容警告为死代码）", () => {
+  const v1 = makePkg();
+  const v2 = makePkg({ package: { ...makePkg().package, version: "1.0.1" } });
+  expect(v1.package.version).not.toBe(v2.package.version);
+  expect(packageFingerprint(v1)).not.toBe(packageFingerprint(v2));
+  expect(contentFingerprint(v1)).toBe(contentFingerprint(v2));
+});
+
+test("内容指纹: namespace 变化（随 id 派生）不影响内容指纹", () => {
+  const a = makePkg();
+  const b = makePkg({ package: { ...makePkg().package, version: "1.0.1", namespace: "mf.other" } });
+  expect(contentFingerprint(a)).toBe(contentFingerprint(b));
+});
+
+test("内容指纹: generator（工具构建）变化 → 内容指纹必变（红队 R1：工具来源属内容）", () => {
+  const a = makePkg();
+  const b = makePkg({ package: { ...makePkg().package, generator: "metric-factory@0.1.0+def456" } });
+  expect(contentFingerprint(a)).not.toBe(contentFingerprint(b));
+});
+
+test("内容指纹: 资产 id 变化 → 内容指纹必变（id 保留为身份）；业务内容变化必变", () => {
+  const a = makePkg();
+  const renamed = makePkg({ package: { ...makePkg().package, id: "renamed-shop" } });
+  expect(contentFingerprint(a)).not.toBe(contentFingerprint(renamed));
+  const changed = makePkg({ metrics: [{ name: "mrr" }] });
+  expect(contentFingerprint(a)).not.toBe(contentFingerprint(changed));
 });

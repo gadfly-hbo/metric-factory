@@ -1,97 +1,63 @@
-# v5 分析体系编辑器 · 任务拆解（tracer-bullet 垂直切片）
+# 批次 1 · 任务切片（tracer-bullet 纵切；自批准，砍线 ≤6）
 
-> 来源：`.flow/prd.md`（含 GRILL 决议 + UI-GATE D1–D4）。自批准（dev-flow 规则），理由记入 state.json。红队砍线：>6 切片即砍（未触发：5 切片）。
+- [x] 1. 内容指纹 + `release` 命令全链（CLI 纵切）
+- [x] 2. `export --package-version` 显式版本旗标
+- [x] 3. UI 发布区块（七状态 + 服务端同一管线 + 写白名单扩展）
+- [x] 4. 净销售样板资产 + v1.0.0 发布入库
+- [x] 5. 消费指引文档 + adoption receipt 格式 + 使用指南边界更新
 
-- [x] 0. ScenarioSpec schema + 校验规则（lint/validate 镜像）
-- [x] 1. 数据接入：模板种子（ecommerce+apparel）+ added_scenarios + materialize 收集 + diff 计数
-- [x] 2. SAP scenarios 段：schema 收紧 + 装配 + 校验镜像
-- [x] 3. CLI e2e：坏场景拒绝 / diff 计数 / SAP 导出含场景
-- [x] 4. UI 场景区块：路由 + 卡片 + DSL 解析 + 422 同页重渲染 + e2e
+## 1. 内容指纹 + release 命令全链
 
----
+**What to build**：`release <instance> <version>` CLI 命令（版本为位置参数，G1）：复用既有 SAP 导出全链（load → materialize → 全量校验 → export gate → 装配 → 整包校验），通过后计算**内容指纹**（规范化序列化置空五键（G10）：`package.fingerprint`/`package.created_at`/`review.exported_at`/`package.version`/`package.namespace`后 SHA-256；generator 不置空，红队 R1），写 `releases/<package-id>/<version>.sap.yaml` 快照 + `releases/index.yaml` append-only 数组条目（package/version/content_fingerprint/package_fingerprint/created_at/released_by/note/file 八字段）。不变量：同 id@version 已存在 → 拒绝（错误含「已发布于 <时间>，请升级版本号」）；index 存在但损坏 → 拒绝发布不静默重建（G3）；内容指纹与既有条目相同 → 允许但警告（G5，输出含既有 package@version 对照）；路径仅由 slug 化 id + semver version 构造，非法写盘前拒绝（R3）。`--note` 可选；`--out` 覆盖 releases 基目录（默认 cwd 相对 `releases/`）。
 
-## 0. ScenarioSpec schema + 校验规则
+**Acceptance criteria**：
+- [x] `release examples/... --version` 无效语法被 commander 拒绝；`release <inst> 1.0.0` 全链成功，快照与 index 落盘
+- [x] 单测：内容指纹置空五键（G10）；同构建重导出稳定；`MF_GIT_SHA` 变化 → 指纹变化且唯一差异为 generator
+- [x] e2e：重复 id@version 拒绝（含指引文案）；损坏 index 拒绝；非法 version（含路径分隔符）拒绝且零写盘；同内容指纹警告后继续
+- [x] index 为 append-only：二次发布不改写既有行
 
-### What to build
+**Blocked by**: None
 
-`src/schema/scenario.ts`：ScenarioSchema（PRD 冻结结构：id/version/title/decision_purpose/question_tree/metric_usages/method_refs/evidence_requirements/output_spec/review_rules；role 枚举 outcome|driver|guardrail）。TemplateSchema += `scenarios`（默认 []）；InstanceSchema += `added_scenarios`（默认 []）。lint 模板镜像规则（scenario-purpose/tree-ref/metric-ref/id）与 validateInstance 实例镜像规则（同套 + added 与模板种子联合唯一）。端到端：YAML 手写场景 → schema/lint/validate 过或拒。
+## 2. export --package-version 显式版本旗标
 
-### Acceptance criteria
+**What to build**：`export --format sap --package-version <semver>` 可选旗标（缺省 0.1.0，不写登记——G2）；装配器 version 参数贯通；`createSapExporter` 与 UI 下载路径行为不变。golden artifact（examples/ecommerce-instance.sap.yaml）字节不受影响（再生成 = 0.1.0）。
 
-- [ ] unit 正/负 fixtures：无 decision_purpose、parent 悬空/成环/自指、metric 引用不存在（模板指标/物化指标两语境）、场景 id 重复、role 非法——每类一条
-- [ ] 两步回归：先 203 基线原样绿再动手
-- [ ] 7 模板 lint 零 error（模板无种子时默认空合法）
+**Acceptance criteria**：
+- [x] e2e：`export --format sap --package-version 2.0.0` 产物 `package.version == "2.0.0"`
+- [x] 缺省导出与既有测试/golden artifact 零回归
+- [x] `--package-version abc` 被 semver 校验拒绝
 
-### Blocked by
+**Blocked by**: None（与 1 并行可做；release 管线不依赖本条）
 
-None
+## 3. UI 发布区块
 
----
+**What to build**：实例页第 6 块「发布」（UI 契约 R1–R7，`.flow/ui-contract.md` 冻结）：表单（版本号 required pattern semver + 变更说明 textarea）POST `/instance/release` → 服务端复用 release 管线（与 CLI 同函数，零第二套规则）；成功/警告 200 重渲染（快照路径+index 位置+双指纹；警告条含既有对照），各类失败 422 同页重渲染 + 值保留 + 逐行错误；侧栏边界声明更新为含 releases/（D3）；写白名单显式扩展 releases/。零 JS、服务端校验权威。
 
-## 1. 数据接入 + 种子 + diff
+**Acceptance criteria**：
+- [x] UI e2e（真实 server + fetch，先例 test/ui/sap-download.test.ts）：R1 表单渲染、发布成功写盘+index 追加、重复版本 422 回显、非法 semver 422、实例校验失败零写盘、index 损坏 422
+- [x] 原型七状态与实现输出一一对应（术语逐字一致）
+- [x] 工作台写白名单外路径零写入（负面测试）
 
-### What to build
+**Blocked by**: 1（服务端复用 release 管线函数）
 
-模板种子：ecommerce-marketplace（GMV 差距诊断）与 apparel-brand-retail（月度经营复盘）各 1 个场景（GRILL Q4 验收线：用途 ≥15 字、树 ≥3 节点、usages ≥3 且含 outcome；引用各自模板真实指标）。materialize 收集（模板种子 ∪ added，同 id 实例覆盖）→ MaterializedInstance.scenarios。diff 输出「scenarios: +N（added）」计数行。
+## 4. 净销售样板资产 + v1.0.0 发布入库
 
-### Acceptance criteria
+**What to build**：`examples/net-sales-instance.yaml`（fork ecommerce-marketplace@0.1.0）：added `refund_amount`（`refund_to_payment_period: true`、`include_pending_refund: false`）与 `net_sales`（derived，expr `gmv - refund_amount`，definition 写明 gmv 含退款前提）；实例口径 `gmv.include_refund: true`；added_scenarios `net_sales_review`（问题树 净销售额变化←销售额侧/退款侧；角色 net_sales=outcome、gmv/refund_amount=driver、refund_rate=guardrail；method_refs 引用标识）。不带 bindings。经 CLI 发布 v1.0.0，快照 + index 条目随 SHIP 入库（G9）。
 
-- [ ] 种子过全部校验规则；两模板 lint 保持零 error
-- [ ] materialize 覆盖语义有单测（同 id 实例 added 覆盖模板种子）
-- [ ] diff --json 含 scenarios 计数字段；文本输出含计数行
+**Acceptance criteria**：
+- [x] `validate` / `diff` / `export --format sap` 对样板全通过（场景引用完整）
+- [x] `releases/net-sales-instance/1.0.0.sap.yaml` + index 条目真实存在、双指纹可对账
+- [x] 样板 definition 含「gmv 含退款」前提文字（红队 R4）
 
-### Blocked by
+**Blocked by**: 1
 
-- #0
+## 5. 消费指引文档 + receipt 格式 + 边界更新
 
----
+**What to build**：`docs/sap-consumption-guide.md`：取得（精确 id@version、禁 latest、从 releases/ 取）、校验（结构/双指纹/重复身份/未审 LLM；移植供应侧校验器需补 LLM 未审规则）、字段消费语义（caliber_switches 改变计算、type_params 公式、aggregation 与比例重算、bindings=设计态草案、任务 Binding 为准、question_tree=参考骨架非执行路径）、版本不可变与内容指纹对账（含 generator 漂移语义，红队 R1）、净销售样板勾稽示例。adoption receipt 格式冻结（task_id/package 双指纹/adopted_metrics/adopted_scenarios/issues_found[kind: caliber_ambiguity|missing_data|trial_issue]/computed_at）。`docs/工作台使用指南.md` 发布区块章节 + 边界声明同步。
 
-## 2. SAP scenarios 段
+**Acceptance criteria**：
+- [x] 指引覆盖 PRD Implementation Decisions #10/#11 全部语义点，术语与 UI 契约 T 表一致
+- [x] receipt 格式含 kind 枚举与双指纹
+- [x] 使用指南含发布流程与边界声明新文案
 
-### What to build
-
-SapPackageSchema.scenarios 从 `z.array(z.unknown())` 收紧为 ScenarioSchema 数组；assembleSap 从 materialized.scenarios 收集进包；validateSapPackage 对应规则随收紧自然生效（结构/引用一致性）。契约预留条款兑现：scenarios 转正式段。
-
-### Acceptance criteria
-
-- [ ] unit：含场景实例 → 包内 scenarios 结构断言；坏场景包 → structure 拒绝
-- [ ] 指纹/去重等既有断言零回归
-
-### Blocked by
-
-- #1
-
----
-
-## 3. CLI e2e
-
-### What to build
-
-test/cli 新 e2e：构造带 added_scenarios 的实例——validate 通过并 diff 显示计数；坏场景（悬空指标引用）validate 非零拒绝；export --format sap 产物含 scenarios 段且过校验器。
-
-### Acceptance criteria
-
-- [ ] 三条 e2e（正/负/SAP 含场景）全绿
-- [ ] 既有 CLI e2e 零改动
-
-### Blocked by
-
-- #2
-
----
-
-## 4. UI 场景区块
-
-### What to build
-
-按 `.flow/ui-contract.md`（冻结契约）：实例页场景卡片（列表+来源 chip 三态）、新建/编辑表单（id 创建可填编辑只读 = D1；DSL `id|label|parent|metric` / `metric|role|note` 服务端解析）、POST 走引擎 validate 全过写回（同页重渲染+值保留 = D4，错误逐条 `[rule] path: message` 含 DSL 行号）；无删除入口（D3）；种子编辑保存为实例覆盖（D2）。零客户端脚本。
-
-### Acceptance criteria
-
-- [ ] UI e2e（真实 server+fetch）：列表渲染含来源 chip；合法表单写回后实例文件含场景且 CLI validate 可见；坏 DSL → 422 同页回显行号 + 实例文件零变化
-- [ ] 术语与 ui-contract §4 逐字一致；既有 test/ui 零回归
-- [ ] 禁 JS 语义：表单原生 action 提交可达
-
-### Blocked by
-
-- #1（物化收集；与 #2/#3 顺序执行）
+**Blocked by**: 4（指引引用真实发布物）

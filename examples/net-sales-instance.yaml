@@ -1,0 +1,96 @@
+# Metric Factory 企业实例（fork 自 ecommerce-marketplace@0.1.0）
+# 净销售样板（批次 1）：销售额 / 退款额 / 净销售额 / 退款归属期间。
+# 前提勾稽：本实例 gmv.include_refund 必须为开（含退款 GMV），net_sales = gmv - refund_amount 才成立；
+# 若把该开关关掉（模板默认剔除退款），同一公式会双重扣减退款。
+# 微调方式：编辑 caliber_switches / added / removed / modified，用 validate 校验、diff 查看变更
+instance:
+  created_at: "2026-10-12T00:00:00.000Z"
+  company: 净销售样板公司
+base: ecommerce-marketplace@0.1.0
+answers:
+  revenue_model: 交易抽佣
+  user_structure: 双边市场
+  core_loop: 交易
+  caliber:
+    gmv:
+      include_refund: true
+caliber_switches:
+  gmv:
+    include_refund: true
+removed: []
+modified: []
+added:
+  - name: refund_amount
+    display_name: 退款额
+    type: simple
+    definition: 统计周期内退款成功的订单金额合计。退款归属期间由开关 refund_to_payment_period 决定：开（默认）= 归属支付期间，与当期 GMV 同期对账；关 = 归属退款完成期间。include_pending_refund 控制是否含退款中订单（默认不含）。
+    dimensions: [channel, category, region, user_tier]
+    time_grains: [day, week, month]
+    owner_role: 电商业务负责人
+    caliber_switches:
+      refund_to_payment_period: true
+      include_pending_refund: false
+    caliber_type:
+      - refund_adjustment
+      - measurement_anchor
+    provenance:
+      origin: manual
+      note: 净销售样板（批次 1）：退款归属期间用布尔开关表达，沿用「开关即证据」SOP
+    review:
+      required: false
+  - name: net_sales
+    display_name: 净销售额
+    type: derived
+    definition: 统计周期内净销售额 = 含退款的成交总额（gmv，include_refund=true 口径）− 退款额（refund_amount）。前提：本实例 gmv.include_refund 必须为开，否则公式会双重扣减退款。退款归属期间与 refund_amount 一致（由 refund_to_payment_period 决定），保证分子分母同期。
+    dimensions: [channel, category, region, user_tier]
+    time_grains: [day, week, month]
+    owner_role: 电商业务负责人
+    caliber_switches: {}
+    type_params:
+      expr: "gmv - refund_amount"
+    caliber_type:
+      - refund_adjustment
+    provenance:
+      origin: manual
+      note: 净销售样板（批次 1）：口径勾稽依赖 gmv.include_refund=true
+    review:
+      required: false
+added_scenarios:
+  - id: net_sales_review
+    version: 0.1.0
+    title: 净销售额复盘
+    decision_purpose: 定位净销售额变化的销售侧与退款侧来源，决定促销售与退款治理之间的资源分配
+    question_tree:
+      - id: net_sales_root
+        label: 净销售额变化多大
+        metric: net_sales
+      - id: sales_side
+        label: 销售额侧贡献多少
+        parent: net_sales_root
+        metric: gmv
+      - id: refund_side
+        label: 退款拖累多少
+        parent: net_sales_root
+        metric: refund_amount
+      - id: refund_rate_check
+        label: 退款率是否异常
+        parent: refund_side
+        metric: refund_rate
+    metric_usages:
+      - metric: net_sales
+        role: outcome
+        note: 复盘的量化对象
+      - metric: gmv
+        role: driver
+        note: 销售侧第一层拆解（含退款口径，与 net_sales 公式一致）
+      - metric: refund_amount
+        role: driver
+        note: 退款侧拖累量，口径随 refund_to_payment_period 开关
+      - metric: refund_rate
+        role: guardrail
+        note: 退款治理动作不得只压退款率而牺牲净销售额
+    method_refs:
+      - "dame.m2.driver_decomposition@1.0.0"
+    evidence_requirements: 近 13 周周粒度 net_sales/gmv/refund_amount 序列与退款记录（退款记录须同时含支付时间与退款完成时间，支撑归属期间口径）
+    output_spec: 一页净销售额归因结论 + 销售侧/退款侧行动清单
+    review_rules: 业务负责人确认退款归属期间口径（refund_to_payment_period 取值）后定稿

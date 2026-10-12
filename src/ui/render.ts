@@ -184,7 +184,7 @@ export function layout(active: NavKey, title: string, desc: string, content: str
 <div class="app">
   <aside class="sidebar">
     <nav class="nav">${nav}</nav>
-    <div class="boundary">写操作仅限本地实例与映射文件<br>页面无脚本 · 纯服务端表单</div>
+    <div class="boundary">写操作仅限本地实例、映射文件与 releases/ 发布登记<br>页面无脚本 · 纯服务端表单</div>
   </aside>
   <main class="main">
     <h1 class="page-title">${escapeHtml(title)}</h1>
@@ -245,7 +245,96 @@ import type { Scenario } from "../schema/scenario.js";
 import { findPendingReview } from "../engine/review.js";
 import { scenarioTreeToDsl, scenarioUsagesToDsl } from "./dsl.js";
 
-export function instancePage(materialized: MaterializedInstance, instance: Instance, instancePath: string, base: Template): string {
+// ===== 发布区块（批次 1 切片 3；.flow/ui-contract.md R1–R7 冻结件）=====
+
+export interface ReleaseUiValues {
+  version: string;
+  note: string;
+}
+
+export interface ReleaseUiResult {
+  packageId: string;
+  version: string;
+  contentFingerprint: string;
+  packageFingerprint: string;
+  indexEntryNumber: number;
+}
+
+export interface ReleaseUiState {
+  kind: "form" | "success" | "warning" | "invalid" | "duplicate" | "index-corrupt" | "validation-failed";
+  values: ReleaseUiValues;
+  result?: ReleaseUiResult;
+  warning?: { package: string; version: string };
+  /** R4/R7：区块级错误行（[rule] path: message 或 T-15 单条） */
+  issues?: string[];
+  /** R5/R6：版本号字段内联错误（T-13/T-14） */
+  versionError?: string;
+}
+
+export function releaseBlock(state: ReleaseUiState): string {
+  const v = state.values;
+  const valuesEscaped = escapeHtml(v.version);
+  const noteEscaped = escapeHtml(v.note);
+
+  // 状态卡：警告条（R3）→ 结果卡（R2/R3）→ 错误卡（R4/R7）
+  let banner = "";
+  if (state.kind === "warning" && state.warning) {
+    banner += `<div class="card" style="border-color:var(--warn-line);background:var(--warn-soft)">
+      <div class="card-h" style="color:var(--warn)">警告 · 内容指纹与既有发布相同</div>
+      <p>本次发布的内容指纹与既有发布 ${escapeHtml(state.warning.package)}@${escapeHtml(state.warning.version)} 相同（无业务变化的版本递增）；发布已生效。</p>
+    </div>`;
+  }
+  if (state.result) {
+    const r = state.result;
+    banner += `<div class="card">
+      <div class="card-h" style="color:var(--ok)">发布成功 · ${escapeHtml(r.packageId)}@${escapeHtml(r.version)}</div>
+      <p>快照 <span class="mono" style="overflow-wrap:anywhere">releases/${escapeHtml(r.packageId)}/${escapeHtml(r.version)}.sap.yaml</span></p>
+      <p>登记 <span class="mono">releases/index.yaml · 追加为第 ${r.indexEntryNumber} 条（append-only）</span></p>
+      <p>内容指纹 <span class="mono" style="overflow-wrap:anywhere">${escapeHtml(r.contentFingerprint)}</span></p>
+      <p>package_fingerprint <span class="mono" style="overflow-wrap:anywhere">${escapeHtml(r.packageFingerprint)}</span></p>
+    </div>`;
+  }
+  if (state.kind === "index-corrupt") {
+    banner += `<div class="card">
+      <div class="card-h" style="color:var(--fail)">发布被拒绝 · releases/index.yaml 不可用</div>
+      <ul id="release-issues" class="error-list" role="alert">${(state.issues ?? []).map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>
+    </div>`;
+  }
+  if (state.kind === "validation-failed") {
+    banner += `<div class="card">
+      <div class="card-h" style="color:var(--fail)">发布未通过校验（零写盘）</div>
+      <ul id="release-issues" class="error-list" role="alert">${(state.issues ?? []).map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>
+    </div>`;
+  }
+
+  // 字段级内联错误（R5/R6）与 aria 关联（§3.2：错误两级呈现）
+  const inline = state.versionError
+    ? `<p id="release-version-error" role="alert" style="color:var(--fail);font-size:0.86rem;margin:4px 0 0">${escapeHtml(state.versionError)}</p>`
+    : "";
+  const aria =
+    (state.versionError ? ' aria-invalid="true" aria-describedby="release-version-error"'
+      : state.issues && state.issues.length > 0 ? ' aria-describedby="release-issues"' : "");
+
+  const form = `<form action="/instance/release" method="post">
+    <div class="card">
+      <div class="fld"><label for="rel-version">版本号（semver 三段 X.Y.Z，必填，如 1.2.0）</label>
+        <input id="rel-version" name="version" type="text" required pattern="\\d+\\.\\d+\\.\\d+" title="版本号须为 semver（三段数字 X.Y.Z，如 1.2.0）" placeholder="1.0.0" value="${valuesEscaped}"${aria}>
+        ${inline}
+      </div>
+      <div class="fld"><label for="rel-note">变更说明（可空）</label>
+        <textarea id="rel-note" name="note" placeholder="本次发布包含的口径或场景变化">${noteEscaped}</textarea>
+        <p style="color:var(--text-3);font-size:11.5px;margin:4px 0 0">随发布登记保存（releases/index.yaml 条目的 note 字段）；发布人取环境约定（MF_REVIEWER / $USER），无需填写。</p>
+      </div>
+      <button class="btn btn-primary" type="submit">发布</button>
+    </div>
+  </form>`;
+
+  return `<div class="view-title">发布</div>
+  <p class="page-desc">把当前实例发布为不可变快照（releases/&lt;package-id&gt;/&lt;version&gt;.sap.yaml）并追加登记 releases/index.yaml，供 JuanerAI 按精确 id@version 取得。与 CLI release 同一管线（全量校验 → export gate → SAP 装配 → 整包校验 → 内容指纹），失败零写盘。同一 id@version 不可重复发布；内容指纹与既有发布相同时发布成功并显示警告。</p>
+  ${banner}${form}`;
+}
+
+export function instancePage(materialized: MaterializedInstance, instance: Instance, instancePath: string, base: Template, release: ReleaseUiState = { kind: "form", values: { version: "", note: "" } }): string {
   const pending = findPendingReview(instance.added);
   const d = materialized.diff;
 
@@ -323,7 +412,7 @@ export function instancePage(materialized: MaterializedInstance, instance: Insta
     </div>
   </form>`;
 
-  return `${summary}${diffBlock}<div class="view-title">指标树 · 杜邦式分解（按模块分组，× ÷ 为公式算符）</div>${trees}${form}${scenariosBlock(materialized, instance, base)}`;
+  return `${summary}${diffBlock}<div class="view-title">指标树 · 杜邦式分解（按模块分组，× ÷ 为公式算符）</div>${trees}${form}${scenariosBlock(materialized, instance, base)}${releaseBlock(release)}`;
 }
 
 // ===== 决策场景区块（v5 切片 4；.flow/ui-contract.md 冻结件）=====

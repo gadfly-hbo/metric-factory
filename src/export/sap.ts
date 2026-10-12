@@ -73,6 +73,8 @@ export interface SapExporterOptions {
   packageId: string;
   /** 实例级 concept_refs（随包传递，装配内与指标 statistic_object 并集去重） */
   instanceConceptRefs?: ConceptRef[];
+  /** 包版本（semver；缺省 0.1.0。发布走 release 命令，export 不登记——G2） */
+  version?: string;
 }
 
 export function createSapExporter(opts: SapExporterOptions): Exporter {
@@ -83,6 +85,7 @@ export function createSapExporter(opts: SapExporterOptions): Exporter {
 
       const pkg = assembleSap(input, opts.template, {
         packageId: opts.packageId,
+        version: opts.version,
         createdAt: new Date().toISOString(),
         generator: buildGenerator(),
         bindings: input.mapping ?? [],

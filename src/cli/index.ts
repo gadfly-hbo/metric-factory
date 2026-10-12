@@ -32,6 +32,8 @@ import { metricflowExporter } from "../export/metricflow.js";
 import { excelExporter } from "../export/excel.js";
 import { mermaidExporter } from "../export/mermaid.js";
 import { createSapExporter, SapExportValidationError, packageIdFromInstancePath } from "../export/sap.js";
+import { releaseInstance } from "../sap/release.js";
+import { ReleaseError } from "../sap/release.js";
 import { SapAssemblyError } from "../sap/assemble.js";
 import { ExportBlockedError } from "../export/gate.js";
 import type { Exporter } from "../export/types.js";
@@ -895,7 +897,8 @@ program
   .option("-t, --templates <dir>", "行业模板目录（用于解析实例的基模板）", defaultTemplatesDir())
   .option("-o, --out <dir>", "导出输出目录", ".")
   .option("--mapping <path>", "映射文件路径（默认自动发现 <实例名>.mapping.yaml）")
-  .action(async (instancePath: string, opts: { format: string; templates: string; out: string; mapping?: string }) => {
+  .option("--package-version <ver>", "SAP 包版本（semver，仅 --format sap；缺省 0.1.0。发布登记用 release 命令）")
+  .action(async (instancePath: string, opts: { format: string; templates: string; out: string; mapping?: string; packageVersion?: string }) => {
     if (!EXPORT_FORMATS.includes(opts.format as (typeof EXPORT_FORMATS)[number])) {
       console.error(`ERROR 不支持的导出格式 "${opts.format}"（可选：${EXPORT_FORMATS.join(" | ")}）`);
       process.exit(1);
@@ -921,7 +924,12 @@ program
     const instanceSlug = packageIdFromInstancePath(instancePath);
     const exporter: Exporter =
       opts.format === "sap"
-        ? createSapExporter({ template: base, packageId: instanceSlug, instanceConceptRefs: loaded.instance.concept_refs })
+        ? createSapExporter({
+            template: base,
+            packageId: instanceSlug,
+            instanceConceptRefs: loaded.instance.concept_refs,
+            version: opts.packageVersion
+          })
         : exporters[opts.format]!;
 
     const materialized = materialize(base, loaded.instance);
@@ -955,6 +963,50 @@ program
         e instanceof SapExportValidationError ||
         e instanceof SapAssemblyError
       ) {
+        console.error(`ERROR ${e.message}`);
+        process.exit(1);
+      }
+      throw e;
+    }
+  });
+
+program
+  .command("release")
+  .description("发布 SAP 资产包明确版本（快照 + index 登记，不可变；export 不登记，发布=登记）")
+  .argument("<instance>", "实例 YAML 文件路径")
+  .argument("<version>", "包版本（semver，如 1.0.0；位置参数：程序级 --version 旗标冲突，G1）")
+  .option("--note <text>", "变更说明（写入发布登记）")
+  .option("-t, --templates <dir>", "行业模板目录（用于解析实例的基模板）", defaultTemplatesDir())
+  .option("--out <dir>", "releases 基目录（默认 ./releases）", "releases")
+  .option("--mapping <path>", "映射文件路径（默认自动发现 <实例名>.mapping.yaml）")
+  .action(async (instancePath: string, version: string, opts: { note?: string; templates: string; out: string; mapping?: string }) => {
+    try {
+      const result = await releaseInstance({
+        instancePath,
+        version,
+        templatesDir: opts.templates,
+        releasesDir: opts.out,
+        releasedBy: process.env.MF_REVIEWER ?? process.env.USER ?? "unknown",
+        note: opts.note,
+        mappingPath: opts.mapping,
+        now: new Date().toISOString()
+      });
+      console.log(`已发布：${result.packageId}@${result.version}`);
+      console.log(`  快照：${result.snapshotPath}`);
+      console.log(`  登记：${result.indexPath}`);
+      console.log(`  package_fingerprint: ${result.packageFingerprint}`);
+      console.log(`  content_fingerprint: ${result.contentFingerprint}`);
+      if (result.warning) {
+        console.log(
+          `警告：内容与既有发布 ${result.warning.package}@${result.warning.version} 完全一致（无业务变化，请确认是否有必要递增版本）`
+        );
+      }
+    } catch (e) {
+      if (e instanceof ReleaseError) {
+        console.error(`ERROR [${e.rule}] ${e.message}`);
+        process.exit(1);
+      }
+      if (e instanceof ExportBlockedError || e instanceof SapAssemblyError) {
         console.error(`ERROR ${e.message}`);
         process.exit(1);
       }

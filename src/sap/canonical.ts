@@ -115,3 +115,15 @@ export function packageFingerprint(pkg: SapPackage): string {
   };
   return fingerprint(canonicalize(cleared));
 }
+
+// 内容指纹（G10 五键）：置空 fingerprint/created_at/exported_at/version/namespace 后计算——
+// 内容指纹 = 纯业务内容对账键（重导出与无意义版本递增均不改写）；id（资产身份）与 generator（工具来源，红队 R1）保留
+export function contentFingerprint(pkg: SapPackage): string {
+  const review = (pkg.review as Record<string, unknown> | undefined) ?? {};
+  const cleared: SapPackage = {
+    ...pkg,
+    package: { ...pkg.package, fingerprint: "", created_at: "", version: "", namespace: "" },
+    review: { ...review, exported_at: "" }
+  };
+  return fingerprint(canonicalize(cleared));
+}

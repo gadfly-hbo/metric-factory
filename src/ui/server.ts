@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadTemplate } from "../engine/loader.js";
-import { layout, templatesPage, templateDetailPage, instancePage, reviewPage, formErrorPage, escapeHtml, emptyScenarioFormValues, scenarioFormPage, scenarioFormValues, type ScenarioFormValues } from "./render.js";
+import { layout, templatesPage, templateDetailPage, instancePage, reviewPage, formErrorPage, escapeHtml, emptyScenarioFormValues, scenarioFormPage, scenarioFormValues, type ScenarioFormValues, type ReleaseUiState } from "./render.js";
 import { parseQuestionTreeDsl, parseMetricUsagesDsl } from "./dsl.js";
 import { loadInstance } from "../engine/loader.js";
 import { materialize } from "../engine/materialize.js";
@@ -33,6 +33,7 @@ import { excelExporter } from "../export/excel.js";
 import { mermaidExporter } from "../export/mermaid.js";
 import { createSapExporter, packageIdFromInstancePath, SapExportValidationError } from "../export/sap.js";
 import { SapAssemblyError } from "../sap/assemble.js";
+import { releaseInstance, ReleaseError } from "../sap/release.js";
 import { ExportBlockedError } from "../export/gate.js";
 import type { Exporter } from "../export/types.js";
 import { MappingSchema } from "../schema/mapping.js";
@@ -662,6 +663,112 @@ export function createUiServer(opts: UiOptions): Server {
               layout("instance", "导出校验未通过", "SAP 语义包校验 fail-closed，修正包内容后才能导出。",
                 formErrorPage("校验失败", e.issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`)), statusInfo)
             );
+            return;
+          }
+          throw e;
+        }
+        return;
+      }
+
+      // ===== 发布（批次 1 切片 3；ui-contract §0.1：成功 200 重渲染 / 失败 422 零写盘；与 CLI release 同一管线，零第二套规则）=====
+      if (path === "/instance/release" && req.method === "POST") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "无实例", "未指定实例。", formErrorPage("无实例", ["metric-factory ui --instance <path>"]), statusInfo)
+          );
+          return;
+        }
+        const form = await readFormBody(req);
+        const version = (form.get("version") ?? "").trim();
+        const note = form.get("note") ?? "";
+        const values = { version, note };
+        const rerender = (release: ReleaseUiState, status: number) => {
+          const materialized = materialize(ctx.base, ctx.instance);
+          res.writeHead(status, { "content-type": "text/html; charset=utf-8" }).end(
+            layout(
+              "instance",
+              "我的实例",
+              `基模板 ${escapeHtml(ctx.instance.base)} · 下方可微调（口径开关/增删改）并写回，写回前经全量校验。`,
+              instancePage(materialized, ctx.instance, ctx.instancePath, ctx.base, release),
+              statusInfo
+            )
+          );
+        };
+        try {
+          const result = await releaseInstance({
+            instancePath: ctx.instancePath,
+            version,
+            templatesDir: opts.templatesDir,
+            releasesDir: join(workspaceDir, "releases"),
+            releasedBy: process.env.MF_REVIEWER ?? process.env.USER ?? "unknown",
+            note,
+            now: new Date().toISOString()
+          });
+          rerender(
+            {
+              kind: result.warning ? "warning" : "success",
+              values: { version: "", note: "" },
+              result: {
+                packageId: result.packageId,
+                version: result.version,
+                contentFingerprint: result.contentFingerprint,
+                packageFingerprint: result.packageFingerprint,
+                indexEntryNumber: result.indexEntryNumber
+              },
+              warning: result.warning
+            },
+            200
+          );
+        } catch (e) {
+          if (e instanceof ReleaseError) {
+            if (e.rule === "invalid-version") {
+              rerender(
+                {
+                  kind: "invalid",
+                  values,
+                  versionError: `版本号 "${version}" 不是合法 semver（须为三段数字 X.Y.Z，如 1.2.0），已拒绝发布（零写盘）`
+                },
+                422
+              );
+            } else if (e.rule === "duplicate-release") {
+              rerender(
+                {
+                  kind: "duplicate",
+                  values,
+                  versionError: `${e.info.packageId}@${e.info.publishedVersion} 已发布于 ${e.info.createdAt}，请升级版本号（已发布版本不可变）`
+                },
+                422
+              );
+            } else if (e.rule === "index-corrupt") {
+              rerender(
+                {
+                  kind: "index-corrupt",
+                  values,
+                  issues: [
+                    `releases/index.yaml 解析失败或形状非法（${e.info.detail ?? e.message}），已拒绝发布（fail-closed，零写盘）。请用 git 恢复该文件后重试；发布不会自动重建或覆盖它。`
+                  ]
+                },
+                422
+              );
+            } else {
+              rerender({ kind: "validation-failed", values, issues: e.info.issues ?? [e.message] }, 422);
+            }
+            return;
+          }
+          if (e instanceof ExportBlockedError) {
+            rerender(
+              {
+                kind: "validation-failed",
+                values,
+                issues: [e.message]
+              },
+              422
+            );
+            return;
+          }
+          if (e instanceof SapAssemblyError) {
+            rerender({ kind: "validation-failed", values, issues: [`[${e.rule}] ${e.message}`] }, 422);
             return;
           }
           throw e;

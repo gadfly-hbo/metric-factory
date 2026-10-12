@@ -44,6 +44,11 @@ node dist/cli.js export my-instance/instance.yaml --format sap      --out out
 
 # 6. 验证导出物可被真实 dbt 解析（需本机安装 dbt >= 1.8，手动执行）
 zsh scripts/dbt-parse-smoke.sh out/metricflow.yaml
+
+# 7. 发布明确版本（快照 + index 登记，不可变；SAP 专用）
+node dist/cli.js release my-instance/instance.yaml 1.0.0 --note "首个发布"
+# releases/<包id>/<版本>.sap.yaml + releases/index.yaml（消费端按精确 id@version 取得）
+# export --format sap --package-version 2.0.0 可导出指定版本的临时包（不登记）
 ```
 
 `--format sap` 产出 JuanerAI 语义资产包 `out/<实例名>.sap.yaml`（SAP = Semantic Asset Package，与 SAP 公司无关；契约 v0.2：YAML 规范序列化 + SHA-256 指纹 + concept_refs + namespace + 包级 review）。「实例名」= 实例文件名去 `.yaml` 后缀；包 id 要求 `^[a-z][a-z0-9-]*$`，故文件名中的大写 / 空格 / 下划线等会 slugify（小写、非法字符→`-`、折叠连续 `-`），下载文件名用 slug 后的名字。同一实例两次导出的 `created_at` 必然不同（契约必填时间戳），不计入指纹对账。

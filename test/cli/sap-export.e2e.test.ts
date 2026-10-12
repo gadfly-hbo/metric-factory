@@ -320,3 +320,31 @@ test("D1：未知格式错误串与 help 枚举串同步含 sap", () => {
   expect(help.status).toBe(0);
   expect(help.stdout).toContain("metricflow | excel | mermaid | sap");
 });
+
+test("export --package-version：显式包版本贯通装配；非法版本拒绝；缺省保持 0.1.0（G1 旗标命名）", () => {
+  // 显式版本
+  const outA = mkdtempSync(join(tmpdir(), "mf-sap-pv-"));
+  const ra = spawnSync(
+    process.execPath,
+    [bin, "export", ECOMMERCE, "--format", "sap", "--out", outA, "--package-version", "2.0.0"],
+    { encoding: "utf8" }
+  );
+  expect(ra.status, `stdout: ${ra.stdout}\nstderr: ${ra.stderr}`).toBe(0);
+  expect(readExported(outA, "instance-ecommerce.sap.yaml").package.version).toBe("2.0.0");
+
+  // 缺省 0.1.0（既有测试与 golden artifact 再生成不受影响）
+  const outB = mkdtempSync(join(tmpdir(), "mf-sap-pv-def-"));
+  expect(runExport(ECOMMERCE, outB).status).toBe(0);
+  expect(readExported(outB, "instance-ecommerce.sap.yaml").package.version).toBe("0.1.0");
+
+  // 非法版本：非 semver 拒绝且零写盘
+  const outC = mkdtempSync(join(tmpdir(), "mf-sap-pv-bad-"));
+  const rc = spawnSync(
+    process.execPath,
+    [bin, "export", ECOMMERCE, "--format", "sap", "--out", outC, "--package-version", "abc"],
+    { encoding: "utf8" }
+  );
+  expect(rc.status).not.toBe(0);
+  expect(rc.stdout + rc.stderr).toContain("semver");
+  expect(existsSync(join(outC, "instance-ecommerce.sap.yaml"))).toBe(false);
+});
