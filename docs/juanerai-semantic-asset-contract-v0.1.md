@@ -2,10 +2,10 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 版本 | `v0.2`（修订冻结） / 2026-10-09；v0.1 历史（2026-10-08 冻结 + errata.1–3）见文末变更记录 |
-| 状态 | **v0.2 修订冻结**（用户批准开工 2026-10-09；登记内容经两轮独立 readiness gate：第 1 轮 NEEDS_CLARIFICATION 修正后第 2 轮 PASS；定格以用户确认为准）；errata 不再单列，已并入正文 |
+| 版本 | `v0.3`（消费方基线事实勘误 + 手动安装/采用回执正文化） / 2026-10-12；v0.2（修订冻结，2026-10-09）与 v0.1 历史（2026-10-08 冻结 + errata.1–3）见文末变更记录；**v0.1/v0.2 冻结面（包格式、身份/版本/指纹语义、fail-closed 不变量）零改动** |
+| 状态 | **v0.3 修订冻结**（用户授权 2026-10-12，纯文档修正；v0.2 修订冻结（2026-10-09，两轮 readiness gate 第 2 轮 PASS）继续有效）；errata 不再单列，已并入正文 |
 | 供应方 | metric-factory（独立开源，Apache-2.0，仓库 `/Users/huangbo/Dev/Projects/metric-factory`） |
-| 消费方 | JuanerAI（`/Users/huangbo/JuanerAI`，现行基线：白皮书 v4.0 + **Blueprint v4.2（已生效 2026-10-04，批准记录为状态权威，main 已发布）**；勘误 2026-10-08，见变更记录） |
+| 消费方 | JuanerAI（`/Users/huangbo/JuanerAI`）。**v0.3 实测基线（2026-10-12 只读核对；本地 main == origin/main `7e137598`，工作树干净）**：在案权威 = Blueprint v1.0/v1.1（白皮书 v3.3.3）+ Xanthil local-analysis 切片（`apps/cli/xanthil.ts` + `packages/product-core/local-analysis.ts`，唯一真实分析面：单案例受控执行，CSV 源 SHA-256 钉死，八阶段管线）；此前所记"白皮书 v4.0 + Blueprint v4.2（2026-10-04 已生效，main 已发布）"在本机不可定位（全仓及 origin/main 均无 v4 文件与 2026-10 提交），A-02/N04 无可定位对象——**以实测为准**，核对记录见 §9 与变更记录 |
 | 命名声明 | 本文 **SAP = Semantic Asset Package（语义资产包）**的缩写，**与 SAP SE（德国 ERP 软件公司）无关**；跨仓文档引用本契约时请用全名「语义资产包 / Semantic Asset Package」以避免歧义（用户裁决 C，2026-10-08） |
 | 用户已裁决 | ①《分析体系工作台方案 v1.0》（JA-ABS-PRD-001）**有效**，且 metric-factory 即「分析体系工作台」的产品名，范围 = 分析体系设计 + 指标体系建设，不再维护两个重叠工具；②先评审后实施；③metric-factory 保持独立开源，未来作为平台插件接入；④三方关系按本文 §2.2 统一理解（正式蓝图命名与范围同步后置） |
 | 本文性质 | 纯静态契约草案；不构成实现声明、验收证据或工程授权 |
@@ -184,12 +184,39 @@ concept_refs:
 | `validate_import` | 资产包 | 校验结果；以下任一即**整体拒绝**（fail-closed）：结构不合法 / 未知 `sap` 合同版本 / 含未审核 LLM 条目 / `runtime_state ≠ design_only` / 指纹失配 / 重复 `id@version` | 消费方执行 |
 | `publish_gate` | 候选资产 | 正式语义身份 / 拒绝 | JuanerAI 独有权威，metric-factory 无写路径 |
 
+### 6.1 安装与采用（v0.3 升格为正文；手动文件模式）
+
+- **模式裁决（用户 2026-10-12）**：前期以文件交付为唯一方式——供应侧 `release` 发布 `releases/<package-id>/<version>.sap.yaml` 快照 + `releases/index.yaml` 登记，人工交付给消费方安装；**不做 API/MCP 接口打通，待使用成熟后再议**（§8-Q5 的具体化）。
+- **发布 = 登记**：供应侧 `release` 是唯一写登记的动作；`export --format sap`（含 `--package-version`）恒为临时导出，不进登记。
+- **安装三步（消费方职责）**：①按精确 `id@version` 取得快照（禁 latest）；②`validate_import` 全量校验（上表；移植供应侧校验器须补未审 LLM 规则）；③**采用**——包内指标口径（`caliber_switches`/`type_params`/`aggregation`）真实进入消费方本次分析的 Context/Binding/IR 并影响计算；把整份文档放进提示词不构成采用。`scenarios.question_tree` 是参考骨架，不是必须机械执行的路径；`bindings` 是设计态草案，真实文件/字段由消费方任务 Binding 承接。
+- 消费面字段语义、净销售样板勾稽示例与对账方法的事实源：metric-factory `docs/sap-consumption-guide.md`。
+
+### 6.2 adoption receipt（采用回执，v0.3 升格为正文）
+
+消费方每完成一个真实任务，按以下格式回传 YAML 回执；供应侧登记（回执登记的供应侧实现随后续批次交付）：
+
+```yaml
+task_id: <消费端任务唯一标识>
+package:
+  id: <package-id>
+  version: <semver>
+  content_fingerprint: sha256:<64hex>   # 与供应侧 releases/index.yaml 对账（五键内容指纹，G10）
+  package_fingerprint: sha256:<64hex>   # 包完整性校验（含时间戳成分）
+adopted_metrics:  [{ name: <metric> }, …]   # 实际进入本次计算口径的指标
+adopted_scenarios: [{ id: <scenario> }, …]
+issues_found:   # 口径歧义 / 缺失信息 / 试用问题
+  - kind: caliber_ambiguity | missing_data | trial_issue
+    metric: <可选，指向具体指标/场景>
+    detail: <一句话问题描述>
+computed_at: <ISO-8601>
+```
+
 ## 7. 演进路线（与用户裁决对齐）
 
 1. **v0.1**（本轮）：契约评审，冻结包格式与不变量；零代码。
 2. **v4 批次**：metric-factory schema 对齐 L1 指标契约字段（汇总规则、统计对象、口径类型）+ `concept_refs` 进入实例数据。
 3. **v5 批次**：场景编辑器落地，`scenarios` 结构冻结；模板升级为 Domain Pack 候选格式（对齐 `packages/domain-pack-sdk`，若其已可用）。
-4. **v6 批次**：消费方 A-02/N04 有真实实现后，修订 `executable` 状态语义与导入触发方式。
+4. **v6 批次**：消费方有真实接入面后，修订 `executable` 状态语义与导入触发方式。**v0.3 注（2026-10-12 实测）**：消费端载体 = Xanthil local-analysis 切片（单案例受控执行，暂无可插拔口径输入面）；A-02/N04 在本机不可定位，未来接入面命名随消费方 Spec 冻结，不由本契约预设。
 5. **跟踪项（已按用户裁决搁置，2026-10-09）**：Blueprint 正文落位**无限期后置**——理由：①产品处边做边改阶段，不成熟；②metric-factory 是未来向 JuanerAI **提供能力的独立方，非隶属于平台**。搁置期间，双方关系由**本契约单独管辖**（双边、版本化、带身份链），不追求蓝图承认；未来若重启，优先评估「能力提供方登记」形态而非蓝图正文隶属式写入（素材包 `docs/blueprint-sync-proposal-v0.1.md` 已标记搁置备查）。
 
 ## 8. 开放问题处置（2026-10-08 用户批准：一次性给方向，细节随实现批次冻结）
@@ -212,7 +239,7 @@ concept_refs:
 
 - 本文档为静态草案；无代码、无测试、无运行时证据；不构成任何一方的实现完成声明。
 - 依据文档：JuanerAI AGENTS.md（工程宪法）、白皮书 v4.0、Blueprint v4.1/v4.2、asset-and-model-capability-architecture.md；metric-factory PRODUCT_PLAN.md、README.md、JA-ABS-PRD-001《分析体系工作台方案 v1.0》。
-- 未读未引：消费方 A-02/N04 尚无可调用实现（截至 2026-10-08），§6 接口为逻辑契约。
+- 未读未引：消费方 A-02/N04 尚无可调用实现（截至 2026-10-08），§6 接口为逻辑契约。**v0.3 核对（2026-10-12，只读）**：消费方仓 origin/main == 本地（`7e137598`），全仓无 Blueprint v4 文件、无 semantic-asset 消费代码、`adapters/semantic-semantica` 与 `packages/domain-pack-sdk` 为空目录；唯一真实分析面 = Xanthil local-analysis 切片（会员复购单案例）。本文档头部 v0.2 所记消费方基线据此勘误。
 - readiness review 第 1 轮（2026-10-08，全新只读 Reviewer）结论 NEEDS_CLARIFICATION；draft.3 按其 Required Plan Additions 七项完成修订。第 2 轮（新鲜 Reviewer 复评，同日照宪法执行）结论 **PASS**：预期产品复述准确，无承重猜测；draft.4 为 PASS 后按评审 §6 五项建议做的非语义文本加固（语义与 stop line 未变，无需再评审）。
 
 ### 附：readiness review 自检预填（按 JuanerAI 宪法七项；评审前留档，评审结论见 §9）
@@ -252,3 +279,4 @@ concept_refs:
 | v0.1-errata.3 | 2026-10-09 | **跟踪项处置（无语义变更）**：§7.5 蓝图落位按用户裁决**搁置**（产品处边做边改阶段；metric-factory 为独立能力提供方、非隶属于 JuanerAI）；搁置期间双方关系由本契约单独管辖，未来重启优先评估「能力提供方登记」形态 |
 | **v0.2（修订冻结）** | 2026-10-09 | 用户批准开工（v5 收尾序列第 2 项）。修订内容：①§3.1 scenarios 预留→正式段（ScenarioSpec v0.1 结构冻结，v5 批次 + 两轮 REVIEW 证据）；②§3.2 L1 三件套预留→冻结（v4 批次交付，8 族枚举与 336 指标回填验证）；③§8 Q7/Q8 关闭登记；④新增 §10 实现批次登记（规范化/generator 双通道/namespace 与实例名 D2/review 段形状/校验器规则集/导出管线/golden artifact/回填资产 SOP）；⑤errata.1–3 事实并入正文基线。待 readiness review 通过后随用户确认定格 |
 | v0.2-rc.2 | 2026-10-09 | readiness gate 第 1 轮 NEEDS_CLARIFICATION：F1 统计口径失实（88/164 为 batch2 小计，7 模板实测 137/194）+ F2-F6 文本残留 → 修正；第 2 轮（新鲜评审员）**PASS**：统计三方对齐、登记与代码逐字一致、v0.1 不变量未触碰；L1-L4 文字残留（kind 字面量说明/文件名 slug 精度/Q4 时态/状态行）随本稿收口。待用户确认定格 v0.2 |
+| **v0.3（修订冻结）** | 2026-10-12 | 用户授权的纯文档修正，**v0.1/v0.2 冻结面零改动**。①消费方基线事实勘误：2026-10-12 只读核对（本地 main == origin/main `7e137598`）证实全仓无 Blueprint v4 文件、A-02/N04 无可定位对象，头部基线改为实测（Blueprint v1.0/v1.1 + Xanthil local-analysis 切片为唯一真实分析面），§7-4/§9 同步；②消费模式裁决（用户 2026-10-12：文件导出→手动交付→安装消费，暂不做 API/MCP）与安装三步（取得/校验/采用）升格为 §6.1 正文；③adoption receipt 格式升格为 §6.2 正文；④消费面字段语义事实源指向 metric-factory `docs/sap-consumption-guide.md` |

@@ -91,8 +91,8 @@ issues_found:                               # 口径歧义 / 缺失信息 / 试�
 computed_at: <ISO-8601>
 ```
 
-## 8. 批次 2 待办（记录在案）
+## 8. 批次 2 状态（2026-10-12）
 
-- JuanerAI 载体指认后做只读核对，冻结契约 v0.3（本指引 §2/§3/§7 升格为契约正文）
-- 消费端安装步骤：文件落位 → validate_import（含 §3 规则 5）→ 登记 candidate
-- 工作台侧回执登记与查看
+- **2a 已完成**：契约修订为 v0.3（消费方基线事实勘误——Blueprint v4.2/A-02/N04 本机不可定位，实测基线 = Xanthil local-analysis 切片；手动安装模式与 adoption receipt 升格为 §6.1/§6.2 正文）
+- **2b 已备料待启动**：JuanerAI 侧 Change 输入包见 `docs/juanerai-change-input-xanthil-sap-install-v0.1.md`（按 JuanerAI 自身宪法流程带入：UI 门 → OpenSpec → Test → Worker → Validator）；metric-factory 不直接改 JuanerAI 代码
+- 批次 3（净销售端到端五点验收）待 2b 落地后执行
