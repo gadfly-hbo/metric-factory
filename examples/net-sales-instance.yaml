@@ -61,7 +61,7 @@ added:
     time_grains: [day, week, month]
     owner_role: 电商业务负责人
     caliber_switches:
-      refund_to_payment_period: true
+      refund_to_payment_period: false
       include_pending_refund: false
     caliber_type:
       - refund_adjustment

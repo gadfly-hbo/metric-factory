@@ -66,3 +66,8 @@
   消费方（JuanerAI Change006 及后续任务）。
 - 已发布快照：`releases/net-sales-instance/1.1.0.sap.yaml`（支付归属）、
   `releases/net-sales-instance/1.1.1.sap.yaml`（完成归属）；登记见 `releases/index.yaml`。
+- 已知未选内容缺陷（显式钉住，不静默）：基模板 `ecommerce-marketplace@0.1.0` 的未选指标
+  `commission_revenue`（expr `gmv * take_rate`）与 `take_rate`（numerator `commission_revenue`）
+  构成第二个既有依赖环，与 `gmv↔aov` 环同源（模板历史缺陷），在新旧发布物中均存在。本修正按
+  任务边界只修所选净销售闭包；该两指标属未消费设计参考，消费方不得将其与修正闭包混用，
+  修复留待后续模板任务。

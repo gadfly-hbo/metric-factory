@@ -551,7 +551,7 @@ test("发布物：两版唯一内容差异 = refund_to_payment_period；退款�
   expect(diffs).toEqual([`metrics.${idx}.caliber_switches.refund_to_payment_period: true → false`]);
 });
 
-test("发布物：无环依赖——新两版无环；旧 1.0.0 存在 gmv↔aov 环（被修正的缺陷留证）", () => {
+test("发布物：无环依赖——所选闭包自洽无环；旧 1.0.0 的 gmv↔aov 环已消除（缺陷留证）；未选指标存在既有 commission_revenue↔take_rate 环（未消费设计参考，显式钉住）", () => {
   const deps = (pkg: SapPackage): Map<string, Set<string>> => {
     const m = new Map<string, Set<string>>();
     for (const metric of pkg.metrics as Record<string, any>[]) {
@@ -565,8 +565,7 @@ test("发布物：无环依赖——新两版无环；旧 1.0.0 存在 gmv↔aov
     }
     return m;
   };
-  const findCycle = (pkg: SapPackage): string[] | null => {
-    const g = deps(pkg);
+  const findCycle = (g: Map<string, Set<string>>, roots: Set<string>): string[] | null => {
     const state = new Map<string, 0 | 1 | 2>();
     const stack: string[] = [];
     const visit = (n: string): string[] | null => {
@@ -585,7 +584,7 @@ test("发布物：无环依赖——新两版无环；旧 1.0.0 存在 gmv↔aov
       stack.pop();
       return null;
     };
-    for (const n of g.keys()) {
+    for (const n of roots) {
       if ((state.get(n) ?? 0) === 0) {
         const found = visit(n);
         if (found) return found;
@@ -594,13 +593,23 @@ test("发布物：无环依赖——新两版无环；旧 1.0.0 存在 gmv↔aov
     return null;
   };
   for (const v of NEW_VERSIONS) {
-    expect(findCycle(loadSnapshot(v)), `${v} 闭包应无环`).toBeNull();
+    const g = deps(loadSnapshot(v));
+    // 所选闭包：引用自包含（闭包指标的依赖都落在闭包内）且无环
+    const closureSet = new Set(CLOSURE);
+    for (const name of CLOSURE) {
+      for (const dep of g.get(name) ?? []) {
+        expect(closureSet.has(dep), `${v} 闭包指标 ${name} 依赖了闭包外指标 ${dep}`).toBe(true);
+      }
+    }
+    expect(findCycle(g, closureSet), `${v} 所选闭包应无环`).toBeNull();
+    // 未选内容既有缺陷显式钉住（不静默、不扩大修正）：commission_revenue(expr: gmv*take_rate) ↔ take_rate(numerator: commission_revenue)
+    expect(findCycle(g, new Set(["commission_revenue"]))).toEqual(["commission_revenue", "take_rate", "commission_revenue"]);
   }
-  // 旧包缺陷留证：gmv(expr: uv*cvr*aov) ↔ aov(numerator: gmv)
-  expect(findCycle(loadSnapshot("1.0.0"))).not.toBeNull();
-  const g = deps(loadSnapshot("1.0.0"));
-  expect([...g.get("gmv")!]).toContain("aov");
-  expect([...g.get("aov")!]).toContain("gmv");
+  // 旧包缺陷留证：gmv(expr: uv*cvr*aov) ↔ aov(numerator: gmv)（已在 v1.1.x 修正）
+  const gOld = deps(loadSnapshot("1.0.0"));
+  expect(findCycle(gOld, new Set(["gmv"]))).toEqual(["gmv", "aov", "gmv"]);
+  expect([...gOld.get("gmv")!]).toContain("aov");
+  expect([...gOld.get("aov")!]).toContain("gmv");
 });
 
 test("发布物：场景 v0.2.0 与方法引用（设计态定义可访问，不硬别名 dame.m2）", () => {
