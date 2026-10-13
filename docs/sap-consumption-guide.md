@@ -67,6 +67,10 @@
 - **合法口径修改示例**：把 `refund_amount.refund_to_payment_period` 翻为 `false`（归属退款完成期间）→ 发布新版本 → 同一批数据的 `net_sales` 计算结果真实变化（退款计入不同期间）。**该演示已发布**：`net-sales-instance@1.0.1`（v1.0.0 = 归属支付期间，v1.0.1 = 归属退款完成期间；内容指纹不同，v1.0.0 快照字节不变），消费端可直接用两版做"合法改口径 → 计算真实变化"的对照验收。
 - 场景：`net_sales_review`（净销售额 ← 销售侧 gmv / 退款侧 refund_amount；guardrail `refund_rate`）。问题树是参考骨架——Agent 发现退款数据缺失或归属歧义时应转向调查（如先补数据），不得硬算。
 
+### 6.1 修正版（v1.1.x，2026-10-13）
+
+`net-sales-instance@1.1.0`（退款金额归属支付期间）与 `@1.1.1`（归属退款完成期间）为**修正版自洽资产**，修复 v1.0.x 的三处缺陷：① 移除 `gmv = uv*cvr*aov` 恒等式（与 `aov.numerator=gmv` 成环，且 cvr 按用户、aov 按订单，不构成金额恒等式）；② GMV 明确为合格成功支付订单的**原始成交金额**（含后来退款的订单、gross 只计一次、不先净额化）；③ `refund_rate` 补显式分子 `refunded_order_count`／分母 `order_count`（支付队列口径，含已退款订单，1:N 退款按订单去重，两版队列一致）。场景升级 `net_sales_review@0.2.0`（13 周周序列 + 两期描述性拆解 Δ净额=Δ成交总额−Δ退款额 + 总体/category 分组 + 受限完成规则）；方法引用 `dame.descriptive_delta_decomposition@0.1.0` 为**设计态定义**（`docs/net-sales-method-refs-v0.1.md`），消费方未实现前不得臆造或硬别名到 `dame.m2`。两版仅 `refund_amount.refund_to_payment_period` 一个开关不同。所选闭包 = 上述 6 指标 + 该场景；**其余 49 项模板指标与 `gmv_gap_diagnosis` 场景保留为未消费设计参考**（模板默认口径，未随本修正重做，勿与修正闭包混用）。供应侧可重放 oracle 见 `test/unit/net-sales-oracle.test.ts`（证明定义/发布一致，不证明消费侧已接通）。v1.0.0/1.0.1 原样保留作历史与反例。
+
 ## 7. adoption receipt（采用回执，格式冻结）
 
 消费端每完成一个真实任务，回传一份 YAML 回执；工作台侧登记（批次 2 实现）：
