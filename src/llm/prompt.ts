@@ -2,7 +2,7 @@ import { stringify as stringifyYaml } from "yaml";
 import type { Template } from "../schema/template.js";
 import type { Instance } from "../schema/instance.js";
 
-export const PROMPT_VERSION = "v2.0.0";
+export const PROMPT_VERSION = "v2.1.0";
 
 export interface Prompt {
   system: string;
@@ -66,7 +66,8 @@ export function buildRefinePrompt(template: Template, instance: Instance, instru
     '   caliber：对象，键为指标名，值为 {开关名: 布尔}，只调整模板已声明的开关；',
     "   modified：数组，元素 {name, definition?, display_name?, owner_role?}，只能改已有指标；",
     "   removed：数组，指标名列表，只能删模板已有指标；",
-    "   added：数组，元素结构同指标定义（name/display_name/type/definition/dimensions/time_grains/owner_role），只补真正缺失的指标。",
+    "   added：数组，只补真正缺失的指标；元素字段硬约束（与生成器同规）：",
+    "   name（小写 snake_case 英文）、display_name（中文）、type（只能是 simple|ratio|derived|cumulative 四个枚举值之一——禁止 sum/measure/count 等任何其他值）、definition（中文口径，写清分子/分母/统计周期/剔除规则）、dimensions（只能从模板维度清单选）、time_grains（只能是 day|week|month|quarter|year）、owner_role（必填，中文角色名）。",
     "2. 不确定的字段宁可不改：空 patch 是合法输出。",
     "3. 你的输出将由人审核，未审核的 LLM 新增指标不可导出。"
   ].join("\n");

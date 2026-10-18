@@ -51,7 +51,7 @@ test("generate → apply → 阻断 → review → 放行 全链路", { timeout:
   expect(draft.added[0]!.name).toBe("seckill_gmv");
   expect(draft.added[0]!.provenance.origin).toBe("llm");
   expect(draft.added[0]!.provenance.model).toBe("fake");
-  expect(draft.added[0]!.provenance.prompt_version).toBe("v2.0.0");
+  expect(draft.added[0]!.provenance.prompt_version).toBe("v2.1.0"); // v2.1.0：refine added 字段硬约束加固
   expect(draft.added[0]!.review.required).toBe(true);
 
   // 2. apply 合入
