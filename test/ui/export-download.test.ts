@@ -56,12 +56,14 @@ test("未审核 LLM 指标：导出 422 列 blocked 名单并链接审核中心�
   server.close();
 });
 
-test("实例页：含导出按钮组与变更对比区块", async () => {
+test("导出按钮组居「04 检查与交付」视图；指标体系视图保留变更对比区块（A1 迁移）", async () => {
   const { dir, inst } = tmpFixture("instance-ecommerce.yaml");
   const { server, base } = await startUi(inst, dir);
+  const delivery = await (await fetch(`${base}/instance/delivery`)).text();
+  expect(delivery).toContain("/instance/export/metricflow");
+  expect(delivery).toContain("/instance/export/excel");
   const html = await (await fetch(`${base}/instance`)).text();
-  expect(html).toContain("/instance/export/metricflow");
-  expect(html).toContain("/instance/export/excel");
   expect(html).toContain("相对模板的变更");
+  expect(html).not.toContain("/instance/export/metricflow");
   server.close();
 });

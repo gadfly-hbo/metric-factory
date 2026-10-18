@@ -24,6 +24,18 @@ export const ScenarioSchema = z
       })
     ),
     method_refs: z.array(z.string().min(1)).default([]),
+    // ScenarioSpec v0.2（A1 批次 D4，可选扩展，向后兼容 v0.1 包）：
+    // 方法角色绑定 = 方法模板角色 → 本体系指标；method_ref 形如 <method-id>@<semver>。
+    // 刻意不带 default：空绑定时键缺席，v0.1 内容的规范化字节与指纹不变（已发布快照身份不受影响）。
+    method_bindings: z
+      .array(
+        z.object({
+          method_ref: z.string().min(1),
+          role: z.string().regex(/^[a-z][a-z0-9_]*$/, "绑定角色 id 必须是小写 snake_case"),
+          metric: z.string().min(1)
+        })
+      )
+      .optional(),
     evidence_requirements: z.string().default(""),
     output_spec: z.string().default(""),
     review_rules: z.string().default("")

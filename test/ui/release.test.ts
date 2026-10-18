@@ -29,14 +29,14 @@ function post(base: string, version: string, note = "") {
   });
 }
 
-test("R1：实例页含发布区块（表单字段序/原生约束/T 术语逐字），boundary 全站更新（T-16）", async () => {
+test("R1（A1 迁移）：发布区块居「04 检查与交付」视图（表单字段序/原生约束/T 术语逐字），boundary 全站更新（T-16）", async () => {
   const { dir, inst } = tmpFixture("instance-ecommerce.yaml", "ecommerce-instance.yaml");
   const { server, base } = await startUi(inst, dir);
 
   const home = await (await fetch(`${base}/`)).text();
-  expect(home).toContain("写操作仅限本地实例、映射文件与 releases/ 发布登记");
+  expect(home).toContain("写操作仅限本地实例、模板库（导入/另存方法）、映射文件与 releases/ 发布登记");
 
-  const html = await (await fetch(`${base}/instance`)).text();
+  const html = await (await fetch(`${base}/instance/delivery`)).text();
   expect(html).toContain("发布");
   expect(html).toContain('action="/instance/release"');
   expect(html).toContain('pattern="\\d+\\.\\d+\\.\\d+"');
@@ -44,8 +44,10 @@ test("R1：实例页含发布区块（表单字段序/原生约束/T 术语逐�
   expect(html).toContain("变更说明（可空）");
   expect(html).toContain("随发布登记保存（releases/index.yaml 条目的 note 字段）；发布人取环境约定（MF_REVIEWER / $USER），无需填写。");
   expect(html).toContain("把当前实例发布为不可变快照");
-  // 区块顺序：发布在决策场景之后（页面最后一块）
-  expect(html.indexOf("决策场景")).toBeLessThan(html.indexOf('action="/instance/release"'));
+  // A1：发布不再居实例页；四视图导航在交付页呈现且当前项高亮
+  expect(html).toContain('href="/instance/delivery" class="active"');
+  const instHtml = await (await fetch(`${base}/instance`)).text();
+  expect(instHtml).not.toContain('action="/instance/release"');
   server.close();
 });
 
@@ -74,21 +76,21 @@ test("R2：发布成功 200 重渲染（结果卡四行 + 表单复位），快�
   server.close();
 });
 
-test("R3：同内容新版本 → 200 警告条（含既有条目对照，不阻断）；两条目内容指纹相同", async () => {
+test("R3（A1 D11 修订）：同内容新版本 → 422 阻断（未修改不重复发版），表单值保留，零写盘", async () => {
   const { dir, inst } = tmpFixture("instance-ecommerce.yaml", "ecommerce-instance.yaml");
   const { server, base } = await startUi(inst, dir);
   expect((await post(base, "1.0.0")).status).toBe(200);
+  const indexBefore = readFileSync(join(dir, "releases", "index.yaml"), "utf8");
 
   const res = await post(base, "1.0.1");
-  expect(res.status).toBe(200);
+  expect(res.status).toBe(422);
   const html = await res.text();
-  expect(html).toContain("警告 · 内容指纹与既有发布相同");
-  expect(html).toContain("本次发布的内容指纹与既有发布 ecommerce-instance@1.0.0 相同（无业务变化的版本递增）；发布已生效。");
-  expect(html).toContain("发布成功 · ecommerce-instance@1.0.1");
+  expect(html).toContain("内容与 ecommerce-instance@1.0.0 完全一致，未修改不重复发版");
+  expect(html).toContain('value="1.0.1"');
 
+  expect(readFileSync(join(dir, "releases", "index.yaml"), "utf8")).toBe(indexBefore);
   const index = parseYaml(readFileSync(join(dir, "releases", "index.yaml"), "utf8"));
-  expect(index.releases.length).toBe(2);
-  expect(index.releases[0].content_fingerprint).toBe(index.releases[1].content_fingerprint);
+  expect(index.releases.length).toBe(1);
   server.close();
 });
 

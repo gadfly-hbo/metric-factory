@@ -1,0 +1,39 @@
+# 分析方法模板：关联与增量效果判断（A1 批次内置）
+method:
+  id: association-vs-increment
+  name: 关联与增量效果判断
+  version: 0.1.0
+  description: 检验客户原有活跃差异与活动增量，明确数据能支持哪种程度的判断；缺合格识别依据时只允许描述与待检验解释。
+  references:
+    - "准实验与选择偏差（公开因果推断方法）"
+    - "队列分析（公开产品分析方法）"
+contexts:
+  - 独立数据专题
+  - 经营改善
+  - 战略选择
+family: 效果评估 · 假设检验
+purpose: 观察到的差异是选择差异还是活动带来的增量？
+roles:
+  - id: outcome_measure
+    name: 结果表现
+    required: true
+  - id: cohort_base
+    name: 客户队列
+    required: true
+  - id: outcome_group
+    name: 结果客户
+    required: true
+steps:
+  - title: 明确比较对象、窗口与指标
+    detail: 同一队列、时间边界与资格口径，防止分母变化。
+  - title: 检查活动前差异与选择偏差
+    detail: 比较参与前的行为差异，识别自选择机制。
+  - title: 设计可行的对照或实验
+    detail: 说明分配机制、对照可比性和必要识别假设。
+  - title: 区分事实、解释和因果限制
+    detail: 描述性差异不升级为增量结论；披露未观测混杂的限制。
+evidence: 客户队列与活动前行为、参与记录、分配机制或合格对照设计。
+limits: 仅有活动后的结果差异不能作为因果结论；不要求附经营目标或行动建议。
+provenance:
+  origin: template
+  template_ref: association-vs-increment@0.1.0

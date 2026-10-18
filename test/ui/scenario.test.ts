@@ -10,6 +10,7 @@ import { validateInstance } from "../../src/engine/validate.js";
 
 // v5 切片 4：UI 决策场景区块 e2e（真实 server + fetch；期望字面量独立推导自
 // .flow/ui-contract.md §4 与 templates/ecommerce-marketplace.yaml 种子场景）
+// A1：场景区块自 /instance 迁入「03 场景与方法」视图（/instance/scenarios）；保存成功 303 回该视图
 
 function tmpFixture(fixture = "instance-ecommerce.yaml"): { dir: string; inst: string } {
   const dir = mkdtempSync(join(tmpdir(), "mf-scn-ui-"));
@@ -52,21 +53,26 @@ const VALID_NEW_SCENARIO = {
   review_rules: "大促后 7 天内由业务负责人签字确认"
 };
 
-test("S1 列表渲染：种子场景在列 + 来源 chip「模板种子」+ 角色计数 + 区块居页面末位", async () => {
+test("S1 列表渲染（A1 迁至 03 视图）：种子场景在列 + 来源 chip「模板种子」+ 角色计数 + 场景在方法库之前", async () => {
   const { dir, inst } = tmpFixture();
   const { server, base } = await startUi(inst, dir);
-  const html = await (await fetch(`${base}/instance`)).text();
+  const html = await (await fetch(`${base}/instance/scenarios`)).text();
 
   expect(html).toContain('<div class="view-title">决策场景 · 分析体系</div>');
   expect(html).toContain(SEED.purpose); // T-01 用途全文（v0.1 不截断）
-  expect(html).toContain("把「这个业务问题应该怎样分析」固化为配置：决策用途、问题树、指标角色、方法引用。场景随实例写盘并进入 SAP 语义包；写回前经全量校验，失败零写盘。");
+  expect(html).toContain("把「这个业务问题应该怎样分析」固化为配置：决策用途、问题树、指标角色、方法绑定。场景随实例写盘并进入 SAP 语义包；写回前经全量校验，失败零写盘。");
   expect(html).toContain(`<strong>${SEED.title}</strong><br><span class="mono">${SEED.id}</span>`);
   expect(html).toContain('<span class="num">6</span> 个（outcome 1 · driver 3 · guardrail 2）');
   expect(html).toContain('chip chip-ok">模板种子</span>');
   expect(html).toContain('href="/instance/scenarios/gmv_gap_diagnosis/edit"');
   expect(html).toContain('href="/instance/scenarios/new"');
-  // 区块位置钉死：实例页最后一块（patch 表单之后）
-  expect(html.indexOf("决策场景 · 分析体系")).toBeGreaterThan(html.indexOf('action="/instance/patch"'));
+  // A1 T10：行内「另存方法」入口
+  expect(html).toContain('href="/instance/scenarios/gmv_gap_diagnosis/save-as-method"');
+  // 区块位置钉死：场景列表在方法模板库之前（视图末位为方法库）
+  expect(html.indexOf("决策场景 · 分析体系")).toBeLessThan(html.indexOf("分析方法库"));
+  // A1：场景不再居实例页（指标体系视图）
+  const instHtml = await (await fetch(`${base}/instance`)).text();
+  expect(instHtml).not.toContain("决策场景 · 分析体系");
   // 表头五列逐字（T-18）
   for (const h of ["<th>场景</th>", "<th>决策用途</th>", "<th>指标角色</th>", "<th>来源</th>", "<th>操作</th>"]) {
     expect(html).toContain(h);
@@ -79,7 +85,7 @@ test("S1 列表渲染：种子场景在列 + 来源 chip「模板种子」+ 角�
 test("S2 空态：无种子模板实例显示「暂无决策场景」+ 价值说明 + 新建入口", async () => {
   const { dir, inst } = tmpFixture("instance-saas.yaml"); // saas-subscription 无种子场景
   const { server, base } = await startUi(inst, dir);
-  const html = await (await fetch(`${base}/instance`)).text();
+  const html = await (await fetch(`${base}/instance/scenarios`)).text();
 
   expect(html).toContain("暂无决策场景");
   expect(html).toContain("决策场景回答「怎样分析这个问题」：先写清决策用途，再拆问题树、挂指标角色。");
@@ -105,7 +111,8 @@ test("S3 新建表单页：术语逐字（T-03/T-06…T-17/T-19）+ 原生 form 
     "决策用途 decision_purpose（非空——无决策用途不可保存）",
     "问题树 question_tree（逐行 id|label|parent|metric，空槽留空；parent 留空即根节点）",
     "指标角色 metric_usages（逐行 指标名|role|note，role 须为 outcome | driver | guardrail，note 可留空）",
-    "方法引用 method_refs（逐行一个自由串，可空，如 dame.m2.driver_decomposition@1.0.0）",
+    "方法引用 method_refs（逐行一个自由串，可空，如 profit-change-diagnosis@0.1.0）",
+    "方法绑定 method_bindings（逐行 方法id@版本|角色id|指标名；A1 ScenarioSpec v0.2 可选段，可空）",
     "证据要求 evidence_requirements（文本段，可空）",
     "输出 output_spec（文本段，可空）",
     "复盘规则 review_rules（文本段，可空）"
@@ -115,7 +122,7 @@ test("S3 新建表单页：术语逐字（T-03/T-06…T-17/T-19）+ 原生 form 
   expect(html).toContain("例：gmv|outcome|月度缺口归因　·　uv|driver|流量端抓手　·　refund_rate|guardrail|防以退款换增长");
   expect(html).toContain('<input type="text" id="scn-id" name="id"');
   expect(html).toContain(">校验并写回场景</button>");
-  expect(html).toContain('href="/instance">取消</a>');
+  expect(html).toContain('href="/instance/scenarios">取消</a>');
   // DSL 两域 mono + wrap=off（行号可对照）
   expect(html).toContain('name="question_tree" rows="5" wrap="off"');
   expect(html).toContain('name="metric_usages" rows="4" wrap="off"');
@@ -129,7 +136,7 @@ test("P2/P4 新建成功：303 回列表 + 实例文件落盘含场景 + 引擎�
 
   const res = await postForm(base, "/instance/scenarios", VALID_NEW_SCENARIO);
   expect(res.status).toBe(303);
-  expect(res.headers.get("location")).toBe("/instance");
+  expect(res.headers.get("location")).toBe("/instance/scenarios");
 
   // 落盘内容与结构（version 由服务端固定 0.1.0；空槽留空 → parent/metric 省略）
   const written = parseYaml(readFileSync(inst, "utf8")) as {
@@ -159,8 +166,8 @@ test("P2/P4 新建成功：303 回列表 + 实例文件落盘含场景 + 引擎�
     expect(mat.scenarios.map((s) => s.id)).toEqual(["gmv_gap_diagnosis", "promo_roi_review"]);
   }
 
-  // S5 回列表：新行 + 实例新增 chip
-  const html = await (await fetch(`${base}/instance`)).text();
+  // S5 回列表（03 视图）：新行 + 实例新增 chip
+  const html = await (await fetch(`${base}/instance/scenarios`)).text();
   expect(html).toContain("<strong>大促 ROI 复盘</strong>");
   expect(html).toContain('chip chip-accent">实例新增</span>');
   expect(html).toContain('chip chip-ok">模板种子</span>');
@@ -203,9 +210,9 @@ test("S6/P5/N4/N6 坏 DSL：422 同页回显行号与原文、合法行不报错
   expect(html).toContain("price 客单价端 root aov");
   expect(html).toContain('value="broken_scenario"');
   expect(html).toContain('value="坏 DSL 场景"');
-  // 可访问性：错误列表 role=alert；DSL 两域 aria-describedby 指向错误列表
+  // 可访问性：错误列表 role=alert；DSL 三域（question_tree/metric_usages/method_bindings）aria-describedby 指向错误列表
   expect(html).toContain('role="alert" id="scn-errors"');
-  expect((html.match(/aria-describedby="scn-errors"/g) ?? []).length).toBe(2);
+  expect((html.match(/aria-describedby="scn-errors"/g) ?? []).length).toBe(3);
   // 零写盘（字节对比）
   expect(readFileSync(inst).equals(before)).toBe(true);
   server.close();
@@ -240,13 +247,13 @@ test("S4/D2 编辑模板种子：预填 DSL 原文 + id 只读 + fork 提示 →
     review_rules: ""
   });
   expect(res.status).toBe(303);
-  expect(res.headers.get("location")).toBe("/instance");
+  expect(res.headers.get("location")).toBe("/instance/scenarios");
 
   const written = parseYaml(readFileSync(inst, "utf8")) as { added_scenarios: { id: string; title: string }[] };
   expect(written.added_scenarios).toEqual([{ id: "gmv_gap_diagnosis", title: "GMV 差距诊断（本地修订）", version: "0.1.0", decision_purpose: SEED.purpose, question_tree: [{ id: "gap_root", label: "GMV 与目标差距多大", metric: "gmv" }], metric_usages: [{ metric: "gmv", role: "outcome", note: "月度缺口归因" }], method_refs: [], evidence_requirements: "", output_spec: "", review_rules: "" }]);
 
-  // 列表：该行变「实例覆盖种子」，模板种子 chip 消失；再次进入编辑无 fork 提示（已是实例版本）
-  const html = await (await fetch(`${base}/instance`)).text();
+  // 列表（03 视图）：该行变「实例覆盖种子」，模板种子 chip 消失；再次进入编辑无 fork 提示（已是实例版本）
+  const html = await (await fetch(`${base}/instance/scenarios`)).text();
   expect(html).toContain("<strong>GMV 差距诊断（本地修订）</strong>");
   expect(html).toContain('chip chip-accent">实例覆盖种子</span>');
   expect(html).not.toContain('chip chip-ok">模板种子</span>');
@@ -263,7 +270,7 @@ test("N7 编辑不存在的场景：404 empty 卡「场景不存在」+ 返回�
   expect(res.status).toBe(404);
   const html = await res.text();
   expect(html).toContain("场景不存在");
-  expect(html).toContain('href="/instance">返回实例</a>');
+  expect(html).toContain('href="/instance/scenarios">返回场景列表</a>');
   expect(html).not.toContain('name="decision_purpose"');
   server.close();
 });

@@ -8,7 +8,13 @@ import { conceptRefKey } from "./assemble.js";
 import { MetricSchema, ConceptRefSchema } from "../schema/template.js";
 import { MappingEntrySchema } from "../schema/mapping.js";
 import { ScenarioSchema } from "../schema/scenario.js";
+import { BlueprintSchema } from "../schema/blueprint.js";
 import type { ValidateIssue } from "../engine/validate.js";
+
+// A1 D12：包内 blueprint 段剥离 review（供应侧工作态不随包携带）；复用 BlueprintSchema 全规则
+const SapBlueprintSchema = BlueprintSchema.refine((bp) => bp.review === undefined, {
+  message: "包内 blueprint 不携带 review 复核状态（供应侧工作态）"
+});
 
 // 契约 §3 全段：sap 字面 0.1、runtime_state 字面 design_only、必填段存在、
 // 概念引用/指标条目形状（指标条目 = 现行 MetricSchema，契约 §3.2 L0「以现行 schema 为准」）
@@ -23,7 +29,9 @@ export const SapPackageSchema = z.object({
     fingerprint: z.string().regex(/^sha256:[0-9a-f]{64}$/, "package.fingerprint 必须是 sha256:<hex64>"),
     namespace: z.string().min(1)
   }),
-  scenarios: z.array(ScenarioSchema), // v5 结构冻结：ScenarioSpec v0.1（契约 §3.1 预留 → §8-Q7 兑现）
+  scenarios: z.array(ScenarioSchema), // v5 结构冻结：ScenarioSpec v0.1（契约 §3.1 预留 → §8-Q7 兑现）；A1 v0.2 可选 method_bindings
+  // A1 D12：分析体系段（可选；缺席 = 仅指标体系包）
+  blueprint: SapBlueprintSchema.optional(),
   metrics: z.array(MetricSchema),
   dimensions: z.array(z.string().min(1)),
   concept_refs: z.array(ConceptRefSchema),
@@ -121,6 +129,31 @@ export function validateSapPackage(pkg: unknown): ValidateIssue[] {
           path: `scenarios.${s.id}.metric_usages.${j}.metric`,
           message: `场景 ${s.id} 的 metric_usages 引用了包内不存在的指标 "${u.metric}"（scenarios→metrics 引用一致性）`
         });
+      }
+    }
+    // A1 v0.2：方法绑定指标的包级镜像
+    for (const [j, b] of (s.method_bindings ?? []).entries()) {
+      if (!metricNames.has(b.metric)) {
+        issues.push({
+          rule: "structure",
+          path: `scenarios.${s.id}.method_bindings.${j}.metric`,
+          message: `场景 ${s.id} 的方法绑定引用了包内不存在的指标 "${b.metric}"（scenarios→metrics 引用一致性）`
+        });
+      }
+    }
+  }
+
+  // A1：blueprint→metrics 引用一致性（问题 metric_refs 必须在包内可解析）
+  if (parsed.data.blueprint) {
+    for (const q of parsed.data.blueprint.questions) {
+      for (const ref of q.metric_refs) {
+        if (!metricNames.has(ref)) {
+          issues.push({
+            rule: "structure",
+            path: `blueprint.questions.${q.id}.metric_refs`,
+            message: `问题 ${q.id} 引用了包内不存在的指标 "${ref}"（blueprint→metrics 引用一致性）`
+          });
+        }
       }
     }
   }

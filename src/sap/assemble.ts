@@ -7,6 +7,7 @@ import type { MaterializedInstance } from "../engine/materialize.js";
 import type { Template, Metric, ConceptRef } from "../schema/template.js";
 import type { MappingEntry } from "../schema/mapping.js";
 import type { Scenario } from "../schema/scenario.js";
+import type { Blueprint } from "../schema/blueprint.js";
 
 export interface SapAssemblyOptions {
   /** kebab-case 包 ID（调用方传入；CLI 侧取实例文件名 slug） */
@@ -35,6 +36,8 @@ export type SapPackageV01 = {
     namespace: string;
   };
   scenarios: Scenario[];
+  /** A1 D12：分析体系段（可选；缺席 = 仅指标体系包）。蓝图内 review 复核状态不随包携带（供应侧工作态，非消费契约） */
+  blueprint?: Omit<Blueprint, "review">;
   metrics: Metric[];
   dimensions: string[];
   concept_refs: ConceptRef[];
@@ -112,6 +115,10 @@ export function assembleSap(
     },
     // 物化场景直接透传（引用完整性由 validateInstance 保证；装配不做二次语义校验，结构由 SapPackageSchema 兜底）
     scenarios: [...materialized.scenarios],
+    // A1 D12：分析体系段透传（review 复核状态为供应侧工作态，剥离不携带）
+    ...(materialized.blueprint
+      ? { blueprint: (() => { const { review: _review, ...bp } = materialized.blueprint; return bp; })() }
+      : {}),
     metrics: [...materialized.metrics],
     dimensions: [...template.dimensions],
     concept_refs: conceptRefs,

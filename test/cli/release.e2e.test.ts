@@ -117,18 +117,17 @@ test("不可变：同 id@version 重复发布被拒绝（含「已发布于…�
   expect(readIndex(rel).releases.length).toBe(1);
 });
 
-test("G10：版本递增但业务内容零变化 → 发布成功但警告（内容指纹相同，包指纹不同）", () => {
+test("G10（A1 D11 修订）：版本递增但业务内容零变化 → 阻断（未修改不重复发版），零写盘", () => {
   const rel = join(mkdtempSync(join(tmpdir(), "mf-release-warn-")), "releases");
   expect(runRelease(ECOMMERCE, "1.0.0", rel).status).toBe(0);
+  const before = readFileSync(join(rel, "index.yaml"), "utf8");
   const r2 = runRelease(ECOMMERCE, "1.0.1", rel);
-  expect(r2.status, `stdout: ${r2.stdout}\nstderr: ${r2.stderr}`).toBe(0);
-  expect(r2.stdout + r2.stderr).toContain("警告");
+  expect(r2.status, `stdout: ${r2.stdout}\nstderr: ${r2.stderr}`).not.toBe(0);
+  expect(r2.stdout + r2.stderr).toContain("same-content");
+  expect(r2.stdout + r2.stderr).toContain("未修改不重复发版");
   expect(r2.stdout + r2.stderr).toContain("instance-ecommerce@1.0.0");
-
-  const index = readIndex(rel);
-  expect(index.releases.length).toBe(2);
-  expect(index.releases[0].content_fingerprint).toBe(index.releases[1].content_fingerprint);
-  expect(index.releases[0].package_fingerprint).not.toBe(index.releases[1].package_fingerprint);
+  expect(readFileSync(join(rel, "index.yaml"), "utf8")).toBe(before);
+  expect(readIndex(rel).releases.length).toBe(1);
 });
 
 test("口径翻转（真实业务变化）→ 新版本内容指纹必变且无警告；旧快照字节不变；index append-only", () => {

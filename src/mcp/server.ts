@@ -3,8 +3,10 @@ import { z } from "zod";
 import { join, resolve } from "node:path";
 import { defaultTemplatesDir } from "../paths.js";
 import { loadInstance, loadTemplate } from "../engine/loader.js";
-import { materialize } from "../engine/materialize.js";
-import { validateInstance } from "../engine/validate.js";
+import { materialize, EMPTY_TEMPLATE } from "../engine/materialize.js";
+import { validateDesign } from "../engine/blueprint.js";
+import { loadMethodsFromDir, defaultMethodsDir } from "../engine/methods.js";
+import type { MethodTemplate } from "../schema/method.js";
 import { auditInstance } from "../engine/audit.js";
 import { buildGeneratePrompt, buildRefinePrompt } from "../llm/prompt.js";
 import { createLlmClientFromEnv, estimateTokens } from "../llm/index.js";
@@ -41,6 +43,14 @@ export interface McpServerOptions {
 export function buildMcpServer(opts: McpServerOptions = {}): McpServer {
   const server = new McpServer({ name: "metric-factory", version: "0.2.0" });
   const templatesDir = defaultTemplatesDir();
+  // A1：方法模板库（缺省 <templates>/methods；空库合法）；装载失败 fail-closed 抛错
+  async function loadMethods(): Promise<MethodTemplate[]> {
+    const result = await loadMethodsFromDir(defaultMethodsDir(templatesDir));
+    if (!result.ok) {
+      throw new Error("方法模板库不可用（fail-closed）");
+    }
+    return result.methods;
+  }
   const resolveEnv = (): Promise<NodeJS.ProcessEnv> =>
     resolveLlmEnvAuto({
       processEnv: process.env,
@@ -52,6 +62,10 @@ export function buildMcpServer(opts: McpServerOptions = {}): McpServer {
     const loaded = await loadInstance(instancePath);
     if (!loaded.ok) {
       throw new Error(`实例加载失败：${loaded.errors.map((e) => `${e.path}: ${e.message}`).join("；")}`);
+    }
+    // A1 D13：空白起点（无 base）→ 合成空基座；否则按 id 装载基模板
+    if (!loaded.instance.base) {
+      return { instance: loaded.instance, base: EMPTY_TEMPLATE };
     }
     const baseId = loaded.instance.base.split("@")[0]!;
     const base = await loadTemplate(resolve(templatesDir, `${baseId}.yaml`));
@@ -149,7 +163,7 @@ export function buildMcpServer(opts: McpServerOptions = {}): McpServer {
     async ({ instancePath }) => {
       const { instance, base } = await loadContext(instancePath);
       const materialized = materialize(base, instance);
-      const issues = validateInstance(materialized, base, instance);
+      const issues = validateDesign(materialized, base, instance, await loadMethods());
       return text({ ok: issues.length === 0, issues });
     }
   );
@@ -185,7 +199,7 @@ export function buildMcpServer(opts: McpServerOptions = {}): McpServer {
     async ({ instancePath, format }) => {
       const { instance, base } = await loadContext(instancePath);
       const materialized = materialize(base, instance);
-      const issues = validateInstance(materialized, base, instance);
+      const issues = validateDesign(materialized, base, instance, await loadMethods());
       if (issues.length > 0) {
         throw new Error(`实例校验不通过（与 CLI export 同门）：${issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`).join("；")}`);
       }

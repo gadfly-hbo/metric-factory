@@ -13,7 +13,7 @@ async function startUi() {
   return { server, base: `http://127.0.0.1:${port}` };
 }
 
-test("GET /：工作台首页含模板入口与边界声明", async () => {
+test("GET /：工作台首页含 NL 主入口与边界声明", async () => {
   const { server, base } = await startUi();
   const res = await fetch(`${base}/`);
   expect(res.status).toBe(200);
@@ -21,7 +21,10 @@ test("GET /：工作台首页含模板入口与边界声明", async () => {
   expect(html).toContain("模板库");
   expect(html).toContain("本机运行");
   expect(html).toContain("凭据仅存本机");
-  expect(html).toContain("创建实例"); // 工作流引导（Web 闭环）
+  // A1：自然语言主入口（一句话 → AI 起草分析体系）+ 次要起点引导
+  expect(html).toContain('action="/blueprint/generate"');
+  expect(html).toContain("用一句话开始");
+  expect(html).toContain("或从模板与导入开始");
   server.close();
 });
 
@@ -53,18 +56,22 @@ test("GET /templates/:id：指标字典表格与口径列", async () => {
   server.close();
 });
 
-test("设计 token 落地：全局「中文专业工作台」基线色板进入 CSS 变量", async () => {
+test("设计 token 落地：JuanerAI 已接受视觉系统进入 CSS 变量（A1 D10）", async () => {
   const { server, base } = await startUi();
   const res = await fetch(`${base}/`);
   const html = await res.text();
-  // 新基线（2026-10-09）：克制绿主动作 + 中性浅表面 + 语义状态色
-  for (const token of ["--accent: #28674e", "--accent-strong: #20573f", "--accent-soft: #edf5ef",
-    "--ok: #1a7f4b", "--warn: #8a5a10", "--fail: #c0392b",
-    "--bg: #f5f6f8", "--border: #dfe3ea", "--text: #1d2433"]) {
+  // A1 视觉迁移（visual-system.md）：暖白/灰绿表面 + 绿主动作 #27664f + 语义状态色
+  for (const token of ["--accent: #27664f", "--accent-strong: #1e5240", "--accent-soft: #eaf2eb",
+    "--ok: #1a7f4b", "--warn: #80541c", "--fail: #c0392b",
+    "--bg: #f6f7f4", "--surface: #fcfcfa", "--border: #dce2d9", "--text: #22332d"]) {
     expect(html).toContain(token);
   }
-  // 旧 09-28 橘色契约退场
+  // 旧基线（#28674e 冷绿 / #f5f6f8 冷灰）与 09-28 橘色契约均退场
   expect(html).not.toContain("#e8643a");
+  expect(html).not.toContain("--accent: #28674e");
+  // 230px 侧栏 + 64px 顶栏（JuanerAI 骨架）
+  expect(html).toContain("width: 230px");
+  expect(html).toContain("height: 64px");
   // 语义状态色仍色+文字双通道（chip 类保留）
   expect(html).toContain("chip-ok");
   server.close();

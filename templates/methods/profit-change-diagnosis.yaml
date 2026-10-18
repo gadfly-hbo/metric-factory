@@ -1,0 +1,37 @@
+# 分析方法模板：利润变化诊断与改善方案比较（A1 批次内置）
+method:
+  id: profit-change-diagnosis
+  name: 利润变化与改善方案分析
+  version: 0.1.0
+  description: 先核对利润变动的口径与组成，再把发现连接到经营目标、约束和可比较的调整方案；数值分解只解释算术变化，不证明因果。
+  references:
+    - "杜邦分解与经营杠杆分析（公开管理会计方法）"
+    - "方案比较与试点设计（公开经营复盘方法）"
+contexts:
+  - 经营改善
+family: 描述分解 · 方案比较
+purpose: 销售增长为何未带来利润改善，当前周期应如何调整？
+roles:
+  - id: profit_result
+    name: 利润结果
+    required: true
+  - id: gross_profit_comp
+    name: 毛利组成
+    required: true
+  - id: expense_constraint
+    name: 费用约束
+    required: true
+steps:
+  - title: 核对收入、成本与费用口径
+    detail: 确认同一期间与业务范围的计算关系，口径不一致时先修口径再比较。
+  - title: 拆解毛利与费用变化
+    detail: 按组成项分解变动方向与量级，保留替代解释。
+  - title: 比较调整方案的收益和代价
+    detail: 说明每个候选方案的预期收益、资源代价、风险与护栏。
+  - title: 设计试点、护栏与复盘条件
+    detail: 写清负责人、观察窗口、继续／调整／停止条件；建议不等于行动批准。
+evidence: 预算与目标、收入成本与费用明细、方案影响测算与业务约束说明。
+limits: 变动分解不能证明促销等单一因素的因果效果；方案尚待授权与试验，分析建议不等于经营决策。
+provenance:
+  origin: template
+  template_ref: profit-change-diagnosis@0.1.0

@@ -11,8 +11,11 @@ import { AnswersSchema } from "../schema/answers.js";
 import { InstanceSchema } from "../schema/instance.js";
 import { defaultTemplatesDir } from "../paths.js";
 import { loadInstance } from "../engine/loader.js";
-import { materialize } from "../engine/materialize.js";
+import { materialize, resolveBaseTemplate } from "../engine/materialize.js";
 import { validateInstance } from "../engine/validate.js";
+import { validateDesign } from "../engine/blueprint.js";
+import { loadMethodsFromDir, loadMethodTemplate, lintMethodTemplate, defaultMethodsDir } from "../engine/methods.js";
+import type { MethodTemplate } from "../schema/method.js";
 import { findPendingReview, applyApproval, applyRejection } from "../engine/review.js";
 import { writeInstanceFile, defaultMappingPath, loadMappingFile } from "../engine/io.js";
 import { auditInstance } from "../engine/audit.js";
@@ -114,6 +117,22 @@ async function discoverTemplates(dir: string): Promise<Template[]> {
     process.exit(1);
   }
   return result.templates;
+}
+
+// A1 D3：方法模板目录装载（缺省 <templates>/methods；目录不存在 = 空方法库，合法）
+async function discoverMethods(dir: string): Promise<MethodTemplate[]> {
+  const result = await loadMethodsFromDir(defaultMethodsDir(dir));
+  if (!result.ok) {
+    if (result.kind === "read") {
+      console.error(`ERROR 无法读取方法模板目录 ${result.dir}：${result.message}`);
+    } else {
+      for (const { file, error } of result.errors) {
+        console.error(`ERROR [method] ${file} ${error.path}: ${error.message}`);
+      }
+    }
+    process.exit(1);
+  }
+  return result.methods;
 }
 
 // 交互口径问卷：对模板中出现的去重口径开关逐个确认取值，再展开为按指标的覆盖值
@@ -223,11 +242,39 @@ program
 
 program
   .command("lint")
-  .description("校验行业模板（口径必填、维度引用完整、出处存在）")
-  .argument("<paths...>", "模板 YAML 文件路径（可多个）")
+  .description("校验模板（指标体系模板：口径必填、维度引用完整、出处存在；分析方法模板：角色/语境/出处）")
+  .argument("<paths...>", "模板 YAML 文件路径（可多个；方法模板按顶层 method 键自动识别）")
   .action(async (paths: string[]) => {
     let failed = false;
     for (const path of paths) {
+      // A1 D3：按顶层键区分两类模板（method → 方法模板；其余 → 指标体系模板）
+      let isMethod = false;
+      try {
+        const doc = parseYaml(await readFile(path, "utf8")) as Record<string, unknown> | null;
+        isMethod = Boolean(doc && typeof doc === "object" && "method" in doc);
+      } catch {
+        // 读取/解析失败按指标体系模板路径走，由 loadTemplate 产出统一错误格式
+      }
+      if (isMethod) {
+        const loaded = await loadMethodTemplate(path);
+        if (!loaded.ok) {
+          for (const e of loaded.errors) {
+            console.error(`ERROR [schema] ${path} ${e.path}: ${e.message}`);
+          }
+          failed = true;
+          continue;
+        }
+        const issues = lintMethodTemplate(loaded.method);
+        if (issues.length > 0) {
+          for (const i of issues) {
+            console.error(`ERROR [${i.rule}] ${path} ${i.path}: ${i.message}`);
+          }
+          failed = true;
+          continue;
+        }
+        console.log(`PASS ${path}（方法模板 ${loaded.method.method.id}@${loaded.method.method.version}，角色 ${loaded.method.roles.length} 个）`);
+        continue;
+      }
       const loaded = await loadTemplate(path);
       if (!loaded.ok) {
         for (const e of loaded.errors) {
@@ -265,8 +312,7 @@ program
     }
 
     const templates = await discoverTemplates(opts.templates);
-    const baseId = loaded.instance.base.split("@")[0]!;
-    const base = templates.find((t) => t.template.id === baseId);
+    const base = resolveBaseTemplate(loaded.instance, templates);
     if (!base) {
       console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
       process.exitCode = 1;
@@ -274,7 +320,8 @@ program
     }
 
     const materialized = materialize(base, loaded.instance);
-    const issues = validateInstance(materialized, base, loaded.instance);
+    const methods = await discoverMethods(opts.templates);
+    const issues = validateDesign(materialized, base, loaded.instance, methods);
     if (issues.length > 0) {
       for (const i of issues) {
         console.error(`ERROR [${i.rule}] ${instancePath} ${i.path}: ${i.message}`);
@@ -302,8 +349,7 @@ program
     }
 
     const templates = await discoverTemplates(opts.templates);
-    const baseId = loaded.instance.base.split("@")[0]!;
-    const base = templates.find((t) => t.template.id === baseId);
+    const base = resolveBaseTemplate(loaded.instance, templates);
     if (!base) {
       console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
       process.exitCode = 1;
@@ -361,8 +407,7 @@ program
     }
 
     const templates = await discoverTemplates(opts.templates);
-    const baseId = loaded.instance.base.split("@")[0]!;
-    const base = templates.find((t) => t.template.id === baseId);
+    const base = resolveBaseTemplate(loaded.instance, templates);
     if (!base) {
       console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
       process.exitCode = 1;
@@ -451,8 +496,7 @@ program
     }
 
     const templates = await discoverTemplates(opts.templates);
-    const baseId = loaded.instance.base.split("@")[0]!;
-    const base = templates.find((t) => t.template.id === baseId);
+    const base = resolveBaseTemplate(loaded.instance, templates);
     if (!base) {
       console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
       process.exit(1);
@@ -467,9 +511,11 @@ program
       process.exit(1);
     }
 
-    // 合入后全量校验（跳过审核门：新 LLM 指标必然待审，执法点在 export）；不过不落盘
+    // 合入后全量校验（跳过审核门：新 LLM 指标必然待审，执法点在 export；writeMode：草稿允许设计缺口，
+    // 蓝图/方法绑定的引用完整性仍执法——悬空引用不进工作稿）；不过不落盘
     const materialized = materialize(base, applied.instance);
-    const issues = validateInstance(materialized, base, applied.instance, { skipReviewGate: true });
+    const applyMethods = await discoverMethods(opts.templates);
+    const issues = validateDesign(materialized, base, applied.instance, applyMethods, { skipReviewGate: true, writeMode: true });
     if (issues.length > 0) {
       for (const i of issues) {
         console.error(`ERROR [${i.rule}] ${instancePath} ${i.path}: ${i.message}`);
@@ -506,8 +552,7 @@ program
     }
 
     const templates = await discoverTemplates(opts.templates);
-    const baseId = loaded.instance.base.split("@")[0]!;
-    const base = templates.find((t) => t.template.id === baseId);
+    const base = resolveBaseTemplate(loaded.instance, templates);
     if (!base) {
       console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
       process.exitCode = 1;
@@ -584,8 +629,7 @@ program
     }
 
     const templates = await discoverTemplates(opts.templates);
-    const baseId = loaded.instance.base.split("@")[0]!;
-    const base = templates.find((t) => t.template.id === baseId);
+    const base = resolveBaseTemplate(loaded.instance, templates);
     if (!base) {
       console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
       process.exitCode = 1;
@@ -669,7 +713,7 @@ program
         byMetric.set(rec.metric, { ...rec, confirmed_by: reviewer, confirmed_at: now });
         added++;
       }
-      const merged: Mapping = { base: loaded.instance.base, mappings: [...byMetric.values()] };
+      const merged: Mapping = { base: loaded.instance.base ?? "", mappings: [...byMetric.values()] };
       await writeFile(mappingPath, stringifyYaml(merged), "utf8");
       console.log(`映射已写入：${mappingPath}（新增确认 ${added} 条，审核人：${reviewer}）`);
       return;
@@ -681,8 +725,7 @@ program
     }
 
     const templates = await discoverTemplates(opts.templates);
-    const baseId = loaded.instance.base.split("@")[0]!;
-    const base = templates.find((t) => t.template.id === baseId);
+    const base = resolveBaseTemplate(loaded.instance, templates);
     if (!base) {
       console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
       process.exit(1);
@@ -762,7 +805,7 @@ program
           confirmed++;
         }
       }
-      const merged: Mapping = { base: loaded.instance.base, mappings: [...byMetric.values()] };
+      const merged: Mapping = { base: loaded.instance.base ?? "", mappings: [...byMetric.values()] };
       await writeFile(mappingPath, stringifyYaml(merged), "utf8");
       console.log(`\n映射已写入：${mappingPath}（本轮确认 ${confirmed} 条，审核人：${reviewer}）`);
     }
@@ -784,8 +827,7 @@ program
       return;
     }
     const templates = await discoverTemplates(opts.templates);
-    const baseId = loaded.instance.base.split("@")[0]!;
-    const base = templates.find((t) => t.template.id === baseId);
+    const base = resolveBaseTemplate(loaded.instance, templates);
     if (!base) {
       console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
       process.exitCode = 1;
@@ -923,8 +965,7 @@ program
     }
 
     const templates = await discoverTemplates(opts.templates);
-    const baseId = loaded.instance.base.split("@")[0]!;
-    const base = templates.find((t) => t.template.id === baseId);
+    const base = resolveBaseTemplate(loaded.instance, templates);
     if (!base) {
       console.error(`ERROR 找不到基模板 ${loaded.instance.base}（目录：${opts.templates}）`);
       process.exit(1);
@@ -953,7 +994,8 @@ program
     }
 
     // 导出前全量校验（fail-closed 门之外的第二道门：坏实例不导出，PRD story 7）
-    const issues = validateInstance(materialized, base, loaded.instance);
+    const exportMethods = await discoverMethods(opts.templates);
+    const issues = validateDesign(materialized, base, loaded.instance, exportMethods);
     if (issues.length > 0) {
       for (const i of issues) {
         console.error(`ERROR [${i.rule}] ${instancePath} ${i.path}: ${i.message}`);
@@ -1006,11 +1048,6 @@ program
       console.log(`  登记：${result.indexPath}（追加为第 ${result.indexEntryNumber} 条）`);
       console.log(`  package_fingerprint: ${result.packageFingerprint}`);
       console.log(`  content_fingerprint: ${result.contentFingerprint}`);
-      if (result.warning) {
-        console.log(
-          `警告：内容与既有发布 ${result.warning.package}@${result.warning.version} 完全一致（无业务变化，请确认是否有必要递增版本）`
-        );
-      }
     } catch (e) {
       if (e instanceof ReleaseError) {
         console.error(`ERROR [${e.rule}] ${e.message}`);

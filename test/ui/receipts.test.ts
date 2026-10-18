@@ -8,6 +8,7 @@ import { test, expect } from "vitest";
 import { createUiServer, listenUi } from "../../src/ui/server.js";
 
 // 采用回执区块 UI e2e（真实 server + fetch；.flow/ui-contract.md RC0–RC6 + T 术语表 + G5）
+// A1：回执区块自 /instance 迁入「04 检查与交付」视图（/instance/delivery），POST 重渲染同视图
 // 期望值按 UI 契约逐字推导，不来自实现输出
 
 const bin = fileURLToPath(new URL("../../dist/cli.js", import.meta.url));
@@ -63,7 +64,7 @@ function post(base: string, yaml: string) {
 test("RC0：工作区无 releases/ → 区块只有标题+说明+表单，无列表卡", async () => {
   const { dir, inst } = setupWorkspace(false);
   const { server, base } = await startUi(dir, inst);
-  const html = await (await fetch(`${base}/instance`)).text();
+  const html = await (await fetch(`${base}/instance/delivery`)).text();
   expect(html).toContain("采用回执");
   expect(html).toContain('action="/instance/receipts"');
   expect(html).toContain("回执 YAML（粘贴契约 §6.2 格式的采用回执，必填）");
@@ -75,7 +76,7 @@ test("RC1→RC3：空态 → 粘贴登记成功 200（列表置顶+对账一致�
   const { dir, inst, fingerprint } = setupWorkspace(true);
   const { server, base } = await startUi(dir, inst);
 
-  const before = await (await fetch(`${base}/instance`)).text();
+  const before = await (await fetch(`${base}/instance/delivery`)).text();
   expect(before).toContain("当前包（ecommerce-instance）尚无采用回执");
   expect(before).toContain("也可用 CLI receipt add &lt;file&gt; 登记"); // 原始 HTML 中尖括号转义
 
@@ -119,7 +120,7 @@ test("RC2 排序：received_at 倒序（后登记在前）", async () => {
   writeFileSync(stored1, readFileSync(stored1, "utf8").replace(/received_at: .+/, "received_at: 2026-10-01T00:00:00.000Z"), "utf8");
   expect((await post(base, receiptYaml(fingerprint, { task_id: "task-late" }))).status).toBe(200);
 
-  const html = await (await fetch(`${base}/instance`)).text();
+  const html = await (await fetch(`${base}/instance/delivery`)).text();
   expect(html.indexOf("task-late")).toBeLessThan(html.indexOf("task-early"));
   server.close();
 });
@@ -173,7 +174,7 @@ test("RC6：index 损坏 → 422 错误卡（T-13 + git 恢复），列表照常
   server.close();
 });
 
-test("G5：跨包回执登记成功但本包列表不新增；boundary 文案不改（O1）", async () => {
+test("G5：跨包回执登记成功但本包列表不新增；boundary 文案为 A1 版（O1）", async () => {
   const { dir, inst, fingerprint } = setupWorkspace(true);
   const { server, base } = await startUi(dir, inst);
   expect((await post(base, receiptYaml(fingerprint))).status).toBe(200);
@@ -185,6 +186,6 @@ test("G5：跨包回执登记成功但本包列表不新增；boundary 文案不
   expect(html).toContain("回执按包全局登记，此处仅展示当前包");
 
   const home = await (await fetch(`${base}/`)).text();
-  expect(home).toContain("写操作仅限本地实例、映射文件与 releases/ 发布登记");
+  expect(home).toContain("写操作仅限本地实例、模板库（导入/另存方法）、映射文件与 releases/ 发布登记");
   server.close();
 });

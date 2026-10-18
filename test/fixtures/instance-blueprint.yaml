@@ -1,0 +1,68 @@
+# A1 蓝图测试用实例：电商模板 + 完整合法分析体系（设计缺口为零，可直接进入业务复核）
+instance:
+  created_at: "2026-10-18T00:00:00.000Z"
+  company: 测试电商公司
+base: ecommerce-marketplace@0.1.0
+answers:
+  revenue_model: 交易抽佣
+  user_structure: 双边市场
+  core_loop: 交易
+added:
+  # 无引用自增指标（删除影响页正例：六路引用全空，可安全删除）
+  - name: scratch_quality_score
+    display_name: 临时质量评分
+    type: simple
+    definition: 临时分析用的质量评分（不入树、无引用）
+    dimensions: [channel]
+    time_grains: [day]
+    owner_role: 分析负责人
+    caliber_switches: {}
+    provenance:
+      origin: manual
+    review:
+      required: false
+blueprint:
+  title: 增长与利润改善分析体系
+  intent: 设计具体分析方案
+  purpose: 把销售增长、毛利变化和费用放回经营目标与约束中，比较改善方案的收益与代价。
+  decision: 当前经营周期应调整什么（促销力度、商品结构、费用节奏）？
+  boundary: 在既定业务方向下设计诊断与调整；资源批准与行动执行由业务负责人承担。
+  deliverable: 差距诊断、候选方案、试点安排与复盘规则。
+  contexts:
+    - 经营改善
+  organizations:
+    - 假设先行
+  questions:
+    - id: q1
+      title: 利润差距由哪些部分组成？
+      detail: 先复核口径，按毛利与费用分解。
+      metric_refs:
+        - gmv
+        - commission_revenue
+    - id: q2
+      title: 流量规模是否拖累了成交？
+      detail: 拆解访客与转化。
+      metric_refs:
+        - uv
+  hypotheses:
+    - id: h1
+      statement: 费用增加可能抵消了收入增长。
+      judgment: 待验证假设
+      support: 费用明细与业务过程证据。
+      counter: 一次性投入或季节性可以解释。
+      change_condition: 核验不支持时保留其他解释。
+      verified: false
+  evidence_plan:
+    - id: e1
+      name: 收入成本费用明细
+      kind: 内部数据
+      source: 同范围同期间的财务记录
+      check: 复核范围与计算关系
+      insufficiency: 缺失时不输出仿成功结论
+      status: 待获取
+  options:
+    - id: promo_up
+      name: 加大促销投入
+      tradeoff: 短期起量，费用率上升，可能推高退款。
+  provenance:
+    origin: manual

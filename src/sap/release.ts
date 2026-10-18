@@ -7,8 +7,9 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { z } from "zod";
 import { loadInstance, loadTemplatesFromDir, type LoadError } from "../engine/loader.js";
 import { defaultMappingPath, loadMappingFile } from "../engine/io.js";
-import { materialize } from "../engine/materialize.js";
-import { validateInstance } from "../engine/validate.js";
+import { materialize, EMPTY_TEMPLATE } from "../engine/materialize.js";
+import { validateDesign, designReview } from "../engine/blueprint.js";
+import { loadMethodsFromDir, defaultMethodsDir } from "../engine/methods.js";
 import type { Mapping } from "../schema/mapping.js";
 import type { Template } from "../schema/template.js";
 import { assertExportable } from "../export/gate.js";
@@ -63,12 +64,6 @@ export class ReleaseError extends Error {
   }
 }
 
-export interface ReleaseSameContentWarning {
-  package: string;
-  version: string;
-  content_fingerprint: string;
-}
-
 export interface ReleaseResult {
   packageId: string;
   version: string;
@@ -78,7 +73,6 @@ export interface ReleaseResult {
   indexPath: string;
   /** 追加后的 1 起算序号（R2 登记行「追加为第 N 条」） */
   indexEntryNumber: number;
-  warning?: ReleaseSameContentWarning;
 }
 
 export interface ReleaseOptions {
@@ -92,6 +86,8 @@ export interface ReleaseOptions {
   note?: string;
   /** 显式映射文件路径；缺省自动发现 <实例名>.mapping.yaml（与 export 同语义） */
   mappingPath?: string;
+  /** 方法模板目录（A1 D3；缺省 <templatesDir>/methods，目录不存在视为空方法库） */
+  methodsDir?: string;
   /** ISO-8601；测试可冻结 */
   now: string;
   /** 覆盖 generator（测试可冻结；缺省 buildGenerator()） */
@@ -203,8 +199,8 @@ export async function releaseInstance(opts: ReleaseOptions): Promise<ReleaseResu
   }
   const instance = loaded.instance;
 
-  const baseId = instance.base.split("@")[0]!;
-  const base = await findBaseTemplate(opts.templatesDir, baseId);
+  // A1 D13：空白起点实例使用合成空基座（方法库照常装载）
+  const base = instance.base ? await findBaseTemplate(opts.templatesDir, instance.base.split("@")[0]!) : EMPTY_TEMPLATE;
   const materialized = materialize(base, instance);
 
   const mappingPath = opts.mappingPath ?? defaultMappingPath(opts.instancePath);
@@ -214,12 +210,37 @@ export async function releaseInstance(opts: ReleaseOptions): Promise<ReleaseResu
     materialized.mapping = mapping.mappings.filter((m) => names.has(m.metric));
   }
 
-  const issues = validateInstance(materialized, base, instance);
+  // A1：统一设计校验（指标/场景 + 蓝图规则 + 方法绑定）；方法库装载失败按错误透出（fail-closed）
+  const methodsResult = await loadMethodsFromDir(opts.methodsDir ?? defaultMethodsDir(opts.templatesDir));
+  if (!methodsResult.ok) {
+    const detail =
+      methodsResult.kind === "read"
+        ? methodsResult.message
+        : methodsResult.errors.map((e) => `[schema] ${e.file} ${e.error.path}: ${e.error.message}`).join("\n");
+    throw new ReleaseError("methods-invalid", `方法模板库不可用，拒绝发布（fail-closed）：\n${detail}`);
+  }
+  const methods = methodsResult.methods;
+
+  const issues = validateDesign(materialized, base, instance, methods);
   if (issues.length > 0) {
     const detail = issues.map((i) => `[${i.rule}] ${opts.instancePath} ${i.path}: ${i.message}`).join("\n");
     throw new ReleaseError("instance-validation", `实例校验未通过，拒绝发布（零写盘）：\n${detail}`, {
       issues: issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`)
     });
+  }
+
+  // A1 D7：分析体系模式的发布门——设计缺口零 ∧ 业务复核有效（仅指标体系模式语义不变）
+  if (materialized.blueprint) {
+    const review = designReview(materialized, base, instance, methods);
+    if (!review.ready) {
+      const reasons: string[] = [];
+      if (review.review.state === "unreviewed") reasons.push("业务复核未确认（请先在「检查与交付」完成复核）");
+      if (review.review.state === "stale") reasons.push("业务复核已失效（设计在复核后被修改，需重新复核）");
+      reasons.push(...review.designIssues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`));
+      throw new ReleaseError("design-review", `分析体系设计未就绪，拒绝发布（零写盘）：\n${reasons.join("\n")}`, {
+        issues: reasons
+      });
+    }
   }
 
   assertExportable(materialized.metrics);
@@ -244,11 +265,15 @@ export async function releaseInstance(opts: ReleaseOptions): Promise<ReleaseResu
   const cfp = contentFingerprint(pkg);
   const pfp = pkg.package.fingerprint;
 
-  // G5：内容指纹与任意既有条目相同 → 允许但警告（无业务变化的无意义版本递增）
+  // A1 D11：内容指纹与任意既有条目相同 → 阻断（未修改不重复发版；升级版本号前请先修改设计内容）
   const same = index.releases.find((e) => e.content_fingerprint === cfp);
-  const warning: ReleaseSameContentWarning | undefined = same
-    ? { package: same.package, version: same.version, content_fingerprint: cfp }
-    : undefined;
+  if (same) {
+    throw new ReleaseError(
+      "same-content",
+      `内容与 ${same.package}@${same.version} 完全一致（content_fingerprint 相同），未修改不重复发版；如需新版本请先修改设计内容`,
+      { packageId: same.package, publishedVersion: same.version }
+    );
+  }
 
   // 写盘：快照 → index 追加（append-only，不改写既有条目）
   const snapshotDir = join(opts.releasesDir, packageId);
@@ -275,7 +300,6 @@ export async function releaseInstance(opts: ReleaseOptions): Promise<ReleaseResu
     packageFingerprint: pfp,
     snapshotPath,
     indexPath,
-    indexEntryNumber: index.releases.length,
-    warning
+    indexEntryNumber: index.releases.length
   };
 }

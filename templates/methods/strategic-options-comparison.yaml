@@ -1,0 +1,29 @@
+# 分析方法模板：战略选项与情景比较（A1 批次内置，定性方法可零必需指标角色）
+method:
+  id: strategic-options-comparison
+  name: 战略选项与情景比较
+  version: 0.1.0
+  description: 围绕客户价值、竞争方式与能力约束，比较值得持续投入的不同道路；允许零指标的定性设计，量化指标按需补充。
+  references:
+    - "情景规划（公开战略方法）"
+    - "假设驱动的问题求解（公开咨询方法）"
+contexts:
+  - 战略选择
+  - 经营改善
+family: 情景分析 · 假设检验
+purpose: 在资源受限下，哪条道路在什么条件下成立，应减少或放弃什么？
+roles: []
+steps:
+  - title: 明确候选道路与取舍边界
+    detail: 先明确对象、范围和比较依据，不把建议当事实。
+  - title: 比较客户、竞争和能力依据
+    detail: 结合业务机制，查找支持和反对证据。
+  - title: 检验关键假设与反对证据
+    detail: 检查输入条件、适用范围与可能的替代解释。
+  - title: 说明资源取舍与重审条件
+    detail: 说明结论边界、未决问题及继续验证的条件。
+evidence: 客户访谈、行业竞争研究、能力盘点与历史经营事实。
+limits: 短期经营下滑不直接证明战略失败；本方法不替用户批准资源；可先完成定性设计，量化指标按需补充。
+provenance:
+  origin: template
+  template_ref: strategic-options-comparison@0.1.0

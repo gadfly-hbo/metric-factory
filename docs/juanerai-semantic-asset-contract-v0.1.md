@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 版本 | `v0.3`（消费方基线事实勘误 + 手动安装/采用回执正文化） / 2026-10-12；v0.2（修订冻结，2026-10-09）与 v0.1 历史（2026-10-08 冻结 + errata.1–3）见文末变更记录；**v0.1/v0.2 冻结面（包格式、身份/版本/指纹语义、fail-closed 不变量）零改动** |
-| 状态 | **v0.3 修订冻结**（用户授权 2026-10-12，纯文档修正；v0.2 修订冻结（2026-10-09，两轮 readiness gate 第 2 轮 PASS）继续有效）；errata 不再单列，已并入正文 |
+| 版本 | `v0.4`（A1 批次：blueprint 段 + ScenarioSpec v0.2 + same-content 阻断，2026-10-18）/ v0.3（消费方基线事实勘误 + 手动安装/采用回执正文化）/ 2026-10-12；v0.2（修订冻结，2026-10-09）与 v0.1 历史（2026-10-08 冻结 + errata.1–3）见文末变更记录；**v0.1/v0.2 冻结面（包格式、身份/版本/指纹语义、fail-closed 不变量）零改动——v0.4 全部新增均为可选段，缺席即无，已发布包指纹不受影响** |
+| 状态 | **v0.4 供应侧实现登记**（A1 批次交付，仓内验证门全绿；**blueprint 段与零指标包的消费侧读取未经 JuanerAI 实测**，见 §9）；v0.3 修订冻结（2026-10-12）继续有效 |
 | 供应方 | metric-factory（独立开源，Apache-2.0，仓库 `/Users/huangbo/Dev/Projects/metric-factory`） |
 | 消费方 | JuanerAI（`/Users/huangbo/JuanerAI`）。**v0.3 实测基线（2026-10-12 只读核对；本地 main == origin/main `7e137598`，工作树干净）**：在案权威 = Blueprint v1.0/v1.1（白皮书 v3.3.3）+ Xanthil local-analysis 切片（`apps/cli/xanthil.ts` + `packages/product-core/local-analysis.ts`，唯一真实分析面：单案例受控执行，CSV 源 SHA-256 钉死，八阶段管线）；此前所记"白皮书 v4.0 + Blueprint v4.2（2026-10-04 已生效，main 已发布）"在本机不可定位（全仓及 origin/main 均无 v4 文件与 2026-10 提交），A-02/N04 无可定位对象——**以实测为准**，核对记录见 §9 与变更记录 |
 | 命名声明 | 本文 **SAP = Semantic Asset Package（语义资产包）**的缩写，**与 SAP SE（德国 ERP 软件公司）无关**；跨仓文档引用本契约时请用全名「语义资产包 / Semantic Asset Package」以避免歧义（用户裁决 C，2026-10-08） |
@@ -79,7 +79,8 @@ package:
   generator: metric-factory@<version>[+<git-sha>]
   namespace: mf.<package-id>
   fingerprint: sha256:<规范化序列化的 SHA-256>
-scenarios: []                  # 分析体系配置（§3.1，v0.2 起正式段，结构已冻结）
+scenarios: []                  # 分析体系配置（§3.1，v0.2 起正式段，结构已冻结；v0.4 增可选 method_bindings）
+blueprint:                     # 分析体系段（§3.7，v0.4 起可选；缺席 = 仅指标体系包）
 metrics: []                    # 见 §3.2 契约等级
 dimensions: []                 # 维度名数组（透传，§3.2）；维度字典为预留槽位
 concept_refs: []               # 本体概念引用（§3.3，v0.1 已定义形状，可为空）
@@ -99,6 +100,7 @@ runtime_state: design_only     # v0.1 恒为 design_only（§3.6）
 - `question_tree`：平面节点表 `{id, label, parent?, metric?}`；parent 引用同场景节点、禁自指/成环；metric 引用包内指标
 - `metric_usages`：`{metric, role: outcome|driver|guardrail, note?}`——场景角色，不是新指标定义
 - `method_refs[]`（引用不实现，如 `dame.m2.driver_decomposition@1.0.0`）/ `evidence_requirements` / `output_spec` / `review_rules`（文本）
+- **ScenarioSpec v0.2（v0.4 新增，A1 批次）**：可选 `method_bindings[]` = `{method_ref: <方法id@semver>, role: <方法已声明角色 id>, metric: <包内指标>}`——把场景绑定到方法模板库的具名角色上（引用不实现）。**无 default：空绑定时键缺席**，已发布包的内容指纹字节不受影响（既有包零迁移）。方法可解析性/角色存在性/绑定指标存在性为供应侧写时规则，语境适配与必需角色覆盖为交付门规则（§3.7 设计门同源）。
 
 重复身份（§4）覆盖场景 id@version；scenarios→metrics 引用一致性为校验器正式规则（消费侧镜像，契约 §6）。
 
@@ -141,6 +143,26 @@ concept_refs:
 - metric-factory 只声明 **design 完备性**；运行就绪（数据资格、权限、A-02 解析）由消费方计算。
 - v0.1 包一律 `design_only`；`executable` 语义待消费方 A-02/N04 有真实实现后另行修订契约。
 - **校验规则（v0.1 冻结）**：`runtime_state ≠ design_only` 的包，`validate_import` **拒绝**（fail-closed：不改写、不降级标注，因该状态声明了 v0.1 不存在的语义）。
+
+### 3.7 分析体系段（blueprint，v0.4 新增可选段）
+
+**AnalysisBlueprint v0.1**（A1 批次，《分析体系工作台产品方案 v0.2》落地）：把「这个业务问题应该怎样分析」的顶层意图结构化为——
+
+- `title` / `intent`（建设可复用体系 | 设计具体分析方案）/ `purpose`（业务目的）/ `decision`（研究问题或选择）/ `boundary`（范围边界）/ `deliverable`（输出要求）
+- `contexts[]`（经营改善 | 战略选择 | 独立数据专题，可组合不分级）/ `organizations[]`（假设先行 | 深度研究 | 自主探索）
+- `questions[]`：`{id, title, detail?, metric_refs[]}`——问题结构；`metric_refs` 只引用包内指标（指标定义唯一权威来源在 metrics 段，问题不重复定义）
+- `hypotheses[]`：`{id, statement, judgment, support, counter, change_condition, verified}`——**判断性质（事实/解释/待验证假设/建议）与证据状态分轴**；假设必须带支持/反对/改变条件三要素
+- `evidence_plan[]`：`{id, name, kind, source, check, insufficiency, status}`——证据计划；**证据计划完整 ≠ 证据已取得**（status：待获取/取得待核/已核验/支持不足/存在冲突）
+- `options[]`：`{id, name, tradeoff}`——候选道路与取舍（战略选择类至少两条由供应侧交付门执法）
+- `provenance`：三来源同 §3.5
+
+供应侧不变量（仓库事实源 `src/schema/blueprint.ts` + `src/engine/blueprint.ts`）：
+
+1. **包内 blueprint 剥离 `review` 复核状态**——业务复核是供应侧工作态，不随包携带（校验器正式规则：携带即拒绝）。
+2. **blueprint→metrics 引用一致性**：问题 `metric_refs` 必须在包内可解析（校验器正式规则，与 scenarios→metrics 镜像同规）。
+3. **设计门（交付时点）**：发布分析体系包要求设计缺口为零（目的/问题/假设三要素/证据三要素/方法适用性与必需角色）且**业务复核有效**（复核绑定完整设计快照指纹 `design_fingerprint`，任何相关修改使确认失效；事实/解释未核验或核验无已核验证据即缺口——复核与检查不替代证据核验）。
+4. **零指标包合法**：战略选择类定性设计允许 `metrics: []` + blueprint 的组合（A04 兼容面：导出与校验不因零指标拒绝）。
+5. **消费侧未验证标注**：blueprint 段与零指标包在 JuanerAI 侧的读取/消费**未经实测**（截至 v0.4，消费方唯一真实分析面为 Xanthil local-analysis 切片，无 blueprint 消费面）；Change006 既有指标资产消费者路径不受影响。
 
 ## 4. 身份、版本与指纹
 
@@ -264,6 +286,11 @@ computed_at: <ISO-8601>
 | SAP 导出管线 | export gate（整批阻断）→ 装配（内含供应侧查重与指纹计算）→ **整包校验（issues 非空即拒绝）** → 规范化写盘；CLI `--format sap` 与工作台下载双出口等价（422 语义一致） |
 | golden artifact | `examples/ecommerce-instance.sap.yaml`（53 指标 + gmv_gap_diagnosis 种子场景；随批次再生成，指纹随内容） |
 | 回填资产 | 7 模板 336 指标 L1 全量回填：caliber_type 137 填（服饰试点 49 + 其余 6 模板 88）/ aggregation 194 填（30 + 164）；SOP：多值仅真实跨族 / 非默认锚才赋值 / 粒度声明≠排除 / **开关即证据** / 继承留空——`.flow/l1-backfill-*.md` 留档 |
+| A1 批次：AnalysisBlueprint v0.1 | 蓝图段结构（title/intent/purpose/decision/boundary/deliverable + contexts/organizations + questions/hypotheses/evidence_plan/options + provenance）；导出剥 `review`；写时/交付双门（`validateDesign(..., { writeMode: true })` 只执法引用完整性，完整性与方法适用性留交付门）；`src/schema/blueprint.ts` + `src/engine/blueprint.ts` |
+| A1 批次：ScenarioSpec v0.2 | 可选 `method_bindings[]`（method_ref/role/metric 三字段）；**无 default，空绑定时键缺席**——已发布包指纹字节不受影响（net-sales-oracle 指纹哨兵钉死）；`src/schema/scenario.ts` + `src/engine/blueprint.ts` |
+| A1 批次：复核指纹 | `design_fingerprint` = canonical(blueprint 去 review + scenarios + 指标身份面去 provenance) 的 sha256；相关修改使确认失效（复核绑定完整设计快照）；`src/engine/blueprint.ts` + `src/schema/blueprint.ts` |
+| A1 批次：release same-content 阻断 | 发布内容与既有 release 完全相同时拒绝重复发版（规则 id `same-content`）；`src/sap/release.ts` |
+| A1 批次：蓝图 LLM 提示版本 | `BLUEPRINT_PROMPT_VERSION = "v1.0.0"`（生成/修正双提示词，`provenance.prompt_version` 携带）；`src/llm/prompt.ts` |
 
 ## 变更记录
 
@@ -280,3 +307,4 @@ computed_at: <ISO-8601>
 | **v0.2（修订冻结）** | 2026-10-09 | 用户批准开工（v5 收尾序列第 2 项）。修订内容：①§3.1 scenarios 预留→正式段（ScenarioSpec v0.1 结构冻结，v5 批次 + 两轮 REVIEW 证据）；②§3.2 L1 三件套预留→冻结（v4 批次交付，8 族枚举与 336 指标回填验证）；③§8 Q7/Q8 关闭登记；④新增 §10 实现批次登记（规范化/generator 双通道/namespace 与实例名 D2/review 段形状/校验器规则集/导出管线/golden artifact/回填资产 SOP）；⑤errata.1–3 事实并入正文基线。待 readiness review 通过后随用户确认定格 |
 | v0.2-rc.2 | 2026-10-09 | readiness gate 第 1 轮 NEEDS_CLARIFICATION：F1 统计口径失实（88/164 为 batch2 小计，7 模板实测 137/194）+ F2-F6 文本残留 → 修正；第 2 轮（新鲜评审员）**PASS**：统计三方对齐、登记与代码逐字一致、v0.1 不变量未触碰；L1-L4 文字残留（kind 字面量说明/文件名 slug 精度/Q4 时态/状态行）随本稿收口。待用户确认定格 v0.2 |
 | **v0.3（修订冻结）** | 2026-10-12 | 用户授权的纯文档修正，**v0.1/v0.2 冻结面零改动**。①消费方基线事实勘误：2026-10-12 只读核对（本地 main == origin/main `7e137598`）证实全仓无 Blueprint v4 文件、A-02/N04 无可定位对象，头部基线改为实测（Blueprint v1.0/v1.1 + Xanthil local-analysis 切片为唯一真实分析面），§7-4/§9 同步；②消费模式裁决（用户 2026-10-12：文件导出→手动交付→安装消费，暂不做 API/MCP）与安装三步（取得/校验/采用）升格为 §6.1 正文；③adoption receipt 格式升格为 §6.2 正文；④消费面字段语义事实源指向 metric-factory `docs/sap-consumption-guide.md` |
+| **v0.4（供应侧实现登记）** | 2026-10-18 | A1 批次（《分析体系工作台产品方案 v0.2》落地，`.flow/proposal.md` D1–D13 裁决），**v0.1/v0.2 冻结面零改动，全部新增均为可选段，缺席即无，已发布包指纹不受影响**。①§3 骨架新增可选 `blueprint` 段；②新增 §3.7 AnalysisBlueprint v0.1 结构 + 五条供应侧不变量（剥 review/引用一致性/设计门/零指标包合法/消费侧未验证标注）；③§3.1 ScenarioSpec v0.2 注记（可选 `method_bindings`，无 default）；④§10 登记 A1 批次五项事实（蓝图结构/ScenarioSpec v0.2/复核指纹/same-content 阻断/BLUEPRINT_PROMPT_VERSION v1.0.0）。仓内验证门全绿（lint + typecheck + 433 tests + contract-test）；blueprint 段与零指标包的消费侧读取**未经 JuanerAI 实测**，真实 LLM 冒烟未跑——见 §9 与最终报告 |

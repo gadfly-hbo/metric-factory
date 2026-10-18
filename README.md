@@ -1,11 +1,14 @@
 # Metric Factory
 
-指标体系的「设计态」工具：**业务目标 → 指标树 + 指标字典**，产出对齐 dbt MetricFlow 的指标定义，直接接入现有语义层生态。
+分析体系工作台：**业务问题 → 分析体系（目的/问题结构/假设/指标/场景方法/证据）→ 可发布的设计版本与指标字典**，产出对齐 dbt MetricFlow 的指标定义与语义资产包，直接接入现有语义层生态。
 
+- **自然语言主入口**：描述业务问题 → AI 出分析体系草稿 → 你修正微调 → 复核发布；模板与粘贴导入是次要起点
+- **分析体系蓝图（AnalysisBlueprint v0.1）**：目的、问题结构、假设（含支持/反对/改变条件）、证据计划、候选道路——指标定义是唯一权威来源，问题与场景只引用不重复定义
+- **工作台四视图**：体系总览 / 指标体系 / 场景与方法 / 检查与交付，设计缺口与业务复核状态一目了然
 - 内置行业模板（电商交易平台 53 指标 / SaaS 订阅 48 指标 / 服饰品牌零售 72 指标），每个指标含完整口径、维度、归口角色与出处
 - 问卷匹配模板 → 口径开关微调 → 实例 = 模板 fork + diff，永远可以回答「我们改了什么、为什么」
-- 导出：dbt MetricFlow YAML / Excel 指标字典（含出处列）/ Mermaid 指标树
-- fail-closed：LLM 生成且未经人工审核的指标**无法导出**（不是提示，是阻断）
+- 导出：dbt MetricFlow YAML / Excel 指标字典（含出处列）/ Mermaid 指标树 / SAP 语义资产包（含蓝图段）
+- fail-closed：LLM 生成且未经人工审核的指标**无法导出**（不是提示，是阻断）；设计有缺口或未复核的分析体系**无法发布**
 
 产品背景与调研依据见 [PRODUCT_PLAN.md](./PRODUCT_PLAN.md)。Apache-2.0。
 
@@ -73,6 +76,24 @@ node dist/cli.js validate my-instance/instance.yaml   # 场景校验含其中
 node dist/cli.js diff my-instance/instance.yaml       # 含场景计数
 ```
 
+## 分析体系：蓝图与工作台四视图（A1）
+
+指标体系回答「用什么衡量」，分析体系回答「这个业务问题应该怎样分析」。A1 批次把分析体系落成实例的可选顶层段 `blueprint`（AnalysisBlueprint v0.1）与工作台四视图：
+
+- **主入口是自然语言**：首页「描述你的业务问题」→ AI 生成分析体系草稿（蓝图 + 建议指标 + 建议场景）→ 预览影响 → 采纳进工作稿 → 修正微调 → 业务复核 → 固定设计版本。模板问卷与粘贴导入是次要起点，三种起点汇入同一工作台。
+- **蓝图结构**：`purpose`（业务目的）/ `decision`（研究问题或选择）/ `boundary` / `deliverable` + `contexts`（经营改善/战略选择/独立数据专题，可组合不分级）+ `questions[]`（问题结构，`metric_refs` 只引用包内指标）+ `hypotheses[]`（判断性质与证据状态分轴，必带支持/反对/改变条件）+ `evidence_plan[]`（证据计划完整 ≠ 证据已取得）+ `options[]`（候选道路与取舍）。战略选择类允许零指标定性设计。
+- **四视图**：`体系总览`（蓝图卡片 + AI 助手 + 复核状态）/ `指标体系`（指标字典 + fork diff + 指标树）/ `场景与方法`（场景列表 + 方法模板库 + 场景绑定方法角色）/ `检查与交付`（设计缺口清单 + 业务复核确认 + 导出 + 发布）。
+- **写时宽、交付严**：工作稿允许缺口（边想边写）；导出/发布走全量设计门——目的缺失、假设缺三要素、证据缺三要素、方法语境不适配或必需角色未绑定、事实/解释未核验，都会成为交付阻断项。
+- **业务复核绑定设计快照**：复核确认记录完整设计内容指纹（`design_fingerprint`），任何相关修改使确认失效需重新确认；查看与切换视图不影响确认。
+- **方法模板库**：`templates/methods/`（内置三方法：利润变动诊断/战略选项评估/关联与增量分析，角色声明 outcome/driver/guardrail）；场景可「另存方法」沉淀可复用模板；首页「导入」支持指标体系与方法两类 YAML 模板（预览后保存，拒绝覆盖）。
+- **删除影响先知**：删除被引用指标前先展示影响页（哪些问题/场景/方法绑定引用了它），确认才执行。
+
+```bash
+node dist/cli.js ui    # 启动工作台，浏览器打开 http://127.0.0.1:4173
+```
+
+操作细节见 [docs/工作台使用指南.md](./docs/工作台使用指南.md)。
+
 ## 口径可信性（fail-closed）
 
 - 每个指标必须带 `provenance`：`template`（模板出处）/ `manual`（人工）/ `llm`（模型 + prompt 版本）
@@ -103,7 +124,7 @@ npm run lint           # 模板 lint（内置两模板）
 npm run contract-test  # MetricFlow 导出契约测试（JSON Schema）
 ```
 
-架构：`src/schema`（Zod 元模型）· `src/engine`（loader / lint / match / instantiate / materialize / validate）· `src/export`（metricflow / excel / mermaid / sap 四导出器 + fail-closed 门）· `src/sap`（SAP 0.1 装配 / 规范化指纹 / 双面校验器）· `src/cli`（commander 命令）· `templates/`（行业模板数据资产）。
+架构：`src/schema`（Zod 元模型：指标/模板/实例/场景/蓝图/方法）· `src/engine`（loader / lint / match / instantiate / materialize / validate / blueprint 设计规则 / methods 方法库）· `src/export`（metricflow / excel / mermaid / sap 四导出器 + fail-closed 门）· `src/sap`（SAP 0.1 装配 / 规范化指纹 / 双面校验器 / release 登记）· `src/cli`（commander 命令）· `src/ui`（零客户端 JS 工作台：四视图 + NL 入口 + 助手预览采纳）· `templates/`（行业模板 + 方法模板数据资产）。
 
 ## v2 · LLM 设计器
 

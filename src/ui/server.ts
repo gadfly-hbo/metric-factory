@@ -2,16 +2,27 @@ import { createServer, type Server } from "node:http";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadTemplate } from "../engine/loader.js";
-import { layout, templatesPage, templateDetailPage, instancePage, reviewPage, formErrorPage, escapeHtml, emptyScenarioFormValues, scenarioFormPage, scenarioFormValues, type ScenarioFormValues, type ReleaseUiState, type ReceiptsUiState } from "./render.js";
-import { parseQuestionTreeDsl, parseMetricUsagesDsl } from "./dsl.js";
+import { layout, templatesPage, templateDetailPage, instancePage, reviewPage, formErrorPage, escapeHtml, emptyScenarioFormValues, scenarioFormPage, scenarioFormValues, scenariosBlock, viewNav, releaseBlock, receiptsBlock, chip, type ScenarioFormValues, type ReleaseUiState, type ReceiptsUiState } from "./render.js";
+import {
+  overviewPage, blueprintEditPage, blueprintFormValues, deliveryPage, metricDeleteImpactPage,
+  blueprintDraftPreviewPage, methodsLibrarySection, methodDetailPage, exportBlock,
+  saveAsMethodPage, saveAsMethodValues, importFormPage, importPreviewPage,
+  type BlueprintFormValues, type SaveAsMethodValues, type ImportKind
+} from "./render-blueprint.js";
+import {
+  parseQuestionTreeDsl, parseMetricUsagesDsl, parseMethodBindingsDsl,
+  parseQuestionsDsl, parseHypothesesDsl, parseEvidenceDsl, parseOptionsDsl
+} from "./dsl.js";
 import { loadInstance } from "../engine/loader.js";
-import { materialize } from "../engine/materialize.js";
-import { validateInstance } from "../engine/validate.js";
+import { materialize, resolveBaseTemplate, EMPTY_TEMPLATE } from "../engine/materialize.js";
 import { findPendingReview, applyApproval, applyRejection } from "../engine/review.js";
 import { writeInstanceFile } from "../engine/io.js";
 import { InstanceSchema } from "../schema/instance.js";
 import type { Instance } from "../schema/instance.js";
 import type { Template } from "../schema/template.js";
+import { TemplateSchema } from "../schema/template.js";
+import { BlueprintSchema, type JudgmentKind, type EvidenceStatus } from "../schema/blueprint.js";
+import { MethodTemplateSchema } from "../schema/method.js";
 import { createLlmClientFromEnv } from "../llm/index.js";
 import { readEnvFile, writeManagedEnv, apiKeyEnvName, maskKey } from "./env-file.js";
 import { resolveLlmEnvAuto, DEFAULT_CHAIN } from "../llm/env-auto.js";
@@ -30,8 +41,8 @@ import { existsSync } from "node:fs";
 import { mkdir, access, readdir, readFile, writeFile, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import { generateDraft, generateRefineDraft } from "../engine/generate.js";
-import { buildGeneratePrompt, buildRefinePrompt } from "../llm/prompt.js";
+import { generateDraft, generateRefineDraft, generateBlueprintDraft } from "../engine/generate.js";
+import { buildGeneratePrompt, buildRefinePrompt, buildBlueprintGeneratePrompt, buildBlueprintRefinePrompt } from "../llm/prompt.js";
 import { applyDraft } from "../engine/apply.js";
 import { DraftSchema } from "../schema/draft.js";
 import { draftsPage, jobRunningPage, jobErrorPage, type DraftLoad } from "./render-drafts.js";
@@ -46,6 +57,11 @@ import { ExportBlockedError } from "../export/gate.js";
 import type { Exporter } from "../export/types.js";
 import { MappingSchema } from "../schema/mapping.js";
 import type { Scenario } from "../schema/scenario.js";
+import type { MethodTemplate } from "../schema/method.js";
+import { loadMethodsFromDir, defaultMethodsDir, lintMethodTemplate } from "../engine/methods.js";
+import {
+  validateDesign, designReview, blueprintReviewStatus, designFingerprint, findMetricReferences
+} from "../engine/blueprint.js";
 export interface UiOptions {
   instancePath?: string;
   templatesDir: string;
@@ -67,6 +83,18 @@ async function discoverTemplates(dir: string): Promise<Template[]> {
   return templates;
 }
 
+// A1 D3：方法模板库（<templatesDir>/methods；目录不存在 = 空库合法；装载失败 fail-closed 抛错）
+async function discoverMethods(dir: string): Promise<MethodTemplate[]> {
+  const result = await loadMethodsFromDir(defaultMethodsDir(dir));
+  if (!result.ok) {
+    const detail =
+      result.kind === "read"
+        ? result.message
+        : result.errors.map((e) => `${e.file} ${e.error.path}: ${e.error.message}`).join("；");
+    throw new Error(`方法模板库不可用：${detail}`);
+  }
+  return result.methods;
+}
 
 interface InstanceContext {
   instance: Instance;
@@ -78,8 +106,8 @@ async function loadInstanceContext(instancePath: string | undefined, templates: 
   if (!instancePath) return null;
   const loaded = await loadInstance(instancePath);
   if (!loaded.ok) return null;
-  const baseId = loaded.instance.base.split("@")[0]!;
-  const base = templates.find((t) => t.template.id === baseId);
+  // A1 D13：空白起点（无 base）→ 合成空基座
+  const base = resolveBaseTemplate(loaded.instance, templates);
   if (!base) return null;
   return { instance: loaded.instance, base, instancePath };
 }
@@ -176,8 +204,8 @@ async function readFormBody(req: import("node:http").IncomingMessage): Promise<U
 }
 
 // 实例发现：工作区根、一层子目录、examples 样例（供首页「打开已有实例」；只列可加载的）
-async function discoverInstances(workspaceDir: string): Promise<{ path: string; base: string }[]> {
-  const found = new Map<string, string>();
+async function discoverInstances(workspaceDir: string): Promise<{ path: string; base: string | undefined }[]> {
+  const found = new Map<string, string | undefined>();
   const tryAdd = async (p: string) => {
     const loaded = await loadInstance(p);
     if (loaded.ok) found.set(p, loaded.instance.base);
@@ -217,6 +245,8 @@ interface DraftJob {
   status: "running" | "done" | "error";
   error?: string;
   issues?: string[];
+  /** A1：完成后去向——指标草案（drafts）/ 蓝图草案预览（blueprint）/ 首页创建流预览（blueprint-create） */
+  returnTo?: "drafts" | "blueprint" | "blueprint-create";
 }
 
 function draftPendingPath(instancePath: string): string {
@@ -254,6 +284,7 @@ function readScenarioFormValues(form: URLSearchParams): ScenarioFormValues {
     question_tree: get("question_tree"),
     metric_usages: get("metric_usages"),
     method_refs: get("method_refs"),
+    method_bindings: get("method_bindings"),
     evidence_requirements: get("evidence_requirements").trim(),
     output_spec: get("output_spec").trim(),
     review_rules: get("review_rules").trim()
@@ -262,6 +293,7 @@ function readScenarioFormValues(form: URLSearchParams): ScenarioFormValues {
 
 function submitScenario(
   ctx: InstanceContext,
+  methods: MethodTemplate[],
   values: ScenarioFormValues,
   mode: "new" | "edit"
 ): { ok: true; instance: Instance } | { ok: false; errors: string[] } {
@@ -281,7 +313,8 @@ function submitScenario(
 
   const tree = parseQuestionTreeDsl(values.question_tree, knownMetrics);
   const usages = parseMetricUsagesDsl(values.metric_usages, knownMetrics);
-  errors.push(...tree.errors, ...usages.errors);
+  const bindings = parseMethodBindingsDsl(values.method_bindings, knownMetrics);
+  errors.push(...tree.errors, ...usages.errors, ...bindings.errors);
   if (errors.length > 0) return { ok: false, errors };
 
   const scenario: Scenario = {
@@ -292,6 +325,7 @@ function submitScenario(
     question_tree: tree.nodes,
     metric_usages: usages.usages,
     method_refs: values.method_refs.split(/\r?\n/).map((x) => x.trim()).filter(Boolean),
+    ...(bindings.bindings.length > 0 ? { method_bindings: bindings.bindings } : {}),
     evidence_requirements: values.evidence_requirements,
     output_spec: values.output_spec,
     review_rules: values.review_rules
@@ -309,7 +343,7 @@ function submitScenario(
     return { ok: false, errors: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
   }
   const materialized = materialize(ctx.base, parsed.data);
-  const issues = validateInstance(materialized, ctx.base, parsed.data, { skipReviewGate: true });
+  const issues = validateDesign(materialized, ctx.base, parsed.data, methods, { skipReviewGate: true, writeMode: true });
   if (issues.length > 0) {
     return { ok: false, errors: issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`) };
   }
@@ -319,6 +353,12 @@ function submitScenario(
 // 场景合并集（模板种子 ∪ 实例 added，同 id 实例覆盖——与 materialize 同语义）
 function mergedScenarios(ctx: InstanceContext): Map<string, Scenario> {
   return new Map([...ctx.base.scenarios, ...ctx.instance.added_scenarios].map((s) => [s.id, s] as const));
+}
+
+// A1 四视图共享：无实例空态（布局归属「我的体系」；指引回首页 NL 入口与向导）
+function noInstanceView(statusInfo: string, title = "我的体系"): string {
+  return layout("instance", title, "当前没有打开的实例。",
+    `<div class="empty">还没有实例<br><span style="font-size:0.82rem">在首页用一句话生成分析设计草稿，或用问卷向导从模板创建</span><br><a class="btn btn-primary" href="/">返回首页开始</a>&nbsp;<a class="btn" href="/init">创建实例</a></div>`, statusInfo);
 }
 
 
@@ -359,6 +399,65 @@ export function createUiServer(opts: UiOptions): Server {
         job.error = (e as Error).message;
       }
     })();
+  };
+
+  // A1：分析体系蓝图 job（D9 prompt v1.0.0 独立版本；caller 标签仍用 generate/refine 保 taskId 统计）。
+  // 产物落盘：实例内生成/修正 → 实例旁 draft.pending.yaml（与指标草案同一单文件通道）；
+  // 首页创建流（无实例）→ 工作区级 draft.pending.create.yaml，采纳时创建空白基座工作稿。
+  const createDraftPath = join(workspaceDir, "draft.pending.create.yaml");
+  const runBlueprintJob = (
+    job: DraftJob,
+    base: Template,
+    instance: Instance | undefined,
+    methods: MethodTemplate[],
+    text: string,
+    outFile: string
+  ): void => {
+    void (async () => {
+      try {
+        const { env } = await resolveLlmEnvAuto({ processEnv: process.env, envFilePath, authJsonPath: opts.authJsonPath });
+        const client = createLlmClientFromEnv(env, job.kind);
+        const modelLabel = env.MF_LLM_MODEL ?? (env.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
+        const now = new Date().toISOString();
+        const prompt =
+          job.kind === "generate"
+            ? buildBlueprintGeneratePrompt(base, methods, text)
+            : buildBlueprintRefinePrompt(base, instance!, methods, text);
+        const result = await generateBlueprintDraft(client, prompt, text, modelLabel, now);
+        if (!result.ok) {
+          job.status = "error";
+          job.error = `模型输出未通过校验（阶段 ${result.stage}）`;
+          job.issues = result.issues ?? [result.stage === "call" ? result.raw : `原始返回前 300 字：${result.raw.slice(0, 300)}`];
+          return;
+        }
+        await writeFile(
+          outFile,
+          `# Metric Factory 待采纳分析体系草案（AI 生成；采纳才写工作稿，未采纳不改内容）\n${stringifyYaml(result.draft)}`,
+          "utf8"
+        );
+        job.status = "done";
+      } catch (e) {
+        job.status = "error";
+        job.error = (e as Error).message;
+      }
+    })();
+  };
+
+  // 「04 检查与交付」视图内容（release/receipts 表单状态可注入；与 GET/POST 重渲染共用同一组装）
+  const deliveryContent = async (
+    ctx: InstanceContext,
+    release: ReleaseUiState = { kind: "form", values: { version: "", note: "" } },
+    receiptsValues = { yaml: "" },
+    receiptsPatch: Partial<ReceiptsUiState> = {}
+  ): Promise<string> => {
+    const materialized = materialize(ctx.base, ctx.instance);
+    const methods = await discoverMethods(opts.templatesDir);
+    const review = designReview(materialized, ctx.base, ctx.instance, methods);
+    const extraSections =
+      exportBlock() +
+      releaseBlock(release) +
+      receiptsBlock(buildReceiptsState(ctx.instancePath, receiptsValues, receiptsPatch));
+    return deliveryPage({ review, materialized, instance: ctx.instance, metricCount: materialized.metrics.length, extraSections });
   };
   // 回执区块状态构建（批次 A+B 切片 5）：登记副本为事实源，列表零 index 运行时依赖（G2）
   const buildReceiptsState = (instancePath: string, values = { yaml: "" }, patch: Partial<ReceiptsUiState> = {}): ReceiptsUiState => {
@@ -413,6 +512,106 @@ export function createUiServer(opts: UiOptions): Server {
           statusInfo
         );
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(home);
+        return;
+      }
+
+      // ===== A1 首页 NL 入口（默认起点）：一句话 → AI 起草分析体系 → 预览 → 采纳建空白基座工作稿 =====
+      if (path === "/blueprint/generate" && req.method === "POST") {
+        const form = await readFormBody(req);
+        const text = form.get("describe")?.trim() ?? "";
+        const llm = await llmStatus(envFilePath, authJsonPath);
+        const fail = (errors: string[]) => {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("home", "生成分析设计草稿", "提交未通过校验。", formErrorPage("无法生成", errors), statusInfo)
+          );
+        };
+        if (llm.mode !== "configured" && llm.mode !== "faux") {
+          fail(["AI 模型未配置或配置有误，请先到设置页完成配置", llm.error ?? ""].filter(Boolean));
+          return;
+        }
+        if (!text) {
+          fail(["需求描述不能为空——用一句话说说你想弄清什么或做出什么选择"]);
+          return;
+        }
+        const id = randomUUID().slice(0, 8);
+        const job: DraftJob = { kind: "generate", status: "running", returnTo: "blueprint-create" };
+        jobs.set(id, job);
+        // D13 空白基座：无基模板，建议指标 dimensions 须空（prompt 已钉死）；方法库照常注入供 method_refs 选择
+        runBlueprintJob(job, EMPTY_TEMPLATE, undefined, await discoverMethods(opts.templatesDir), text, createDraftPath);
+        res.writeHead(303, { location: `/drafts/jobs/${id}` }).end();
+        return;
+      }
+
+      if (path === "/blueprint/preview") {
+        const pending = await loadPendingDraft(createDraftPath);
+        if (!pending || !pending.ok || !pending.draft.blueprint) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("home", "分析体系草案", "没有可预览的草案。",
+              formErrorPage("无草案", [pending && !pending.ok ? pending.error : "没有待采纳的分析体系草案，请先在首页用一句话生成"]), statusInfo)
+          );
+          return;
+        }
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(
+          layout("home", "分析体系草案 · 预览与影响", "AI 建议逐段呈现；采纳才创建工作稿，放弃不改任何内容。",
+            blueprintDraftPreviewPage(pending.draft, { create: true }), statusInfo)
+        );
+        return;
+      }
+
+      if (path === "/blueprint/apply-create" && req.method === "POST") {
+        const form = await readFormBody(req);
+        const name = form.get("name")?.trim() ?? "";
+        const pending = await loadPendingDraft(createDraftPath);
+        if (!pending || !pending.ok || !pending.draft.blueprint) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("home", "采纳草案", "没有可采纳的草案。", formErrorPage("无草案", [pending && !pending.ok ? pending.error : "草案不存在或已被处理，请重新生成"]), statusInfo)
+          );
+          return;
+        }
+        const draft = pending.draft;
+        const rerender = (errors: string[]) => {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("home", "分析体系草案 · 预览与影响", "创建工作稿前校验未通过（零写盘）。",
+              `${formErrorPage("无法创建", errors)}${blueprintDraftPreviewPage(draft, { create: true })}`, statusInfo)
+          );
+        };
+        if (!/^[a-z0-9][a-z0-9_-]*$/.test(name)) {
+          rerender([`工作区目录名需以小写字母或数字开头，仅含小写字母、数字、中划线、下划线（收到 "${name}"）`]);
+          return;
+        }
+        const outPath = join(workspaceDir, name, "instance.yaml");
+        try {
+          await access(outPath);
+          rerender([`目录 ${name}/ 下已存在 instance.yaml，为避免覆盖请换一个名字`]);
+          return;
+        } catch { /* 不存在，可创建 */ }
+        // D13 空白起点工作稿：无 base；LLM 建议指标带待审标记（审核中心批准前导出被硬阻断）
+        const instance = InstanceSchema.safeParse({
+          instance: { created_at: new Date().toISOString() },
+          added: draft.added,
+          added_scenarios: draft.added_scenarios,
+          blueprint: draft.blueprint
+        });
+        if (!instance.success) {
+          rerender(instance.error.issues.map((i) => `[instance] ${i.path.join(".")}: ${i.message}`));
+          return;
+        }
+        const issues = validateDesign(materialize(EMPTY_TEMPLATE, instance.data), EMPTY_TEMPLATE, instance.data, await discoverMethods(opts.templatesDir), { skipReviewGate: true, writeMode: true });
+        if (issues.length > 0) {
+          rerender(issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`));
+          return;
+        }
+        await mkdir(dirname(outPath), { recursive: true });
+        await writeInstanceFile(outPath, instance.data);
+        await rm(createDraftPath, { force: true });
+        currentInstancePath = outPath;
+        res.writeHead(303, { location: "/instance/overview" }).end();
+        return;
+      }
+
+      if (path === "/blueprint/discard-create" && req.method === "POST") {
+        await rm(createDraftPath, { force: true });
+        res.writeHead(303, { location: "/" }).end();
         return;
       }
 
@@ -534,6 +733,166 @@ export function createUiServer(opts: UiOptions): Server {
         return;
       }
 
+      // ===== 方法模板库（A1 第二类模板；须在 /templates/:id 之前注册——"methods" 会被模板 id 通配吞掉）=====
+      if (path === "/templates/methods") {
+        const methods = await discoverMethods(opts.templatesDir);
+        const html = layout(
+          "templates",
+          "方法模板库",
+          `共 ${methods.length} 个分析方法模板。方法记录适用语境、输入角色、步骤、证据与限制；场景经方法绑定引用（引用不实现），语境不匹配或缺必需角色将阻断交付。`,
+          methodsLibrarySection(methods),
+          statusInfo
+        );
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
+        return;
+      }
+
+      const methodMatch = path.match(/^\/templates\/methods\/([a-z0-9-]+)$/);
+      if (methodMatch) {
+        const id = methodMatch[1]!;
+        const methods = await discoverMethods(opts.templatesDir);
+        const m = methods.find((x) => x.method.id === id);
+        if (!m) {
+          res.writeHead(404, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("templates", "未找到方法", `方法 ${escapeHtml(id)} 不存在。`, `<div class="empty">方法不存在<br><a class="btn" href="/templates/methods">返回方法库</a></div>`, statusInfo)
+          );
+          return;
+        }
+        const html = layout(
+          "templates",
+          `${m.method.name} · ${m.method.id}`,
+          `${escapeHtml(m.family)} · 版本 ${escapeHtml(m.method.version)} · 适用：${m.contexts.join("、")}`,
+          methodDetailPage(m),
+          statusInfo
+        );
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
+        return;
+      }
+
+      // ===== 粘贴导入（次要起点；解析预览 → 确认落盘，零猜补）=====
+      if (path === "/import" && req.method === "GET") {
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(
+          layout("templates", "导入模板", "粘贴外部模板 YAML，解析预览后确认落盘。", importFormPage(), statusInfo)
+        );
+        return;
+      }
+      if (path === "/import" && req.method === "POST") {
+        // 预览页「返回修改」回带原值
+        const form = await readFormBody(req);
+        const kind: ImportKind = form.get("kind") === "metric" ? "metric" : "method";
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(
+          layout("templates", "导入模板", "粘贴外部模板 YAML，解析预览后确认落盘。",
+            importFormPage({ kind, source: form.get("source") ?? "" }), statusInfo)
+        );
+        return;
+      }
+
+      type ImportParseResult =
+        | { kind: ImportKind; source: string; error: string[] }
+        | { kind: ImportKind; source: string; method: MethodTemplate }
+        | { kind: ImportKind; source: string; template: Template };
+
+      const importParse = async (form: URLSearchParams): Promise<ImportParseResult> => {
+        const kind: ImportKind = form.get("kind") === "metric" ? "metric" : "method";
+        const source = form.get("source") ?? "";
+        let doc: unknown;
+        try {
+          doc = parseYaml(source);
+        } catch (e) {
+          return { kind, source, error: [`YAML 解析失败：${(e as Error).message}`] as string[] };
+        }
+        if (kind === "method") {
+          const parsed = MethodTemplateSchema.safeParse(doc);
+          if (!parsed.success) {
+            return { kind, source, error: parsed.error.issues.map((i) => `[method] ${i.path.join(".")}: ${i.message}`) };
+          }
+          const m = parsed.data;
+          const lintIssues = lintMethodTemplate(m);
+          if (lintIssues.length > 0) {
+            return { kind, source, error: lintIssues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`) };
+          }
+          return { kind, source, method: m };
+        }
+        const parsed = TemplateSchema.safeParse(doc);
+        if (!parsed.success) {
+          return { kind, source, error: parsed.error.issues.map((i) => `[template] ${i.path.join(".")}: ${i.message}`) };
+        }
+        return { kind, source, template: parsed.data };
+      };
+
+      if (path === "/import/preview" && req.method === "POST") {
+        const form = await readFormBody(req);
+        const r = await importParse(form);
+        if ("error" in r) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("templates", "导入模板", "解析未通过（零写盘）。", importFormPage({ kind: r.kind, source: r.source }, r.error), statusInfo)
+          );
+          return;
+        }
+        const preview =
+          "method" in r
+            ? {
+                kind: r.kind, source: r.source, title: `${r.method.method.name}（${r.method.method.id}）`,
+                targetFile: `templates/methods/${r.method.method.id}.yaml`,
+                summary: [
+                  ["方法族", r.method.family],
+                  ["适用语境", r.method.contexts.join("、")],
+                  ["输入角色", r.method.roles.length > 0 ? r.method.roles.map((x) => `${x.name}${x.required ? "（必需）" : ""}`).join("；") : "无（定性方法）"],
+                  ["步骤数", String(r.method.steps.length)],
+                  ["版本", r.method.method.version]
+                ] as [string, string][],
+                gaps: [
+                  ...(r.method.method.references.length === 0 ? ["方法论出处（references）为空——lint 要求必填"] : []),
+                  ...(r.method.roles.length === 0 ? ["无输入角色：将作为定性方法入库"] : [])
+                ]
+              }
+            : {
+                kind: r.kind, source: r.source, title: `${r.template.template.industry}（${r.template.template.id}）`,
+                targetFile: `templates/${r.template.template.id}.yaml`,
+                summary: [
+                  ["业务模型", r.template.template.business_models.join("、")],
+                  ["指标数", String(r.template.metrics.length)],
+                  ["维度", r.template.dimensions.join("、") || "（无）"],
+                  ["场景数", String(r.template.scenarios.length)],
+                  ["版本", r.template.template.version]
+                ] as [string, string][],
+                gaps: [
+                  ...(r.template.dimensions.length === 0 ? ["维度清单为空"] : []),
+                  ...(r.template.scenarios.length === 0 ? ["无种子决策场景"] : [])
+                ]
+              };
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(
+          layout("templates", "导入模板 · 预览", "确认内容与落盘位置；缺口如实标注，不代为编造。", importPreviewPage(preview), statusInfo)
+        );
+        return;
+      }
+
+      if (path === "/import/save" && req.method === "POST") {
+        const form = await readFormBody(req);
+        const r = await importParse(form);
+        if ("error" in r) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("templates", "导入模板", "解析未通过（零写盘）。", importFormPage({ kind: r.kind, source: r.source }, r.error), statusInfo)
+          );
+          return;
+        }
+        const isMethod = "method" in r;
+        const id = isMethod ? r.method.method.id : r.template.template.id;
+        const target = isMethod ? join(defaultMethodsDir(opts.templatesDir), `${id}.yaml`) : join(opts.templatesDir, `${id}.yaml`);
+        try {
+          await access(target);
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("templates", "导入模板", "目标已存在（零写盘）。",
+              importFormPage({ kind: r.kind, source: r.source }, [`${isMethod ? "方法" : "模板"} id "${id}" 已存在（${target}），为避免覆盖请更换 id`]), statusInfo)
+          );
+          return;
+        } catch { /* 不存在，可创建 */ }
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, `# Metric Factory ${isMethod ? "方法" : "行业"}模板（工作台导入）\n${stringifyYaml(isMethod ? r.method : r.template)}`, "utf8");
+        res.writeHead(303, { location: isMethod ? `/templates/methods/${id}` : `/templates/${id}` }).end();
+        return;
+      }
+
       const tplMatch = path.match(/^\/templates\/([a-z0-9-]+)$/);
       if (tplMatch) {
         const id = tplMatch[1]!;
@@ -555,19 +914,82 @@ export function createUiServer(opts: UiOptions): Server {
         return;
       }
 
-      // ===== 实例视图（切片 6）=====
-      if (path === "/instance") {
+      // ===== 01 体系总览（A1 四视图之一；分析体系蓝图 + AI 助手栏）=====
+      if (path === "/instance/overview") {
         const ctx = await loadInstanceContext(currentInstancePath, templates);
         if (!ctx) {
-          res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(
-            layout("instance", "我的实例", "当前没有打开的实例。",
-              `<div class="empty">还没有实例<br><span style="font-size:0.82rem">用问卷向导创建，或在首页打开已有实例</span><br><a class="btn btn-primary" href="/init">创建实例</a>&nbsp;<a class="btn" href="/">返回工作台</a></div>`, statusInfo)
-          );
+          res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(noInstanceView(statusInfo, "体系总览"));
           return;
         }
         const materialized = materialize(ctx.base, ctx.instance);
-        const html = layout("instance", "我的实例", `基模板 ${escapeHtml(ctx.instance.base)} · 下方可微调（口径开关/增删改）并写回，写回前经全量校验。`,
-          instancePage(materialized, ctx.instance, ctx.instancePath, ctx.base, undefined, buildReceiptsState(ctx.instancePath)), statusInfo);
+        const methods = await discoverMethods(opts.templatesDir);
+        const review = designReview(materialized, ctx.base, ctx.instance, methods);
+        const html = layout(
+          "instance",
+          "体系总览",
+          `基模板 ${escapeHtml(ctx.instance.base ?? "（空白起点）")} · 分析体系的目的、问题结构、假设、证据计划与候选道路。`,
+          viewNav("/instance/overview") +
+            overviewPage({
+              materialized,
+              instance: ctx.instance,
+              base: ctx.base,
+              review: blueprintReviewStatus(materialized),
+              designIssueCount: review.designIssues.length
+            }),
+          statusInfo
+        );
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
+        return;
+      }
+
+      // ===== 02 指标体系（原实例视图：概览/变更/指标树/指标字典/微调表单）=====
+      if (path === "/instance") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(noInstanceView(statusInfo, "指标体系"));
+          return;
+        }
+        const materialized = materialize(ctx.base, ctx.instance);
+        const html = layout("instance", "指标体系", `基模板 ${escapeHtml(ctx.instance.base ?? "（空白起点）")} · 指标定义的唯一权威来源；下方可微调（口径开关/增删改）并写回，写回前经全量校验。`,
+          viewNav("/instance") + instancePage(materialized, ctx.instance, ctx.instancePath, ctx.base), statusInfo);
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
+        return;
+      }
+
+      // ===== 03 场景与方法（决策场景列表 + 方法模板库）=====
+      if (path === "/instance/scenarios" && req.method === "GET") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(noInstanceView(statusInfo, "场景与方法"));
+          return;
+        }
+        const materialized = materialize(ctx.base, ctx.instance);
+        const methods = await discoverMethods(opts.templatesDir);
+        const html = layout(
+          "instance",
+          "场景与方法",
+          "决策场景回答「怎样分析这个问题」；方法模板记录可复用的分析套路，场景经方法绑定引用。",
+          viewNav("/instance/scenarios") + scenariosBlock(materialized, ctx.instance, ctx.base) + methodsLibrarySection(methods),
+          statusInfo
+        );
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
+        return;
+      }
+
+      // ===== 04 检查与交付（设计检查 + 业务复核 + 导出/发布/回执）=====
+      if (path === "/instance/delivery") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(noInstanceView(statusInfo, "检查与交付"));
+          return;
+        }
+        const html = layout(
+          "instance",
+          "检查与交付",
+          "设计缺口、业务复核与导出发布在同一处收口；复核绑定完整设计快照，相关修改使确认失效。",
+          viewNav("/instance/delivery") + (await deliveryContent(ctx)),
+          statusInfo
+        );
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
         return;
       }
@@ -602,7 +1024,7 @@ export function createUiServer(opts: UiOptions): Server {
         if (!scn) {
           res.writeHead(404, { "content-type": "text/html; charset=utf-8" }).end(
             layout("instance", "未找到场景", `场景 ${escapeHtml(id)} 不存在。`,
-              `<div class="empty">场景不存在<br><span class="mono">${escapeHtml(id)}</span><br><a class="btn" href="/instance">返回实例</a></div>`, statusInfo)
+              `<div class="empty">场景不存在<br><span class="mono">${escapeHtml(id)}</span><br><a class="btn" href="/instance/scenarios">返回场景列表</a></div>`, statusInfo)
           );
           return;
         }
@@ -625,7 +1047,7 @@ export function createUiServer(opts: UiOptions): Server {
         }
         const form = await readFormBody(req);
         const values = readScenarioFormValues(form);
-        const result = submitScenario(ctx, values, "new");
+        const result = submitScenario(ctx, await discoverMethods(opts.templatesDir), values, "new");
         if (!result.ok) {
           res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
             layout("instance", "决策场景 · 新建", "全量校验未通过（零写盘）——修正下列问题后重试。",
@@ -634,7 +1056,7 @@ export function createUiServer(opts: UiOptions): Server {
           return;
         }
         await writeInstanceFile(ctx.instancePath, result.instance);
-        res.writeHead(303, { location: "/instance" }).end();
+        res.writeHead(303, { location: "/instance/scenarios" }).end();
         return;
       }
 
@@ -651,13 +1073,13 @@ export function createUiServer(opts: UiOptions): Server {
         if (!mergedScenarios(ctx).has(id)) {
           res.writeHead(404, { "content-type": "text/html; charset=utf-8" }).end(
             layout("instance", "未找到场景", `场景 ${escapeHtml(id)} 不存在。`,
-              `<div class="empty">场景不存在<br><span class="mono">${escapeHtml(id)}</span><br><a class="btn" href="/instance">返回实例</a></div>`, statusInfo)
+              `<div class="empty">场景不存在<br><span class="mono">${escapeHtml(id)}</span><br><a class="btn" href="/instance/scenarios">返回场景列表</a></div>`, statusInfo)
           );
           return;
         }
         const form = await readFormBody(req);
         const values = { ...readScenarioFormValues(form), id }; // id 以路径为准
-        const result = submitScenario(ctx, values, "edit");
+        const result = submitScenario(ctx, await discoverMethods(opts.templatesDir), values, "edit");
         if (!result.ok) {
           res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
             layout("instance", "决策场景 · 编辑", "全量校验未通过（零写盘）——修正下列问题后重试。",
@@ -666,6 +1088,512 @@ export function createUiServer(opts: UiOptions): Server {
           return;
         }
         await writeInstanceFile(ctx.instancePath, result.instance);
+        res.writeHead(303, { location: "/instance/scenarios" }).end();
+        return;
+      }
+
+      // ===== 场景另存为方法模板（A1 T10：写 templates/methods/<id>.yaml，id 冲突零写盘）=====
+      const saveAsMethodMatch = path.match(/^\/instance\/scenarios\/([a-z][a-z0-9_]*)\/save-as-method$/);
+      if (saveAsMethodMatch) {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "无实例", "未指定实例。", formErrorPage("未指定实例", ["metric-factory ui --instance <path>"]), statusInfo)
+          );
+          return;
+        }
+        const id = saveAsMethodMatch[1]!;
+        const scn = mergedScenarios(ctx).get(id);
+        if (!scn) {
+          res.writeHead(404, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "未找到场景", `场景 ${escapeHtml(id)} 不存在。`,
+              `<div class="empty">场景不存在<br><span class="mono">${escapeHtml(id)}</span><br><a class="btn" href="/instance/scenarios">返回场景列表</a></div>`, statusInfo)
+          );
+          return;
+        }
+        const defaultContexts = ctx.instance.blueprint?.contexts ?? [];
+        if (req.method === "GET") {
+          res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "另存为方法模板", `把场景「${escapeHtml(scn.title)}」的分析套路沉淀为可复用方法模板。`,
+              saveAsMethodPage(scn, saveAsMethodValues(scn, defaultContexts)), statusInfo)
+          );
+          return;
+        }
+        if (req.method === "POST") {
+          const form = await readFormBody(req);
+          const values: SaveAsMethodValues = {
+            id: (form.get("id") ?? "").trim(),
+            name: (form.get("name") ?? "").trim(),
+            family: (form.get("family") ?? "").trim(),
+            purpose: (form.get("purpose") ?? "").trim(),
+            description: (form.get("description") ?? "").trim(),
+            contexts: form.getAll("contexts"),
+            steps: form.get("steps") ?? "",
+            evidence: (form.get("evidence") ?? "").trim(),
+            limits: (form.get("limits") ?? "").trim(),
+            references: form.get("references") ?? ""
+          };
+          const rerender = (errors: string[]) => {
+            res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+              layout("instance", "另存为方法模板", "校验未通过（零写盘）。", saveAsMethodPage(scn, values, errors), statusInfo)
+            );
+          };
+          // 步骤 DSL：逐行 标题|说明（说明可省）
+          const stepRows: { title: string; detail: string }[] = [];
+          const stepErrors: string[] = [];
+          for (const [i, raw] of values.steps.split(/\r?\n/).entries()) {
+            if (raw.trim() === "") continue;
+            const slots = raw.split("|").map((s) => s.trim());
+            if (slots.length < 1 || slots.length > 2 || slots[0] === "") {
+              stepErrors.push(`[method-steps] steps 第 ${i + 1} 行: 格式须为 标题|说明（说明可省）`);
+              continue;
+            }
+            stepRows.push({ title: slots[0]!, detail: slots[1] ?? "" });
+          }
+          if (stepErrors.length > 0) {
+            rerender(stepErrors);
+            return;
+          }
+          // 角色从场景指标角色派生：outcome/driver 必需，guardrail 可选
+          const ROLE_NAME: Record<string, string> = { outcome: "结果指标", driver: "驱动指标", guardrail: "护栏指标" };
+          const roleIds = [...new Set(scn.metric_usages.map((u) => u.role))];
+          const candidate = {
+            method: {
+              id: values.id,
+              name: values.name,
+              version: "0.1.0",
+              description: values.description,
+              references: values.references.split(/\r?\n/).map((x) => x.trim()).filter(Boolean)
+            },
+            contexts: values.contexts,
+            family: values.family,
+            purpose: values.purpose,
+            roles: roleIds.map((r) => ({ id: r, name: ROLE_NAME[r] ?? r, required: r !== "guardrail" })),
+            steps: stepRows,
+            evidence: values.evidence,
+            limits: values.limits,
+            provenance: { origin: "manual" as const }
+          };
+          const parsed = MethodTemplateSchema.safeParse(candidate);
+          if (!parsed.success) {
+            rerender(parsed.error.issues.map((i) => `[method] ${i.path.join(".")}: ${i.message}`));
+            return;
+          }
+          const lintIssues = lintMethodTemplate(parsed.data);
+          if (lintIssues.length > 0) {
+            rerender(lintIssues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`));
+            return;
+          }
+          const target = join(defaultMethodsDir(opts.templatesDir), `${parsed.data.method.id}.yaml`);
+          try {
+            await access(target);
+            rerender([`方法 id "${parsed.data.method.id}" 已存在（${target}），为避免覆盖请更换 id`]);
+            return;
+          } catch { /* 不存在，可创建 */ }
+          await mkdir(dirname(target), { recursive: true });
+          await writeFile(target, `# Metric Factory 方法模板（由场景 ${scn.id} 另存）\n${stringifyYaml(parsed.data)}`, "utf8");
+          res.writeHead(303, { location: `/templates/methods/${parsed.data.method.id}` }).end();
+          return;
+        }
+      }
+
+      // ===== 分析体系蓝图（A1 T8/T9：编辑保存 / 假设判断状态 / AI 生成与修正 / 预览采纳 / 业务复核）=====
+      if (path === "/instance/blueprint/edit") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "无实例", "未指定实例。", formErrorPage("未指定实例", ["metric-factory ui --instance <path>"]), statusInfo)
+          );
+          return;
+        }
+        const bp = ctx.instance.blueprint;
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(
+          layout("instance", bp ? "修正我的理解" : "手工建立分析体系",
+            "直接编辑设计要素：业务目的、问题结构、假设三要素、证据计划与候选道路。草稿允许缺口；交付前必须补齐。",
+            blueprintEditPage(blueprintFormValues(bp), Boolean(bp)), statusInfo)
+        );
+        return;
+      }
+
+      if (path === "/instance/blueprint" && req.method === "POST") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "无实例", "未指定实例。", formErrorPage("未指定实例", ["metric-factory ui --instance <path>"]), statusInfo)
+          );
+          return;
+        }
+        const form = await readFormBody(req);
+        const values: BlueprintFormValues = {
+          title: (form.get("title") ?? "").trim(),
+          intent: (form.get("intent") ?? "").trim(),
+          purpose: (form.get("purpose") ?? "").trim(),
+          decision: (form.get("decision") ?? "").trim(),
+          boundary: (form.get("boundary") ?? "").trim(),
+          deliverable: (form.get("deliverable") ?? "").trim(),
+          contexts: form.getAll("contexts"),
+          organizations: form.getAll("organizations"),
+          questions: form.get("questions") ?? "",
+          hypotheses: form.get("hypotheses") ?? "",
+          evidence_plan: form.get("evidence_plan") ?? "",
+          options: form.get("options") ?? ""
+        };
+        const knownMetrics = new Set(materialize(ctx.base, ctx.instance).metrics.map((m) => m.name));
+        const q = parseQuestionsDsl(values.questions, knownMetrics);
+        const h = parseHypothesesDsl(values.hypotheses);
+        const e = parseEvidenceDsl(values.evidence_plan);
+        const o = parseOptionsDsl(values.options);
+        const dslErrors = [...q.errors, ...h.errors, ...e.errors, ...o.errors];
+        const fail = (errors: string[]) => {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "修正我的理解", "保存未通过（零写盘）——修正下列问题后重试。",
+              blueprintEditPage(values, Boolean(ctx.instance.blueprint), errors), statusInfo)
+          );
+        };
+        if (dslErrors.length > 0) {
+          fail(dslErrors);
+          return;
+        }
+        // 判断性质/核验状态不在编辑表单内（总览视图逐条维护）：按 id 保留既有取值，新增假设取缺省
+        const prev = ctx.instance.blueprint;
+        const prevHyp = new Map((prev?.hypotheses ?? []).map((x) => [x.id, x]));
+        const bpParsed = BlueprintSchema.safeParse({
+          title: values.title,
+          intent: values.intent,
+          purpose: values.purpose,
+          decision: values.decision,
+          boundary: values.boundary,
+          deliverable: values.deliverable,
+          contexts: values.contexts,
+          organizations: values.organizations,
+          questions: q.rows,
+          hypotheses: h.rows.map((r) => ({
+            ...r,
+            judgment: prevHyp.get(r.id)?.judgment ?? "待验证假设",
+            verified: prevHyp.get(r.id)?.verified ?? false
+          })),
+          evidence_plan: e.rows,
+          options: o.rows,
+          provenance: prev?.provenance ?? { origin: "manual" },
+          // review 原样保留：内容未变则复核仍有效（指纹不变）；内容变了自然失配失效（D5）
+          ...(prev?.review ? { review: prev.review } : {})
+        });
+        if (!bpParsed.success) {
+          fail(bpParsed.error.issues.map((i) => `[blueprint] ${i.path.join(".")}: ${i.message}`));
+          return;
+        }
+        const merged: Instance = { ...ctx.instance, blueprint: bpParsed.data };
+        const instParsed = InstanceSchema.safeParse(merged);
+        if (!instParsed.success) {
+          fail(instParsed.error.issues.map((i) => `[instance] ${i.path.join(".")}: ${i.message}`));
+          return;
+        }
+        const issues = validateDesign(materialize(ctx.base, instParsed.data), ctx.base, instParsed.data, await discoverMethods(opts.templatesDir), { skipReviewGate: true, writeMode: true });
+        if (issues.length > 0) {
+          fail(issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`));
+          return;
+        }
+        await writeInstanceFile(ctx.instancePath, instParsed.data);
+        res.writeHead(303, { location: "/instance/overview" }).end();
+        return;
+      }
+
+      const hypStateMatch = path.match(/^\/instance\/blueprint\/hypotheses\/([a-z][a-z0-9_]*)\/state$/);
+      if (hypStateMatch && req.method === "POST") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx || !ctx.instance.blueprint) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "无法更新", "实例或分析体系不存在。", formErrorPage("无法更新", ["metric-factory ui --instance <path>，且实例需已含分析体系"]), statusInfo)
+          );
+          return;
+        }
+        const hypId = hypStateMatch[1]!;
+        const bp = ctx.instance.blueprint;
+        if (!bp.hypotheses.some((x) => x.id === hypId)) {
+          res.writeHead(404, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "未找到假设", `假设 ${escapeHtml(hypId)} 不存在。`,
+              `<div class="empty">假设不存在<br><span class="mono">${escapeHtml(hypId)}</span><br><a class="btn" href="/instance/overview">返回体系总览</a></div>`, statusInfo)
+          );
+          return;
+        }
+        const form = await readFormBody(req);
+        const judgment = (form.get("judgment") ?? "待验证假设") as JudgmentKind;
+        const verified = form.get("verified") === "true";
+        const merged: Instance = {
+          ...ctx.instance,
+          blueprint: {
+            ...bp,
+            hypotheses: bp.hypotheses.map((x) => (x.id === hypId ? { ...x, judgment, verified } : x))
+          }
+        };
+        const instParsed = InstanceSchema.safeParse(merged);
+        if (!instParsed.success) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "无法更新", "判断状态取值非法（零写盘）。",
+              formErrorPage("schema 校验失败", instParsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`)), statusInfo)
+          );
+          return;
+        }
+        // 判断性质越过证据状态（事实/解释未核验、核验但无已核验证据）是交付缺口而非写入错误——允许保存，缺口在「检查与交付」呈现
+        await writeInstanceFile(ctx.instancePath, instParsed.data);
+        res.writeHead(303, { location: "/instance/overview" }).end();
+        return;
+      }
+
+      if ((path === "/instance/blueprint/generate" || path === "/instance/blueprint/refine") && req.method === "POST") {
+        const kind = path.endsWith("/generate") ? "generate" : "refine";
+        const field = kind === "generate" ? "describe" : "instruction";
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "AI 分析设计", "未指定实例。", formErrorPage("无实例", ["AI 分析设计基于当前实例生成/修正，请先创建或打开实例"]), statusInfo)
+          );
+          return;
+        }
+        const form = await readFormBody(req);
+        const text = form.get(field)?.trim() ?? "";
+        const llm = await llmStatus(envFilePath, authJsonPath);
+        if (llm.mode !== "configured" && llm.mode !== "faux") {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "AI 分析设计", "提交未通过校验。", formErrorPage("无法生成", ["AI 模型未配置或配置有误，请先到设置页完成配置", llm.error ?? ""].filter(Boolean)), statusInfo)
+          );
+          return;
+        }
+        if (!text) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "AI 分析设计", "提交未通过校验。", formErrorPage("无法生成", [kind === "generate" ? "需求描述不能为空" : "修正指令不能为空"]), statusInfo)
+          );
+          return;
+        }
+        const id = randomUUID().slice(0, 8);
+        const job: DraftJob = { kind, status: "running", returnTo: "blueprint" };
+        jobs.set(id, job);
+        runBlueprintJob(job, ctx.base, ctx.instance, await discoverMethods(opts.templatesDir), text, draftPendingPath(ctx.instancePath));
+        res.writeHead(303, { location: `/drafts/jobs/${id}` }).end();
+        return;
+      }
+
+      if (path === "/instance/blueprint/preview") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "分析体系草案", "未指定实例。", formErrorPage("无实例", ["请先创建或打开实例"]), statusInfo)
+          );
+          return;
+        }
+        const pending = await loadPendingDraft(draftPendingPath(ctx.instancePath));
+        if (!pending) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "分析体系草案", "没有可预览的草案。", formErrorPage("无草案", ["没有待采纳的草案，请先在体系总览用自然语言生成或修正"]), statusInfo)
+          );
+          return;
+        }
+        if (!pending.ok) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "分析体系草案", "草案文件损坏，无法预览。", formErrorPage("草案损坏", [pending.error]), statusInfo)
+          );
+          return;
+        }
+        if (!pending.draft.blueprint) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "分析体系草案", "该草案不含分析体系内容。",
+              formErrorPage("非蓝图草案", ["当前待采纳草案是指标草案（无分析体系段），请到「AI 草案」页预览与采纳"]), statusInfo)
+          );
+          return;
+        }
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(
+          layout("instance", "分析体系草案 · 建议与影响", "AI 建议逐段呈现；采纳才更新同一工作稿，放弃不改任何内容。",
+            blueprintDraftPreviewPage(pending.draft, { create: false }), statusInfo)
+        );
+        return;
+      }
+
+      if (path === "/instance/blueprint/apply" && req.method === "POST") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "分析体系草案", "未指定实例。", formErrorPage("无实例", ["请先创建或打开实例"]), statusInfo)
+          );
+          return;
+        }
+        const pending = await loadPendingDraft(draftPendingPath(ctx.instancePath));
+        if (!pending) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "分析体系草案", "无待采纳草案。", formErrorPage("无草案", ["没有可采纳的草案，请先生成"]), statusInfo)
+          );
+          return;
+        }
+        if (!pending.ok) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "分析体系草案", "草案文件损坏，无法采纳。", formErrorPage("草案损坏", [pending.error]), statusInfo)
+          );
+          return;
+        }
+        const applied = applyDraft(ctx.instance, pending.draft, ctx.base);
+        if (!applied.ok) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "分析体系草案", "草案合入校验未通过（零写盘，草案已保留）。",
+              formErrorPage("合入失败", applied.errors.map((e) => `[${e.rule}] ${e.message}`)), statusInfo)
+          );
+          return;
+        }
+        const materialized = materialize(ctx.base, applied.instance);
+        const issues = validateDesign(materialized, ctx.base, applied.instance, await discoverMethods(opts.templatesDir), { skipReviewGate: true, writeMode: true });
+        if (issues.length > 0) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "分析体系草案", "草案合入校验未通过（零写盘，草案已保留）。",
+              formErrorPage("校验失败", issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`)), statusInfo)
+          );
+          return;
+        }
+        await writeInstanceFile(ctx.instancePath, applied.instance);
+        await rm(draftPendingPath(ctx.instancePath), { force: true });
+        res.writeHead(303, { location: "/instance/overview" }).end();
+        return;
+      }
+
+      if (path === "/instance/blueprint/discard" && req.method === "POST") {
+        if (currentInstancePath) {
+          await rm(draftPendingPath(currentInstancePath), { force: true });
+        }
+        res.writeHead(303, { location: "/instance/overview" }).end();
+        return;
+      }
+
+      // ===== 业务复核确认（A1 D5：绑定完整设计快照指纹；相关修改使确认失效）=====
+      if (path === "/instance/review/confirm" && req.method === "POST") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "业务复核", "未指定实例。", formErrorPage("无实例", ["请先创建或打开实例"]), statusInfo)
+          );
+          return;
+        }
+        const form = await readFormBody(req);
+        const confirmedBy = (form.get("confirmed_by") ?? "").trim();
+        const materialized = materialize(ctx.base, ctx.instance);
+        const methods = await discoverMethods(opts.templatesDir);
+        const review = designReview(materialized, ctx.base, ctx.instance, methods);
+        const failDelivery = async (msg: string, status = 422) => {
+          res.writeHead(status, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "检查与交付", "业务复核未确认（零写盘）。",
+              viewNav("/instance/delivery") +
+              `<div class="card"><div class="card-h" style="color:var(--fail)">复核被拒绝</div><ul class="error-list" role="alert"><li>${escapeHtml(msg)}</li></ul></div>` +
+              (await deliveryContent(ctx)),
+              statusInfo)
+          );
+        };
+        if (!ctx.instance.blueprint) {
+          await failDelivery("当前实例无分析体系（仅指标体系模式无需业务复核）");
+          return;
+        }
+        if (!confirmedBy) {
+          await failDelivery("复核人不能为空（复核动作必须归属到具体责任人）");
+          return;
+        }
+        // fail-closed：设计缺口未清零不可复核（与发布门同一 designReview 聚合，无第二套规则）
+        if (review.designIssues.length > 0) {
+          await failDelivery(`存在 ${review.designIssues.length} 项设计缺口，处理完成后才能复核`);
+          return;
+        }
+        const confirmed: Instance = {
+          ...ctx.instance,
+          blueprint: {
+            ...ctx.instance.blueprint,
+            review: {
+              confirmed_by: confirmedBy,
+              confirmed_at: new Date().toISOString(),
+              design_fingerprint: designFingerprint(materialized)
+            }
+          }
+        };
+        await writeInstanceFile(ctx.instancePath, confirmed);
+        res.writeHead(303, { location: "/instance/delivery" }).end();
+        return;
+      }
+
+      // ===== 指标删除（A1 D8：先展示影响；被引用即阻断，禁止悬空引用后假通过）=====
+      const metricDeleteIntentMatch = path.match(/^\/instance\/metrics\/([a-z][a-z0-9_]*)\/delete-intent$/);
+      if (metricDeleteIntentMatch && req.method === "GET") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "删除指标", "未指定实例。", formErrorPage("无实例", ["请先创建或打开实例"]), statusInfo)
+          );
+          return;
+        }
+        const name = metricDeleteIntentMatch[1]!;
+        const materialized = materialize(ctx.base, ctx.instance);
+        if (!materialized.metrics.some((m) => m.name === name)) {
+          res.writeHead(404, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "未找到指标", `指标 ${escapeHtml(name)} 不存在。`,
+              `<div class="empty">指标不存在<br><span class="mono">${escapeHtml(name)}</span><br><a class="btn" href="/instance">返回指标体系</a></div>`, statusInfo)
+          );
+          return;
+        }
+        const refs = findMetricReferences(materialized).get(name) ?? [];
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(
+          layout("instance", "删除指标 · 影响确认", `指标 ${escapeHtml(name)} 的引用位置全量列出。`,
+            viewNav("/instance") + metricDeleteImpactPage(name, refs), statusInfo)
+        );
+        return;
+      }
+
+      const metricDeleteMatch = path.match(/^\/instance\/metrics\/([a-z][a-z0-9_]*)\/delete$/);
+      if (metricDeleteMatch && req.method === "POST") {
+        const ctx = await loadInstanceContext(currentInstancePath, templates);
+        if (!ctx) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "删除指标", "未指定实例。", formErrorPage("无实例", ["请先创建或打开实例"]), statusInfo)
+          );
+          return;
+        }
+        const name = metricDeleteMatch[1]!;
+        const materialized = materialize(ctx.base, ctx.instance);
+        if (!materialized.metrics.some((m) => m.name === name)) {
+          res.writeHead(404, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "未找到指标", `指标 ${escapeHtml(name)} 不存在。`,
+              `<div class="empty">指标不存在<br><span class="mono">${escapeHtml(name)}</span><br><a class="btn" href="/instance">返回指标体系</a></div>`, statusInfo)
+          );
+          return;
+        }
+        // fail-closed：删除前复检六路引用（影响页之后再有点击间隔，状态可能已变）
+        const refs = findMetricReferences(materialized).get(name) ?? [];
+        if (refs.length > 0) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "删除指标 · 被引用阻断", `指标 ${escapeHtml(name)} 仍被 ${refs.length} 处引用，已拒绝删除（零写盘）。`,
+              viewNav("/instance") + metricDeleteImpactPage(name, refs), statusInfo)
+          );
+          return;
+        }
+        const isAdded = ctx.instance.added.some((m) => m.name === name);
+        const caliber = { ...ctx.instance.caliber_switches };
+        delete caliber[name];
+        const merged: Instance = {
+          ...ctx.instance,
+          caliber_switches: caliber,
+          modified: ctx.instance.modified.filter((m) => m.name !== name),
+          ...(isAdded
+            ? { added: ctx.instance.added.filter((m) => m.name !== name) }
+            : { removed: [...ctx.instance.removed, name] })
+        };
+        const instParsed = InstanceSchema.safeParse(merged);
+        if (!instParsed.success) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "删除指标", "实例 schema 校验未通过（零写盘）。",
+              formErrorPage("schema 校验失败", instParsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`)), statusInfo)
+          );
+          return;
+        }
+        const issues = validateDesign(materialize(ctx.base, instParsed.data), ctx.base, instParsed.data, await discoverMethods(opts.templatesDir), { skipReviewGate: true, writeMode: true });
+        if (issues.length > 0) {
+          res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
+            layout("instance", "删除指标", "删除后全量校验未通过（零写盘）。",
+              formErrorPage("校验失败", issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`)), statusInfo)
+          );
+          return;
+        }
+        await writeInstanceFile(ctx.instancePath, instParsed.data);
         res.writeHead(303, { location: "/instance" }).end();
         return;
       }
@@ -703,7 +1631,7 @@ export function createUiServer(opts: UiOptions): Server {
             materialized.mapping = mappingFile.data.mappings.filter((m) => names.has(m.metric));
           }
         } catch { /* 无映射文件 */ }
-        const issues = validateInstance(materialized, ctx.base, ctx.instance);
+        const issues = validateDesign(materialized, ctx.base, ctx.instance, await discoverMethods(opts.templatesDir));
         if (issues.length > 0) {
           res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
             layout("instance", "导出前校验未通过", "实例存在未解决问题，修正后才能导出。", formErrorPage("校验失败", issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`)), statusInfo)
@@ -773,14 +1701,13 @@ export function createUiServer(opts: UiOptions): Server {
         const version = (form.get("version") ?? "").trim();
         const note = form.get("note") ?? "";
         const values = { version, note };
-        const rerender = (release: ReleaseUiState, status: number) => {
-          const materialized = materialize(ctx.base, ctx.instance);
+        const rerender = async (release: ReleaseUiState, status: number) => {
           res.writeHead(status, { "content-type": "text/html; charset=utf-8" }).end(
             layout(
               "instance",
-              "我的实例",
-              `基模板 ${escapeHtml(ctx.instance.base)} · 下方可微调（口径开关/增删改）并写回，写回前经全量校验。`,
-              instancePage(materialized, ctx.instance, ctx.instancePath, ctx.base, release, buildReceiptsState(ctx.instancePath)),
+              "检查与交付",
+              "设计缺口、业务复核与导出发布在同一处收口；复核绑定完整设计快照，相关修改使确认失效。",
+              viewNav("/instance/delivery") + (await deliveryContent(ctx, release)),
               statusInfo
             )
           );
@@ -795,9 +1722,9 @@ export function createUiServer(opts: UiOptions): Server {
             note,
             now: new Date().toISOString()
           });
-          rerender(
+          await rerender(
             {
-              kind: result.warning ? "warning" : "success",
+              kind: "success",
               values: { version: "", note: "" },
               result: {
                 packageId: result.packageId,
@@ -805,15 +1732,14 @@ export function createUiServer(opts: UiOptions): Server {
                 contentFingerprint: result.contentFingerprint,
                 packageFingerprint: result.packageFingerprint,
                 indexEntryNumber: result.indexEntryNumber
-              },
-              warning: result.warning
+              }
             },
             200
           );
         } catch (e) {
           if (e instanceof ReleaseError) {
             if (e.rule === "invalid-version") {
-              rerender(
+              await rerender(
                 {
                   kind: "invalid",
                   values,
@@ -822,7 +1748,7 @@ export function createUiServer(opts: UiOptions): Server {
                 422
               );
             } else if (e.rule === "duplicate-release") {
-              rerender(
+              await rerender(
                 {
                   kind: "duplicate",
                   values,
@@ -830,8 +1756,17 @@ export function createUiServer(opts: UiOptions): Server {
                 },
                 422
               );
+            } else if (e.rule === "same-content") {
+              await rerender(
+                {
+                  kind: "duplicate",
+                  values,
+                  versionError: `内容与 ${e.info.packageId}@${e.info.publishedVersion} 完全一致，未修改不重复发版；如需新版本请先修改设计内容`
+                },
+                422
+              );
             } else if (e.rule === "index-corrupt") {
-              rerender(
+              await rerender(
                 {
                   kind: "index-corrupt",
                   values,
@@ -842,12 +1777,12 @@ export function createUiServer(opts: UiOptions): Server {
                 422
               );
             } else {
-              rerender({ kind: "validation-failed", values, issues: e.info.issues ?? [e.message] }, 422);
+              await rerender({ kind: "validation-failed", values, issues: e.info.issues ?? [e.message] }, 422);
             }
             return;
           }
           if (e instanceof ExportBlockedError) {
-            rerender(
+            await rerender(
               {
                 kind: "validation-failed",
                 values,
@@ -858,7 +1793,7 @@ export function createUiServer(opts: UiOptions): Server {
             return;
           }
           if (e instanceof SapAssemblyError) {
-            rerender({ kind: "validation-failed", values, issues: [`[${e.rule}] ${e.message}`] }, 422);
+            await rerender({ kind: "validation-failed", values, issues: [`[${e.rule}] ${e.message}`] }, 422);
             return;
           }
           throw e;
@@ -878,14 +1813,13 @@ export function createUiServer(opts: UiOptions): Server {
         const form = await readFormBody(req);
         const yamlText = form.get("receipt") ?? "";
         const values = { yaml: yamlText };
-        const receiptRerender = (patch: Partial<ReceiptsUiState>, status: number) => {
-          const materialized = materialize(ctx.base, ctx.instance);
+        const receiptRerender = async (patch: Partial<ReceiptsUiState>, status: number) => {
           res.writeHead(status, { "content-type": "text/html; charset=utf-8" }).end(
             layout(
               "instance",
-              "我的实例",
-              `基模板 ${escapeHtml(ctx.instance.base)} · 下方可微调（口径开关/增删改）并写回，写回前经全量校验。`,
-              instancePage(materialized, ctx.instance, ctx.instancePath, ctx.base, undefined, buildReceiptsState(ctx.instancePath, values, patch)),
+              "检查与交付",
+              "设计缺口、业务复核与导出发布在同一处收口；复核绑定完整设计快照，相关修改使确认失效。",
+              viewNav("/instance/delivery") + (await deliveryContent(ctx, undefined, values, patch)),
               statusInfo
             )
           );
@@ -894,11 +1828,11 @@ export function createUiServer(opts: UiOptions): Server {
           `releases/index.yaml 缺失或损坏（${detail}），无法对账，已拒绝登记（fail-closed，零写盘）。若从未发布过版本请先发布；若文件损坏请用 git 恢复后重试；登记不会自动重建或覆盖它。`;
         try {
           registerReceipt({ receiptText: yamlText, releasesDir: join(workspaceDir, "releases"), now: new Date().toISOString() });
-          receiptRerender({ values: { yaml: "" } }, 200);
+          await receiptRerender({ values: { yaml: "" } }, 200);
         } catch (e) {
           if (e instanceof ReceiptError) {
             if (e.rule === "schema" && Array.isArray(e.info.issues)) {
-              receiptRerender(
+              await receiptRerender(
                 {
                   issuesTitle: "回执未通过校验（零写盘）",
                   issues: (e.info.issues as { path: string; message: string }[]).map((i) => `[receipt] ${i.path}: ${i.message}`)
@@ -906,18 +1840,18 @@ export function createUiServer(opts: UiOptions): Server {
                 422
               );
             } else if (e.rule === "duplicate") {
-              receiptRerender(
+              await receiptRerender(
                 {
                   yamlError: `task_id "${String(e.info.task_id)}" 已登记于 ${String(e.info.received_at || "未知时间")}，不可重复登记（append-only）；如为新任务请更换 task_id。`
                 },
                 422
               );
             } else if (e.rule === "index-missing") {
-              receiptRerender({ issuesTitle: "登记被拒绝 · releases/index.yaml 不可用", issues: [receiptIssue13("缺失，尚无任何发布版本")] }, 422);
+              await receiptRerender({ issuesTitle: "登记被拒绝 · releases/index.yaml 不可用", issues: [receiptIssue13("缺失，尚无任何发布版本")] }, 422);
             } else if (e.rule === "index-corrupt") {
-              receiptRerender({ issuesTitle: "登记被拒绝 · releases/index.yaml 不可用", issues: [receiptIssue13(String(e.info.detail ?? "解析失败"))] }, 422);
+              await receiptRerender({ issuesTitle: "登记被拒绝 · releases/index.yaml 不可用", issues: [receiptIssue13(String(e.info.detail ?? "解析失败"))] }, 422);
             } else {
-              receiptRerender({ issuesTitle: "登记失败", issues: [e.message] }, 422);
+              await receiptRerender({ issuesTitle: "登记失败", issues: [e.message] }, 422);
             }
             return;
           }
@@ -988,7 +1922,7 @@ export function createUiServer(opts: UiOptions): Server {
           return;
         }
         const materialized = materialize(ctx.base, parsed.data);
-        const issues = validateInstance(materialized, ctx.base, parsed.data, { skipReviewGate: true });
+        const issues = validateDesign(materialized, ctx.base, parsed.data, await discoverMethods(opts.templatesDir), { skipReviewGate: true, writeMode: true });
         if (issues.length > 0) {
           res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
             layout("instance", "写回失败", "全量校验未通过（零写盘）。", formErrorPage("校验失败", issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`)), statusInfo)
@@ -1115,7 +2049,12 @@ export function createUiServer(opts: UiOptions): Server {
           return;
         }
         if (job.status === "done") {
-          res.writeHead(303, { location: "/drafts" }).end();
+          // A1：按任务去向分流——指标草案回草案工坊；蓝图草案进预览页（建议与影响）；首页创建流进创建预览
+          const target =
+            job.returnTo === "blueprint" ? "/instance/blueprint/preview"
+              : job.returnTo === "blueprint-create" ? "/blueprint/preview"
+                : "/drafts";
+          res.writeHead(303, { location: target }).end();
           return;
         }
         res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
@@ -1153,7 +2092,7 @@ export function createUiServer(opts: UiOptions): Server {
           return;
         }
         const materialized = materialize(ctx.base, applied.instance);
-        const issues = validateInstance(materialized, ctx.base, applied.instance, { skipReviewGate: true });
+        const issues = validateDesign(materialized, ctx.base, applied.instance, await discoverMethods(opts.templatesDir), { skipReviewGate: true, writeMode: true });
         if (issues.length > 0) {
           res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
             layout("drafts", "AI 草案", "草案合入校验未通过（零写盘，草案已保留）。", formErrorPage("校验失败", issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`)), statusInfo)

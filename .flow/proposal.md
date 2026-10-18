@@ -1,64 +1,34 @@
-# M3 · 治理闭环：审计落盘 + 预算账本 + provenance 真值 + 调用统计 · 方案（proposal）
+# A1 · 分析体系核心批次 — 提案
 
-> 规格源：2026-10-18 会话三仓对比与 M1/M2/M3 迭代方案定稿（用户裁决「M1 先行，M2 紧跟，M3 可拆独立 PR」）+ M1/M2 交付事实（commits `655b84d`、`902574c`）与两份 handoff（`.flow/archive-m1-20261018/handoff.md`、`.flow/archive-m2-20261018/handoff.md`）。本文件是后续 PRD/GRILL/ISSUES/REVIEW 的唯一规格源。**本 flow 只做 M3**。
-> 诚实披露：迭代方案 M3 节原文未完整落盘，本文件从 M1 proposal「明确不做」节原文四项 + M2 handoff M3 前置重构，稀薄处标注，GRILL 补全。
+2026-10-18 · 依据用户已接受的《分析体系工作台产品方案 v0.2》（`/Users/huangbo/Documents/Codex/2026-10-18/task/metric-factory-product-prototype/方案.md`）落地真实产品迭代。原型为合成演示，其 JSON/脚本不充当生产 schema；本批按方案语义在仓内合同上重新设计。
 
-## 目标
+## 目标（方案 §8「必须先做」闭环）
 
-把 M1 埋好的治理挂点接上真实账本：**审计 JSONL 落盘+轮转**（每次 LLM 调用留痕可查）、**预算账本**（可设上限、超限有行为）、**provenance 记录实际出稿 provider/model**（不再是配置面的链首标签，而是真值）、**设置页调用统计**（用账本数据回看用量）。四项共用同一数据源（审计事件），一次闭环。
+1. 自然语言需求 → pi-agent-runtime → 可维护分析设计草稿（支持「可复用指标体系」与「具体分析」两种起点；模板/导入为次要入口）。
+2. 一个工作台、两个联动编辑器，四视图：体系总览／指标体系／场景与方法／检查与交付。
+3. 共享指标定义（一个权威来源），问题／假设／证据计划结构化，方法适用性检查，集中业务复核，设计版本快照闭环。
+4. 保留指标创建、模板导入、两类模板、独立指标交付；复用既有校验与导出。
+5. 三条业务任务验收（经营诊断／零指标战略／独立数据专题）。
 
-## M1/M2 交付地基（事实）
+## 设计裁决（D 系列；持久结构与公共合同变更登记处）
 
-- **auditSink 挂点**：`createPiClient` 的 `opts.auditSink`（缺省 no-op 永不抛错）——M1 注释明言「M3 替换为 JSONL 落盘实现」，单点替换。
-- **AuditEvent 形状**（vendored runtime 实测）：`{version:"1.0", taskId, runId, sequence, kind: run.started|model.admitted|model.finished|run.finished|…, at, provider, model, contextVersions, digest?, reason?, attempt?, failureCategory?}`——**每事件带 provider+model**（provenance 真值来源；runText 的 RunResult 不含 model，fallback 发生在 runtime 内部）。
-- **RunResult**：`{taskId, runId, usage, usageKnown, status…}`——usage 带 token 计数（预算账本数据源）。
-- **taskId**：`mf:<kind>-<seq>`（进程内全局自增）；`createLlmClientFromEnv(env, caller?)` 已支持可选 caller——**四个调用点（CLI generate/refine、MCP 两工具、UI draft job）尚未传 generate/refine 标签**，M3 接上。
-- **modelLabel 现状**：读合成 env 的 `MF_LLM_MODEL`（链首语义）——主备容灾下备候选出稿时标签失真，正是本批要修的。
-- **审计不落密钥的结构保证**：AuditEvent 无任何 key 字段（provider 名、模型 id、taskId、usage、reason——无密钥材料）；红线「密钥永不进日志」由此结构保住。
-- 先例：deep-research 生产在跑审计 JSONL + 轮转 + 预算账本（M1 对比分析已研读；实现细节本批 GRILL 时对照）。
+- **D1 单一工作稿**：`blueprint` 作为 InstanceSchema 可选顶层段（instance.yaml）。缺省 = 仅指标体系模式，现有行为零变化；零指标 + blueprint = 定性战略设计。release 快照自动覆盖完整设计。
+- **D2 内嵌子实体**：问题（questions）／假设（hypotheses）／证据计划（evidence_plan）／候选道路（options）内嵌于 blueprint，不另立文件。判断性质（事实/解释/待验证假设/建议）与证据状态（待获取/取得待核/已核验/支持不足/存在冲突）分轴表达。
+- **D3 方法模板**：新增第二类模板 `MethodTemplateSchema`（id/name/version/contexts/family/purpose/roles[required]/steps/evidence/limits/provenance），存放 `templates/methods/*.yaml`；库保持「指标体系／分析方法」两类，不设第三套。
+- **D4 ScenarioSpec v0.2 可选扩展**：场景新增可选 `method_bindings: [{method_ref, role, metric}]`。可选字段向后兼容 v0.1 包；SAP 合同以变更记录登记为供应侧扩展，消费侧镜像留 v6 窗口。**不改动** v0.1 已冻结字段。
+- **D5 业务复核与失效**：复核确认 = `{confirmed_by, confirmed_at, design_fingerprint}`；指纹 = canonical(blueprint ＋ scenarios ＋指标身份面) 的内容哈希。任何相关写入后失配 → 确认失效（严格方向：宁可多失效）；查看/切视图不写盘不失效。
+- **D6 假设升级门**：`verified=true` 需 ≥1 条证据状态为「已核验」且无「存在冲突」；judgment ∈ {事实, 解释} 而未 verified → 设计缺口，阻断交付。复核/检查不自动提升证据状态或确认假设。
+- **D7 设计交付门**：blueprint 完整（目的/决策/边界/交付/语境/组织/问题结构/假设三要素/证据三要素）∧ 指标缺口零 ∧ 场景必需角色绑定齐 ∧ 方法语境适配 ∧ 复核有效 → 允许交付；草稿允许缺口。证据计划完整 ≠ 证据已取得（证据状态独立呈现于交付视图）。
+- **D8 引用保护**：引擎 `findMetricReferences(materialized)` 汇总 type_params/expr、trees、north_star、questions.metric_refs、scenarios.metric_usages、method_bindings 六路引用；删除被引用指标必须先展示影响并解除引用，禁止悬空引用后假通过。
+- **D9 LLM 草稿**：PROMPT_VERSION → v3.0.0；新增 blueprint 生成/修正 prompt（中文业务语言输出、硬约束 JSON 合同、负例禁令）。Draft 扩展 `blueprint?` 与 `added_scenarios?` 段；apply 沿用零写入门；provenance 强制注入（模型不可自报）。
+- **D10 UI 壳**：JuanerAI 已接受视觉 token（#f6f7f4/#fcfcfa/#f0f2ed、#27664f 主绿、230px 侧栏、64px 顶栏、320px 助手栏、系统中文字体）。保持仓内「零客户端脚本、纯服务端渲染」纪律：原型弹层 → 独立页面/区块；键盘可达与 :focus-visible 保留；四视图 = 实例下四条路由。
+- **D11 未修改不重复发版**：release 同内容从「警告放行」升级为「阻断 + 提示无需重复发版」（行为变更，本批 PRD 登记；CLI/UI 一致）。
+- **D12 消费边界诚实标注**：blueprint 段与零指标包进入 SAP 供应侧；JuanerAI 指标资产已有真实消费者（Change006），blueprint/方法绑定/零指标包的消费侧支持**未验证**，本批不宣称消费通过，不修改 JuanerAI，不启动插件化/Semantica＋Protégé。
 
-## 已定决策（从迭代方案继承，为约束而非开放问题）
+## 非目标（本批）
 
-1. **审计 JSONL 落盘 + 轮转**：auditSink 从 no-op 换成 JSONL 追加写；轮转策略防无限增长（具体策略 GRILL 定，DR 先例优先）。
-2. **预算账本**：可设预算上限，超限有明确行为（阻断/警告，GRILL 定）；数据源 = 审计事件/usage。
-3. **provenance 记录实际出稿 provider/model**：draft 的 provenance.model 从「配置面链首标签」改为「实际出稿真值」（来源：审计事件）。
-4. **设置页调用统计**：设置页新增用量回看（次数/tokens，按模型），数据源 = 账本。
-5. **caller 标签接上**：四个调用点传 generate/refine 标签（taskId 变 `mf:generate-<seq>` 等，审计可按用途区分）。
+证据与假设的细粒度交叉引用、专业方法扩充（先 3 个内置）、模板差异升级、多人治理、实际证据/采用回执回流、JuanerAI 插件呈现、Excel 直读 UI（离线脚本保留）、完整本体。
 
-## 红线（既有设计不变式，全程保留）
+## 验证门
 
-- **工人模式不变**：审计/预算/统计全部是**事后记账**，不改变单发结构化调用形态，不引入工具循环。
-- **fail-closed 人审门不变**：预算超限的「阻断」语义（若 GRILL 定为阻断）只作用于**新的 LLM 调用发起**，不影响已产草案的人审/导出流程。
-- **pi 依赖收敛 `src/llm`**：guard 测试锁定；审计落盘模块若需 AuditEvent 类型，放 src/llm。
-- **faux 后端不变**：faux 零网络语义不动（faux 是否记账 GRILL 定，但 faux 路径不得因账本而需要网络/文件才可用——测试密闭性不能破）。
-- **密钥永不进页面/日志/导出物**——审计文件是日志类产物，**AuditEvent 结构上无密钥**，且落盘实现不得把 env/key 写入任何行。
-- **审计/账本文件不进 git**（本机运行时产物，.gitignore 处理）。
-
-## 明确不做（本批范围外）
-
-- M4：runAgent 会话/工具化草案（明确否决）。
-- 多用户密钥托管/多租户账本（本地单用户）。
-- refine prompt 加固（M1 延期项 1，仍是独立产品决策——除非用户在 diff 门裁决入批）。
-- M2 遗留 non-blocking 收口包与代码卫生包（handoff 延期项 3/4/5）——默认不入本批，避免范围蔓延；用户可另行安排。
-- 审计数据的跨实例聚合/导出报表（本批只做单机文件 + 设置页回看）。
-
-## 验收方向（草案级，PRD 细化）
-
-- 验证门不变：`npm run lint && npm run typecheck && npm run test && npm run contract-test` 全绿。
-- **真实用例**：真实 LLM 调用后审计文件出现该 run 的完整事件链（含 provider/model 真值）；draft provenance.model = 实际出稿模型（主备容灾场景可验证——主候选畸形回退备候选时 provenance 应显示备）。
-- 轮转可触发（构造超限文件证明轮转动作）。
-- 预算上限可配置且超限行为符合 GRILL 裁决。
-- 设置页统计与账本文件对得上（手工核对样本）。
-- faux 路径零回归；guard 测试通过；测试不因账本写盘而互相污染（测试用临时目录注入）。
-
-## 开放问题（GRILL 补全候选）
-
-- 审计文件路径与命名（工作区相对？全局 ~/.metric-factory？实例级？）；CLI/MCP/UI 是否同路径。
-- 轮转策略：按大小/按条数/按日期；保留几份（DR 先例值）。
-- 预算维度与单位：tokens（input/output 分开？）/ 调用次数 / 两者；默认上限（还是缺省无限制）。
-- 超限行为：硬阻断（抛错）/ 软警告（审计里记 budget 事件 + 页面提示）；阻断后设置页如何呈现与解除。
-- provenance 真值的接法：auditSink 捕获 model.admitted/model.finished 回填 draft？还是 runText 后查账本？时序（事件异步与否——M1 实测 append 在 runText 完成前被调用）。
-- 设置页统计的口径：时间窗（今日/累计）、维度（按模型/按用途）、展示形态（表格/计数 chip）。
-- faux 是否记账（记了统计才完整；不记则 faux 保持零依赖纯净——测试密闭性考量）。
-- 审计写入失败的容错（磁盘满/权限）：降级为内存丢弃（保调用）还是抛错（保账本完整性）——审计 sink 抛错会以 AUDIT_FAILED 杀调用（M1 已知），no-op 兜底语义与落盘语义的取舍。
-- 预算账本的存储形态：独立文件/审计文件派生/JSON 状态文件；并发（UI fire-and-forget job 与 CLI 并行）下的写冲突。
+`npm run lint && npm run typecheck && npm test && npm run contract-test` 全绿；新规则配负例测试；三条业务任务 e2e；UI 路由级测试沿用 fetch 边界。

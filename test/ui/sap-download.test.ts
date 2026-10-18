@@ -105,11 +105,11 @@ added:
   server.close();
 });
 
-test("实例页下载区：SAP 项恒居末位 + §4 术语逐字（标签 / 说明文案 / aria 关联）", async () => {
+test("交付视图下载区：SAP 项恒居末位 + §4 术语逐字（标签 / 说明文案 / aria 关联）（A1 迁移）", async () => {
   const { dir, inst } = tmpFixture("instance-ecommerce.yaml", "ecommerce-instance.yaml");
   const { server, base } = await startUi(inst, dir);
 
-  const html = await (await fetch(`${base}/instance`)).text();
+  const html = await (await fetch(`${base}/instance/delivery`)).text();
   expect(html).toContain("导出 SAP 语义包");
   expect(html).toContain("SAP 语义包：JuanerAI 语义资产包（YAML，含指纹与出处）");
   expect(html).toContain('href="/instance/export/sap" aria-describedby="sap-export-note"');

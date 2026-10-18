@@ -5,28 +5,29 @@ export function escapeHtml(s: string): string {
 }
 
 // UI 基线：全局 DESIGN.md「中文专业工作台 UI 基线」（~/.agents/ui-design/DESIGN.md，2026-10-09 起）
-// 浅色中性表面 + 克制绿主动作 + 紧凑布局 + 语义状态色（ok/run/fail/wait/block）；变量名保持稳定，仅迁移取值。
+// A1 D10：取值迁移至 JuanerAI 已接受视觉系统（visual-system.md：暖白/灰绿、230px 侧栏、64px 顶栏）；
+// 变量名保持稳定，仅迁移取值——既有组件零改动继承。
 const CSS = `
 :root {
-  --bg: #f5f6f8; --surface: #ffffff; --surface-2: #eef1f5; --soft: #f6f7f9;
-  --border: #dfe3ea; --border-strong: #ccd3dd;
-  --text: #1d2433; --text-2: #4a5568; --text-3: #6b7280;
-  --accent: #28674e; --accent-strong: #20573f; --accent-soft: #edf5ef; --accent-line: #cfe0d6;
-  --navy: #1d2433;
+  --bg: #f6f7f4; --surface: #fcfcfa; --surface-2: #f0f2ed; --soft: #f6f7f4;
+  --border: #dce2d9; --border-strong: #c4cec2;
+  --text: #22332d; --text-2: #36443f; --text-3: #59665e;
+  --accent: #27664f; --accent-strong: #1e5240; --accent-soft: #eaf2eb; --accent-line: #c8dacd;
+  --navy: #22332d;
   --ok: #1a7f4b; --ok-soft: #e6f4ec; --ok-line: #c3e2ce;
-  --warn: #8a5a10; --warn-soft: #faf3e2; --warn-line: #ecdcb4;
+  --warn: #80541c; --warn-soft: #fbf3e4; --warn-line: #ecd9ae;
   --fail: #c0392b; --fail-soft: #fdecea; --fail-line: #f2cdc8;
-  --queue: #6b7280; --queue-ink: #4a5568; --queue-soft: #eef0f3; --queue-line: #d7dbe2;
-  --rounded-base: 10px; --rounded-sm: 8px;
-  --shadow-card: 0 2px 10px rgba(29,36,51,.05); --shadow-float: 0 16px 40px rgba(29,36,51,.14);
-  --font: -apple-system, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+  --queue: #59665e; --queue-ink: #36443f; --queue-soft: #eef1ec; --queue-line: #d7ddd4;
+  --rounded-base: 12px; --rounded-sm: 8px;
+  --shadow-card: 0 1px 2px rgba(34,51,45,.04); --shadow-float: 0 16px 40px rgba(34,51,45,.12);
+  --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
   --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font: 400 15px/1.55 var(--font); }
-.topbar { position: sticky; top: 0; z-index: 20; height: 64px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 18px; background: rgba(255,255,255,.96); border-bottom: 1px solid var(--border); }
+body { background: var(--bg); color: var(--text); font: 400 14px/1.6 var(--font); }
+.topbar { position: sticky; top: 0; z-index: 20; height: 64px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 18px; background: rgba(252,252,250,.96); border-bottom: 1px solid var(--border); }
 .app { display: flex; min-height: calc(100vh - 64px); }
-.sidebar { width: 248px; background: var(--surface-2); border-right: 1px solid var(--border); padding: 16px 14px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 64px; height: calc(100vh - 64px); }
+.sidebar { width: 230px; flex: 0 0 230px; background: var(--surface-2); border-right: 1px solid var(--border); padding: 16px 14px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 64px; height: calc(100vh - 64px); }
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav a { display: block; padding: 7px 10px; border-radius: var(--rounded-sm); color: var(--text-2); text-decoration: none; font-size: 14px; }
 .nav a:hover { background: var(--surface); }
@@ -154,18 +155,74 @@ a { color: var(--accent-strong); }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .pulse-dot { width: 9px; height: 9px; border-radius: 999px; background: var(--accent); display: inline-block; animation: mf-pulse 1.2s ease-in-out infinite; margin-right: 8px; vertical-align: middle; }
 @keyframes mf-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+
+/* ===== A1 · 分析体系工作台（D10）===== */
+/* 四视图导航：非强制向导，允许往返；窄屏横向滚动 */
+.viewnav { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin: 2px 0 18px; overflow-x: auto; }
+.viewnav a { padding: 8px 14px; font-size: 13.5px; color: var(--text-2); text-decoration: none; white-space: nowrap; border-bottom: 2px solid transparent; }
+.viewnav a:hover { color: var(--text); }
+.viewnav a.active { color: var(--accent-strong); border-bottom-color: var(--accent); font-weight: 600; }
+.viewnav .vn-no { color: var(--text-3); font-size: 11px; margin-right: 4px; }
+/* 总览双栏：主栏 + 助手栏 320px；窄屏助手移至成果之后 */
+.overview-grid { display: grid; grid-template-columns: 1fr 320px; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .overview-grid { grid-template-columns: 1fr; } }
+.assistant { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rounded-base); padding: 14px; position: sticky; top: 84px; }
+.assistant .card-h { display: flex; justify-content: space-between; align-items: center; }
+.assistant textarea { min-height: 96px; }
+/* 蓝图区块 */
+.bp-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rounded-base); padding: 14px 16px; margin-bottom: 14px; }
+.bp-section > h3 { font-size: 15px; margin-bottom: 8px; }
+.bp-boundary { background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: var(--rounded-sm); padding: 10px 12px; font-size: 13px; color: var(--text-2); }
+.bp-item { border-top: 1px solid var(--border); padding: 10px 0; }
+.bp-item:first-of-type { border-top: 0; }
+.bp-item h4 { font-size: 13.5px; font-weight: 600; }
+.bp-item .bp-detail { color: var(--text-2); font-size: 13px; margin-top: 2px; }
+.bp-meta { color: var(--text-3); font-size: 11.5px; margin-top: 4px; }
+.metric-ref { display: inline-block; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--rounded-sm); padding: 1px 8px; font-size: 12px; margin: 2px 4px 0 0; text-decoration: none; color: var(--text-2); }
+.metric-ref:hover { border-color: var(--accent-line); color: var(--accent-strong); }
+.kv2 { display: grid; grid-template-columns: 88px 1fr; gap: 4px 10px; font-size: 13px; margin-top: 6px; }
+.kv2 dt { color: var(--text-3); font-size: 12px; }
+.kv2 dd { margin: 0; }
+/* 检查与交付：检查项清单 */
+.check-row { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.check-row:first-of-type { border-top: 0; }
+.check-ico { flex: 0 0 18px; font-weight: 700; }
+.check-ok { color: var(--ok); }
+.check-bad { color: var(--fail); }
+/* 方法卡 */
+.method-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rounded-base); padding: 14px 16px; margin-bottom: 12px; }
+.role-chip { display: inline-block; background: var(--accent-soft); color: var(--accent-strong); border: 1px solid var(--accent-line); border-radius: var(--rounded-sm); padding: 1px 8px; font-size: 12px; margin: 2px 4px 0 0; }
+.role-chip.required { font-weight: 600; }
+/* 导入预览 */
+.import-gap { color: var(--warn); font-size: 12px; }
 `;
 
 export type NavKey = "home" | "templates" | "instance" | "drafts" | "review" | "settings";
 
 const NAV: [NavKey, string, string][] = [
-  ["home", "/", "工作台"],
+  ["home", "/", "创建分析体系"],
+  ["instance", "/instance", "我的体系"],
   ["templates", "/templates", "模板库"],
-  ["instance", "/instance", "我的实例"],
   ["drafts", "/drafts", "AI 草案"],
   ["review", "/review", "审核中心"],
   ["settings", "/settings", "设置"]
 ];
+
+// A1 四视图导航（方案 §3：非强制向导，允许往返）；技术字段在专业详情
+export const VIEWNAV: [string, string][] = [
+  ["/instance/overview", "体系总览"],
+  ["/instance", "指标体系"],
+  ["/instance/scenarios", "场景与方法"],
+  ["/instance/delivery", "检查与交付"]
+];
+
+export function viewNav(active: string): string {
+  const links = VIEWNAV.map(
+    ([href, label], i) =>
+      `<a href="${href}" class="${href === active ? "active" : ""}"><span class="vn-no">0${i + 1}</span>${label}</a>`
+  ).join("");
+  return `<nav class="viewnav" aria-label="分析体系视图">${links}</nav>`;
+}
 
 export function layout(active: NavKey, title: string, desc: string, content: string, statusInfo: string, extraHead = ""): string {
   const nav = NAV.map(
@@ -190,7 +247,7 @@ export function layout(active: NavKey, title: string, desc: string, content: str
 <div class="app">
   <aside class="sidebar">
     <nav class="nav">${nav}</nav>
-    <div class="boundary">写操作仅限本地实例、映射文件与 releases/ 发布登记<br>页面无脚本 · 纯服务端表单</div>
+    <div class="boundary">写操作仅限本地实例、模板库（导入/另存方法）、映射文件与 releases/ 发布登记<br>页面无脚本 · 纯服务端表单</div>
   </aside>
   <main class="main">
     <h1 class="page-title">${escapeHtml(title)}</h1>
@@ -217,7 +274,7 @@ export function templatesPage(templates: Template[]): string {
     </div>`
     )
     .join("");
-  return `<div class="grid">${cards}</div>`;
+  return `<p class="btn-row" style="margin-bottom:12px"><a class="btn" href="/templates/methods">方法模板库</a><a class="btn" href="/import">导入模板</a></p><div class="grid">${cards}</div>`;
 }
 
 export function templateDetailPage(t: Template): string {
@@ -249,7 +306,7 @@ import type { MaterializedInstance } from "../engine/materialize.js";
 import type { Instance } from "../schema/instance.js";
 import type { Scenario } from "../schema/scenario.js";
 import { findPendingReview } from "../engine/review.js";
-import { scenarioTreeToDsl, scenarioUsagesToDsl } from "./dsl.js";
+import { scenarioTreeToDsl, scenarioUsagesToDsl, scenarioBindingsToDsl } from "./dsl.js";
 
 // ===== 发布区块（批次 1 切片 3；.flow/ui-contract.md R1–R7 冻结件）=====
 
@@ -267,10 +324,9 @@ export interface ReleaseUiResult {
 }
 
 export interface ReleaseUiState {
-  kind: "form" | "success" | "warning" | "invalid" | "duplicate" | "index-corrupt" | "validation-failed";
+  kind: "form" | "success" | "invalid" | "duplicate" | "index-corrupt" | "validation-failed";
   values: ReleaseUiValues;
   result?: ReleaseUiResult;
-  warning?: { package: string; version: string };
   /** R4/R7：区块级错误行（[rule] path: message 或 T-15 单条） */
   issues?: string[];
   /** R5/R6：版本号字段内联错误（T-13/T-14） */
@@ -282,14 +338,8 @@ export function releaseBlock(state: ReleaseUiState): string {
   const valuesEscaped = escapeHtml(v.version);
   const noteEscaped = escapeHtml(v.note);
 
-  // 状态卡：警告条（R3）→ 结果卡（R2/R3）→ 错误卡（R4/R7）
+  // 状态卡：结果卡（R2/R3）→ 错误卡（R4/R7）
   let banner = "";
-  if (state.kind === "warning" && state.warning) {
-    banner += `<div class="card" style="border-color:var(--warn-line);background:var(--warn-soft)">
-      <div class="card-h" style="color:var(--warn)">警告 · 内容指纹与既有发布相同</div>
-      <p>本次发布的内容指纹与既有发布 ${escapeHtml(state.warning.package)}@${escapeHtml(state.warning.version)} 相同（无业务变化的版本递增）；发布已生效。</p>
-    </div>`;
-  }
   if (state.result) {
     const r = state.result;
     banner += `<div class="card">
@@ -336,7 +386,7 @@ export function releaseBlock(state: ReleaseUiState): string {
   </form>`;
 
   return `<div class="view-title">发布</div>
-  <p class="page-desc">把当前实例发布为不可变快照（releases/&lt;package-id&gt;/&lt;version&gt;.sap.yaml）并追加登记 releases/index.yaml，供 JuanerAI 按精确 id@version 取得。与 CLI release 同一管线（全量校验 → export gate → SAP 装配 → 整包校验 → 内容指纹），失败零写盘。同一 id@version 不可重复发布；内容指纹与既有发布相同时发布成功并显示警告。</p>
+  <p class="page-desc">把当前实例发布为不可变快照（releases/&lt;package-id&gt;/&lt;version&gt;.sap.yaml）并追加登记 releases/index.yaml，供 JuanerAI 按精确 id@version 取得。与 CLI release 同一管线（全量校验 → export gate → SAP 装配 → 整包校验 → 内容指纹），失败零写盘。同一 id@version 不可重复发布；内容与既有发布完全一致（未修改）时拒绝重复发版。</p>
   ${banner}${form}`;
 }
 
@@ -449,26 +499,20 @@ export function instancePage(
   materialized: MaterializedInstance,
   instance: Instance,
   instancePath: string,
-  base: Template,
-  release: ReleaseUiState = { kind: "form", values: { version: "", note: "" } },
-  receipts: ReceiptsUiState = { list: [], showList: false, packageId: "", values: { yaml: "" } }
+  base: Template
 ): string {
   const pending = findPendingReview(instance.added);
   const d = materialized.diff;
 
   const summary = `<div class="card">
     <div class="card-h">实例概览 · <span class="mono">${escapeHtml(instancePath)}</span></div>
-    <p>基模板 <span class="mono">${escapeHtml(instance.base)}</span> · 有效指标 <span class="num">${materialized.metrics.length}</span> 个
+    <p>基模板 <span class="mono">${escapeHtml(instance.base ?? "（空白起点）")}</span> · 有效指标 <span class="num">${materialized.metrics.length}</span> 个
     · 口径调整 ${d.caliber.length} · 字段修改 ${d.modified.length} · 删除 ${d.removed.length} · 新增 ${d.added.length}
     · ${pending.length > 0 ? chip("warn", `待审核 ${pending.length}`) : chip("ok", "无待审核")}</p>
     <p style="margin-top:8px" class="btn-row">
       <a class="btn" href="/review">审核中心</a>
-      <a class="btn btn-primary" href="/instance/export/metricflow">导出 MetricFlow YAML</a>
-      <a class="btn" href="/instance/export/excel">导出 Excel 字典</a>
-      <a class="btn" href="/instance/export/mermaid">导出 Mermaid 指标树</a>
-      <a class="btn" href="/instance/export/sap" aria-describedby="sap-export-note">导出 SAP 语义包</a>
+      <span style="color:var(--text-3);font-size:12px">导出与发布在「04 检查与交付」视图</span>
     </p>
-    <p id="sap-export-note" style="color:var(--text-3);font-size:11.5px;margin-top:8px">SAP 语义包：JuanerAI 语义资产包（YAML，含指纹与出处）</p>
   </div>`;
 
   // 相对模板的变更明细（fork diff：永远可以回答「我们改了什么」）
@@ -501,6 +545,32 @@ export function instancePage(
     looseMetrics: instance.added
   });
 
+  // 指标字典（A1：唯一权威定义面；删除走「先看影响」通道——被引用指标在删除前展示全部引用位置）
+  const addedNames = new Set(instance.added.map((m) => m.name));
+  const dictRows = materialized.metrics
+    .map((m) => {
+      const source = addedNames.has(m.name)
+        ? m.provenance.origin === "llm"
+          ? m.provenance.reviewed_by ? "LLM · 已审核" : "LLM · 待审核"
+          : "实例新增"
+        : modifiedNames.has(m.name) ? "模板 · 已修改" : "模板";
+      return `<tr>
+        <td class="mono">${escapeHtml(m.name)}</td>
+        <td>${escapeHtml(m.display_name)}</td>
+        <td>${chip("accent", m.type)}</td>
+        <td>${escapeHtml(m.definition)}</td>
+        <td>${escapeHtml(m.owner_role)}</td>
+        <td>${chip(source.includes("待审核") ? "warn" : source === "模板" ? "ok" : "queue", source)}</td>
+        <td><a class="btn" href="/instance/metrics/${escapeHtml(m.name)}/delete-intent" style="font-size:11px;padding:2px 8px">删除…</a></td>
+      </tr>`;
+    })
+    .join("");
+  const dictBlock = `<div class="view-title">指标字典（${materialized.metrics.length}）· 唯一定义来源</div>
+    <div class="card" style="padding:0;overflow-x:auto"><table class="tbl">
+      <thead><tr><th>指标名</th><th>展示名</th><th>类型</th><th>口径</th><th>归口</th><th>来源</th><th>操作</th></tr></thead>
+      <tbody>${dictRows}</tbody></table></div>
+    <p style="color:var(--text-3);font-size:11.5px;margin:4px 0 10px">问题与场景只引用此处的指标定义；删除入口先展示影响（计算/指标树/北极星/问题/场景/方法绑定六路引用），被引用指标须先解除引用。LLM 待审核指标也可在审核中心拒绝移除。</p>`;
+
   // 口径开关三态（不变/开/关），只列模板声明了开关的指标
   const switchRows: string[] = [];
   for (const m of materialized.metrics) {
@@ -530,7 +600,7 @@ export function instancePage(
     </div>
   </form>`;
 
-  return `${summary}${diffBlock}<div class="view-title">指标树 · 杜邦式分解（按模块分组，× ÷ 为公式算符）</div>${trees}${form}${scenariosBlock(materialized, instance, base)}${releaseBlock(release)}${receiptsBlock(receipts)}`;
+  return `${summary}${diffBlock}<div class="view-title">指标树 · 杜邦式分解（按模块分组，× ÷ 为公式算符）</div>${trees}${dictBlock}${form}`;
 }
 
 // ===== 决策场景区块（v5 切片 4；.flow/ui-contract.md 冻结件）=====
@@ -542,6 +612,7 @@ export interface ScenarioFormValues {
   question_tree: string;
   metric_usages: string;
   method_refs: string;
+  method_bindings: string;
   evidence_requirements: string;
   output_spec: string;
   review_rules: string;
@@ -555,6 +626,7 @@ export function emptyScenarioFormValues(): ScenarioFormValues {
     question_tree: "",
     metric_usages: "",
     method_refs: "",
+    method_bindings: "",
     evidence_requirements: "",
     output_spec: "",
     review_rules: ""
@@ -569,6 +641,7 @@ export function scenarioFormValues(s: Scenario): ScenarioFormValues {
     question_tree: scenarioTreeToDsl(s.question_tree),
     metric_usages: scenarioUsagesToDsl(s.metric_usages),
     method_refs: s.method_refs.join("\n"),
+    method_bindings: scenarioBindingsToDsl(s.method_bindings ?? []),
     evidence_requirements: s.evidence_requirements,
     output_spec: s.output_spec,
     review_rules: s.review_rules
@@ -590,13 +663,14 @@ export function scenariosBlock(materialized: MaterializedInstance, instance: Ins
       <td>${escapeHtml(s.decision_purpose)}</td>
       <td><span class="num">${s.metric_usages.length}</span> 个（outcome ${counts.outcome} · driver ${counts.driver} · guardrail ${counts.guardrail}）</td>
       <td>${chip(source === "模板种子" ? "ok" : "accent", source)}</td>
-      <td><a class="btn" href="/instance/scenarios/${escapeHtml(s.id)}/edit">编辑</a></td>
+      <td><a class="btn" href="/instance/scenarios/${escapeHtml(s.id)}/edit">编辑</a>
+        <a class="btn" href="/instance/scenarios/${escapeHtml(s.id)}/save-as-method" style="font-size:11px;padding:2px 8px" title="把该场景沉淀为可复用方法模板">另存方法</a></td>
     </tr>`;
     })
     .join("");
 
   const head = `<div class="view-title">决策场景 · 分析体系</div>
-    <p class="page-desc" style="margin-bottom:10px">把「这个业务问题应该怎样分析」固化为配置：决策用途、问题树、指标角色、方法引用。场景随实例写盘并进入 SAP 语义包；写回前经全量校验，失败零写盘。</p>`;
+    <p class="page-desc" style="margin-bottom:10px">把「这个业务问题应该怎样分析」固化为配置：决策用途、问题树、指标角色、方法绑定。场景随实例写盘并进入 SAP 语义包；写回前经全量校验，失败零写盘。</p>`;
   if (materialized.scenarios.length === 0) {
     return `${head}<div class="empty">暂无决策场景<br><span style="font-size:12px">决策场景回答「怎样分析这个问题」：先写清决策用途，再拆问题树、挂指标角色。</span><br><a class="btn btn-primary" href="/instance/scenarios/new">新建场景</a></div>`;
   }
@@ -658,8 +732,11 @@ export function scenarioFormPage(opts: {
     </div>
     <div class="card">
       <div class="card-h">方法与治理</div>
-      <div class="fld"><label for="scn-methods">方法引用 method_refs（逐行一个自由串，可空，如 dame.m2.driver_decomposition@1.0.0）</label>
+      <div class="fld"><label for="scn-methods">方法引用 method_refs（逐行一个自由串，可空，如 profit-change-diagnosis@0.1.0）</label>
         <textarea id="scn-methods" name="method_refs">${escapeHtml(values.method_refs)}</textarea></div>
+      <div class="fld"><label for="scn-bindings">方法绑定 method_bindings（逐行 方法id@版本|角色id|指标名；A1 ScenarioSpec v0.2 可选段，可空）</label>
+        <textarea id="scn-bindings" name="method_bindings" rows="3" wrap="off"${describedBy}>${escapeHtml(values.method_bindings)}</textarea>
+        <p style="color:var(--text-3);font-size:11.5px">例：profit-change-diagnosis@0.1.0|profit_result|operating_profit　·　角色须为该方法已声明角色；缺必需角色或语境不匹配将阻断设计交付。可用方法见「场景与方法」视图的方法库。</p></div>
       <div class="fld"><label for="scn-evidence">证据要求 evidence_requirements（文本段，可空）</label>
         <textarea id="scn-evidence" name="evidence_requirements">${escapeHtml(values.evidence_requirements)}</textarea></div>
       <div class="fld"><label for="scn-output">输出 output_spec（文本段，可空）</label>
@@ -669,7 +746,7 @@ export function scenarioFormPage(opts: {
     </div>
     <div class="btn-row">
       <button class="btn btn-primary" type="submit">校验并写回场景</button>
-      <a class="btn" href="/instance">取消</a>
+      <a class="btn" href="/instance/scenarios">取消</a>
     </div>
   </form>`;
 }
