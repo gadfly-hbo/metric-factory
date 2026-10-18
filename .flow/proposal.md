@@ -1,63 +1,64 @@
-# M2 · 零配置体验：密钥自动发现 + 默认链自动启用 · 方案（proposal）
+# M3 · 治理闭环：审计落盘 + 预算账本 + provenance 真值 + 调用统计 · 方案（proposal）
 
-> 规格源：2026-10-18 会话三仓（metric-factory / deep-research / reports-factory）agent-runtime 接入对比与 M1/M2/M3 迭代方案定稿（用户裁决「M1 先行，M2 紧跟，M3 可拆独立 PR」）+ M1 flow 交付事实（commit `655b84d`）与 `.flow/archive-m1-20261018/handoff.md`。本文件是后续 PRD/GRILL/ISSUES/REVIEW 的唯一规格源。**本 flow 只做 M2**；M3（审计落盘与 provenance 闭环）明确不在本批。
-> 诚实披露：迭代方案的 M2 节原文未完整落盘，本文件从 M1 proposal「明确不做」节原文、红线括注（设置页降级为「查看+覆盖」）与 handoff 重构，稀薄处在「开放问题」标注，由 GRILL 补全。
+> 规格源：2026-10-18 会话三仓对比与 M1/M2/M3 迭代方案定稿（用户裁决「M1 先行，M2 紧跟，M3 可拆独立 PR」）+ M1/M2 交付事实（commits `655b84d`、`902574c`）与两份 handoff（`.flow/archive-m1-20261018/handoff.md`、`.flow/archive-m2-20261018/handoff.md`）。本文件是后续 PRD/GRILL/ISSUES/REVIEW 的唯一规格源。**本 flow 只做 M3**。
+> 诚实披露：迭代方案 M3 节原文未完整落盘，本文件从 M1 proposal「明确不做」节原文四项 + M2 handoff M3 前置重构，稀薄处标注，GRILL 补全。
 
 ## 目标
 
-让新用户 clone + build 后**无需手配任何环境变量**即可用真实模型跑通 generate/refine：从本机已有凭据自动发现密钥、自动启用默认链；设置页从「必填表单」降级为「查看 + 覆盖」；首页状态芯片三态化。
+把 M1 埋好的治理挂点接上真实账本：**审计 JSONL 落盘+轮转**（每次 LLM 调用留痕可查）、**预算账本**（可设上限、超限有行为）、**provenance 记录实际出稿 provider/model**（不再是配置面的链首标签，而是真值）、**设置页调用统计**（用账本数据回看用量）。四项共用同一数据源（审计事件），一次闭环。
 
-## M1 交付地基（事实）
+## M1/M2 交付地基（事实）
 
-- 引擎：vendored `pi-agent-runtime@0.4.3` `runText` 通道（三分映射、limits 五键、modelRecovery）；`LlmClient` 接口不变。
-- 配置面：四分映射——真值表两已验证模型（`minimax-cn/MiniMax-M3`、`xiaomi-token-plan-cn/mimo-v2.6-flash`）/ `MF_LLM_BASE_URL` 网关 / pi-ai 目录回退 / 显式拒绝。
-- `MF_LLM_FALLBACK_MODELS` 主备链（缺 key 候选跳过）；密钥从注入 env 直读，process.env 桥已删——**工厂入参 env 即唯一密钥来源，自动发现天然接在这里**。
-- `scripts/llm-smoke.sh` 已有 auth.json 密钥注入循环（smoke 专用 dev 便利；M2 是把它**产品化**）。
-- 本机 `~/.pi/agent/auth.json` 实测含 minimax-cn、xiaomi-token-plan-cn 等 7 个 provider 凭据。
-- 先例：reports-factory `src/agent/model.ts` 候选链与密钥发现（M1 对比分析已研读过）。
-- M1 延期项中与本批相关者：`envKeyFor`（src/llm/index.ts）与 `apiKeyEnvName`（src/ui/env-file.ts）两处实现漂移风险（handoff 延期项 3）。
+- **auditSink 挂点**：`createPiClient` 的 `opts.auditSink`（缺省 no-op 永不抛错）——M1 注释明言「M3 替换为 JSONL 落盘实现」，单点替换。
+- **AuditEvent 形状**（vendored runtime 实测）：`{version:"1.0", taskId, runId, sequence, kind: run.started|model.admitted|model.finished|run.finished|…, at, provider, model, contextVersions, digest?, reason?, attempt?, failureCategory?}`——**每事件带 provider+model**（provenance 真值来源；runText 的 RunResult 不含 model，fallback 发生在 runtime 内部）。
+- **RunResult**：`{taskId, runId, usage, usageKnown, status…}`——usage 带 token 计数（预算账本数据源）。
+- **taskId**：`mf:<kind>-<seq>`（进程内全局自增）；`createLlmClientFromEnv(env, caller?)` 已支持可选 caller——**四个调用点（CLI generate/refine、MCP 两工具、UI draft job）尚未传 generate/refine 标签**，M3 接上。
+- **modelLabel 现状**：读合成 env 的 `MF_LLM_MODEL`（链首语义）——主备容灾下备候选出稿时标签失真，正是本批要修的。
+- **审计不落密钥的结构保证**：AuditEvent 无任何 key 字段（provider 名、模型 id、taskId、usage、reason——无密钥材料）；红线「密钥永不进日志」由此结构保住。
+- 先例：deep-research 生产在跑审计 JSONL + 轮转 + 预算账本（M1 对比分析已研读；实现细节本批 GRILL 时对照）。
 
-## 已定决策（从迭代方案与 M1 proposal 继承，为约束而非开放问题）
+## 已定决策（从迭代方案继承，为约束而非开放问题）
 
-1. **密钥自动发现**：来源以 `~/.pi/agent/auth.json` 为先（pi CLI 凭据文件，本机实测在手）；发现到的 key 仅内存使用，**永不写盘、永不进页面/日志/导出物**（红线延续）。
-2. **默认链自动启用**：未配置 `MF_LLM_MODEL` 且发现到真值表候选 key 时，自动以默认链（MiniMax-M3 主 / mimo-v2.6-flash 备）工作——「开箱即用」的落点。
-3. **设置页降级为「查看 + 覆盖」**：手配路径保留（`.env.local` 显式配置覆盖自动发现结果），但模型/密钥不再是必填表单。
-4. **首页芯片三态化**：承接 v1 设置芯片后续（M1 proposal「明确不做」节原文项）。
-5. **优先级语义：显式配置（.env.local / process env）> 自动发现**——手配永远赢（与 M1 smoke 注入「已设变量优先」语义一致）。
-6. **M3 项明确不在本批**：审计 JSONL 落盘+轮转、预算账本、provenance 记录实际出稿 provider/model、设置页调用统计。
+1. **审计 JSONL 落盘 + 轮转**：auditSink 从 no-op 换成 JSONL 追加写；轮转策略防无限增长（具体策略 GRILL 定，DR 先例优先）。
+2. **预算账本**：可设预算上限，超限有明确行为（阻断/警告，GRILL 定）；数据源 = 审计事件/usage。
+3. **provenance 记录实际出稿 provider/model**：draft 的 provenance.model 从「配置面链首标签」改为「实际出稿真值」（来源：审计事件）。
+4. **设置页调用统计**：设置页新增用量回看（次数/tokens，按模型），数据源 = 账本。
+5. **caller 标签接上**：四个调用点传 generate/refine 标签（taskId 变 `mf:generate-<seq>` 等，审计可按用途区分）。
 
 ## 红线（既有设计不变式，全程保留）
 
-- **工人模式不变**：LLM 只产草案不写盘；generate/refine 保持单发结构化调用，不引入 `runAgent` 工具循环。
-- **fail-closed 人审门不变**：草案带 provenance + 待审标记，未审核导出硬阻断。
-- **pi 依赖收敛 `src/llm`**：guard 测试锁定业务代码零 pi import。
-- **faux 后端不变**：`MF_LLM_BACKEND=faux` + `MF_FAUX_RESPONSE` 确定性脚本，测试/演示零网络。
-- **密钥永不进页面/日志/导出物**：自动发现路径同样约束——页面只可显示打码形式。
-- **`.env.local` 手配路径保留**：覆盖语义，不删既有 UX 能力。
+- **工人模式不变**：审计/预算/统计全部是**事后记账**，不改变单发结构化调用形态，不引入工具循环。
+- **fail-closed 人审门不变**：预算超限的「阻断」语义（若 GRILL 定为阻断）只作用于**新的 LLM 调用发起**，不影响已产草案的人审/导出流程。
+- **pi 依赖收敛 `src/llm`**：guard 测试锁定；审计落盘模块若需 AuditEvent 类型，放 src/llm。
+- **faux 后端不变**：faux 零网络语义不动（faux 是否记账 GRILL 定，但 faux 路径不得因账本而需要网络/文件才可用——测试密闭性不能破）。
+- **密钥永不进页面/日志/导出物**——审计文件是日志类产物，**AuditEvent 结构上无密钥**，且落盘实现不得把 env/key 写入任何行。
+- **审计/账本文件不进 git**（本机运行时产物，.gitignore 处理）。
 
 ## 明确不做（本批范围外）
 
-- M3：审计 JSONL 落盘+轮转、预算账本、provenance 实际出稿记录、设置页调用统计。
-- M4：runAgent 会话/工具化草案（明确否决，见红线）。
-- 多用户密钥托管（工作台定位本地单用户不变）。
-- auth.json 以外的更多密钥来源（系统 keychain、1Password CLI 等——留开放问题评估，默认不做）。
+- M4：runAgent 会话/工具化草案（明确否决）。
+- 多用户密钥托管/多租户账本（本地单用户）。
+- refine prompt 加固（M1 延期项 1，仍是独立产品决策——除非用户在 diff 门裁决入批）。
+- M2 遗留 non-blocking 收口包与代码卫生包（handoff 延期项 3/4/5）——默认不入本批，避免范围蔓延；用户可另行安排。
+- 审计数据的跨实例聚合/导出报表（本批只做单机文件 + 设置页回看）。
 
 ## 验收方向（草案级，PRD 细化）
 
 - 验证门不变：`npm run lint && npm run typecheck && npm run test && npm run contract-test` 全绿。
-- **零配置路径真实验证**：无 `MF_LLM_MODEL`、无 provider key 环境变量时，CLI `generate` 经自动发现 + 默认链跑通真实调用（本机 auth.json 两候选 key 实测在手）。
-- **覆盖语义**：手配 `MF_LLM_MODEL`/key 时自动发现让位（显式永远赢）。
-- faux 路径零回归；guard 测试通过。
-- README/设置页文案同步（零配置为主线叙事，手配为覆盖路径）。
+- **真实用例**：真实 LLM 调用后审计文件出现该 run 的完整事件链（含 provider/model 真值）；draft provenance.model = 实际出稿模型（主备容灾场景可验证——主候选畸形回退备候选时 provenance 应显示备）。
+- 轮转可触发（构造超限文件证明轮转动作）。
+- 预算上限可配置且超限行为符合 GRILL 裁决。
+- 设置页统计与账本文件对得上（手工核对样本）。
+- faux 路径零回归；guard 测试通过；测试不因账本写盘而互相污染（测试用临时目录注入）。
 
 ## 开放问题（GRILL 补全候选）
 
-- auth.json 读取失败/格式漂移容错（文件不存在、JSON 坏、条目缺 `key` 字段、非 object 条目）。
-- 发现的 provider→key 映射与 `envKeyFor` 是否合一（M1 handoff 延期项 3：两处实现漂移风险，本批顺手合一？）。
-- 默认链的组成与顺序（是否就是真值表两候选；缺 key 跳过语义是否沿用 M1 主备链语义）。
-- 设置页「查看+覆盖」具体呈现：自动发现来源标示、打码形式、覆盖写 `.env.local` 的交互与校验。
-- 首页芯片三态的状态定义与文案（三态如何映射 未配置/已自动发现/已手配/错误？）。
-- CLI 无配置且无发现时的报错文案（现时「请设置 MF_LLM_MODEL」指引手配，零配置时代如何改写）。
-- 同 provider 部分配置组合边界（如 env 有模型无 key + auth.json 有 key → 是否补齐；env key 与 auth.json key 不一致时谁赢——决策 5 已答显式赢，细节待 GRILL）。
-- 发现结果的缓存与重读时机（进程生命周期内缓存？设置页保存后是否重读？auth.json mtime 变化？）。
-- 自动发现是否写入 llmStatus/设置页的来源标示（「密钥来源：自动发现（pi CLI）」类文案）。
+- 审计文件路径与命名（工作区相对？全局 ~/.metric-factory？实例级？）；CLI/MCP/UI 是否同路径。
+- 轮转策略：按大小/按条数/按日期；保留几份（DR 先例值）。
+- 预算维度与单位：tokens（input/output 分开？）/ 调用次数 / 两者；默认上限（还是缺省无限制）。
+- 超限行为：硬阻断（抛错）/ 软警告（审计里记 budget 事件 + 页面提示）；阻断后设置页如何呈现与解除。
+- provenance 真值的接法：auditSink 捕获 model.admitted/model.finished 回填 draft？还是 runText 后查账本？时序（事件异步与否——M1 实测 append 在 runText 完成前被调用）。
+- 设置页统计的口径：时间窗（今日/累计）、维度（按模型/按用途）、展示形态（表格/计数 chip）。
+- faux 是否记账（记了统计才完整；不记则 faux 保持零依赖纯净——测试密闭性考量）。
+- 审计写入失败的容错（磁盘满/权限）：降级为内存丢弃（保调用）还是抛错（保账本完整性）——审计 sink 抛错会以 AUDIT_FAILED 杀调用（M1 已知），no-op 兜底语义与落盘语义的取舍。
+- 预算账本的存储形态：独立文件/审计文件派生/JSON 状态文件；并发（UI fire-and-forget job 与 CLI 并行）下的写冲突。

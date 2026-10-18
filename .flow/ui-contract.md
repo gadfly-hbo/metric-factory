@@ -1,62 +1,60 @@
-# M2 · 零配置体验 · UI 契约（设置页「查看+覆盖」/ 首页芯片四分支三态）
+# M3 · 治理闭环 · UI 契约（设置页「调用统计」卡 / 审计降级态 / 预算超限错误页呈现）
 
-> 规格源（只读冻结）：`.flow/proposal.md` + `.flow/prd.md`（含 Diff-gate 附录 ①A②A、GRILL 附录 G1–G9 与 G4 裁决 B）。本契约从其推导，不新增 PRD 需求、不改任何已定决策；若实现发现需要新 PRD 需求，应返回 BLOCKED 而非在本文件扩权。
-> 覆盖面：**仅** M2 两个用户可见表面——`/settings`（降级为「查看+覆盖」）与首页（`/`）AI 模型状态芯片行。其余表面一律不在本契约范围。
-> 视觉与交互基线：`src/ui/render.ts` 顶部 CSS 既有 token/类/chip 体系 + §7.3 声明的两条最小 CSS 增量；零客户端脚本、纯服务端渲染（项目现行 plain-HTML 基线：语义 HTML、label 关联、原生可聚焦、`:focus-visible` 轮廓）。
-> 数据保真：原型演示数据为虚构，但形状逐字镜像真实实现——`maskKey`（src/ui/env-file.ts）输出 `****`+末 4 位；错误文案逐字取自 `src/llm/index.ts` 工厂急错与 `src/ui/server.ts` 设置 422 文案；链序 per G4 裁决 B（minimax-cn/MiniMax-M3 主 / xiaomi-token-plan-cn/mimo-v2.6-flash 备）。
+> 规格源（只读冻结）：`.flow/proposal.md` + `.flow/prd.md`（D1–D12 + GRILL 附录 G1–G8，esp. G7/G8）。M2 术语与表面血脉：`.flow/archive-m2-20261018/ui-contract.md`——M3 表面**复用**其术语约定（chip 类、就绪/未配置/配置错误/演示模式、来源标签），不得改名或重构 M2 表面；仅允许 D7 要求的**新增卡片**与 G7 要求的**既有错误页新文案呈现**。若实现发现需要新 PRD 需求，返回 BLOCKED 而非在本文件扩权。
+> 覆盖面：**仅** M3 三个用户可见表面——设置页新卡「调用统计」（含正常/预算警告/审计降级/faux/空态）、审计降级态（在该卡内呈现）、draft job 错误页的预算超限呈现（沿用现有 `jobErrorPage`，零新页面）。其余表面（首页、草案工坊、CLI/MCP stderr 警告行）一律不在本契约范围。
+> 视觉与交互基线：`src/ui/render.ts` 顶部 CSS 既有 token/类/chip 体系（含 M2 §7.3 增量 `.chip-fail`/`a.chip`，已生产化于 render.ts）；**本契约零新增 CSS 类**（§7.3）；零客户端脚本、纯服务端渲染（语义 HTML、原生可聚焦、`:focus-visible` 轮廓）。
+> 数据保真：原型演示数据为虚构但形状逐字镜像真实实现——taskId 前缀 `mf:generate-<seq>`/`mf:refine-<seq>`（D6）、AuditEvent 字段名（`version/taskId/runId/sequence/kind/at/provider/model`）、usage 三字段（`modelCalls/inputTokens/outputTokens`，G4）、数据目录 `~/.metric-factory/`（G3：`model-audit.jsonl`(+`.1`)/`model-budget.json`）；链序 per M2 G4 裁决 B（minimax-cn/MiniMax-M3 主 / xiaomi-token-plan-cn/mimo-v2.6-flash 备）。
 
 ---
 
-## 1. Surfaces（表面清单，仅此两面）
+## 1. Surfaces（表面清单，仅此三面）
 
-### SE-A · 设置页 `/settings` —— 「查看 + 覆盖」（D7/G5/G6/G9）
+### SE-A · 设置页 `/settings` 新卡「调用统计」（D7/G8）
 
-页面自上而下四个区块 + 一条注脚：
+**插入位置**：链卡「当前生效链（查看）」之后、覆盖表单卡「模型配置（覆盖）」之前（只读查看类区块连续、与写操作表单分离）。M2 既有五区块（状态卡/链卡/表单卡/清除卡/注脚）的结构、文案、语义**原样保留**；统计卡渲染独立于连接状态——M2 状态 S1–S9 任何基座上均按本契约 ST1–ST5 呈现。数据事实源 = G8 读路径：渲染时只读 `MF_DATA_DIR`（缺省 `~/.metric-factory/`）下两文件 `model-audit.jsonl` + `model-budget.json`（rename 原子、append 尾读安全，无需锁）。
 
-1. **状态卡「AI 模型连接」**：一个语义状态 chip（就绪/未配置/配置错误/演示模式，色映射见 §4）+ 一句上下文说明；错误态追加 `error-list`（`role="alert"`）呈现工厂报错**原文**（G7：工厂报错只含变量名不含 key 值，已逐条核实可透出）。
-2. **链卡「当前生效链（查看）」**（G9a）：
-   - 生效模型来源一行（G2 sources 的 `MF_LLM_MODEL` 维度：`default-chain` → 「默认链自动启用（未手动设置 MF_LLM_MODEL）」；`env-file`/`process` → 「.env.local（手动配置）」/「环境变量（手动配置）」）。
-   - **全链表格**：每候选一行，列 = 角色（主/备…）｜模型（`provider/model-id`，mono）｜密钥来源 chip（四标签之一，见 §4）｜密钥（打码，`maskKey` 形状 `****`+末 4 位；缺失时 `—`）。
-   - 网关行（仅 `MF_LLM_BASE_URL` 已设时）：`网关 MF_LLM_BASE_URL = <值>（<来源>）`。
-   - **链外 pi CLI 凭据提示行**（G9b，仅发现结果中不属于当前链的 provider 时）：`另检测到 N 个 pi CLI 凭据：<provider 名列表>（手配对应模型即可用）`——**仅 provider 名，永不列 key**。
-   - **遮蔽警告**（G5，仅 `.env.local` 有值但被 process env 覆盖的键）：`遮蔽警告 <ENV_VAR 名>：.env.local 保存的值被进程环境变量同名值覆盖（显式配置优先），需先 unset 才生效`。表格密钥列只显示**生效（process env）值**的打码；被遮蔽值即使打码也不并列显示。
-3. **覆盖表单卡「模型配置（覆盖）」**（POST `/settings/save`，G6/G9c）：
-   - 模型输入：`value` **永远留空**（422 重渲染亦不回填）；`placeholder` 显示当前生效模型（如 `当前生效：minimax-cn/MiniMax-M3`；未配置态为 `如 minimax-cn/MiniMax-M3`；错误态为 `当前保存：<模型>（未生效）`）。字段下注明：`模型留空保存 = 清除覆盖、回退自动发现（与下方「清除配置」等效）`。
-   - API Key：`type=password`、`autocomplete="off"`、永不回显；label 含 `留空则不修改`。
-   - 网关地址：可选，`value` 留空，`placeholder` 为当前保存值（有则显示，无则 `https://…`）。
-   - 提交按钮 `保存配置`（primary）。
-4. **清除卡「清除配置」**（POST `/settings/clear`，既有表面保留）：danger 按钮 `清除本页管理的配置`，说明文案沿用现状。
-5. **注脚**：`配置写入仓库根目录 .env.local（已被 git 忽略），工作台与 CLI 共用；密钥不会出现在页面、日志或导出物中。`（②A 后「与 CLI 共用」为真）+ `自动发现的密钥仅内存使用、永不写盘。`（D11）
+卡内自上而下：
 
-设置页状态（one file per state，见 §7）：
+1. **卡标题**：`调用统计`（card-h）。
+2. **两行汇总 chip**（G8）：
+   - `今日`（chip-queue）+ `<N> 次 · <N> tokens`（`.num` 千分位；本地时区自然日，时间源 = 审计事件 `at`）；
+   - `累计`（chip-queue）+ `<N> 次 · <N> tokens`（留存期内口径，见脚注 4）。
+3. **预算警告（条件元素）**：任一已配置预算维度用量 ≥80%（G6 固定阈值，无 env）时，在 `累计` 行尾追加 warn chip `预算已用 N%` + 上限小字注记（如 `（tokens 上限 22,000,000）`；调用次数维度为 `（调用上限 <N> 次）`）。N = floor(用量百分比)，超限后为 100；两维均配置且均 ≥80% 时各一枚 chip（tokens 在前）。**未配置上限（G6 缺省不限）→ 恒无任何警告元素**。用量口径 = 账本留存条目聚合（G1）。
+4. **按模型表（累计口径）**：引导行 `按模型（累计，留存期内）：` + `.tbl` 表（`th scope="col"`）；列 = 模型（`provider/model-id`，mono）｜调用次数｜tokens（in+out）｜generate 次数｜refine 次数（用途拆分 = taskId 前缀红利，D6/D1；按模型计数取 `model.admitted`/`model.finished` 而非 `run.started`，G8）；末行 `合计` 勾稽汇总行（行内 generate+refine = 调用次数，行和 = 汇总 chip 数字）。行集 = 账本/审计中**实际出稿过**的模型——主备容灾回退后备候选照常成行（mimo 行非零即回退真值，D5 验收场景）。
+5. **留存脚注**（composer-note）：`tokens 为 input+output 合计；累计 = 审计与账本留存期内（审计文件 50MB × 2 代轮转、预算账本 FIFO 剪老，仅统计留存条目）。`
 
-| 态 | 场景 | 状态 chip | 链卡 |
-|---|---|---|---|
-| **S1 自动发现全链** | 零配置机器，auth.json 含两候选 key（US1/US2 happy path） | 就绪（绿） | 默认链主+备两行均 `自动发现 · pi CLI` + 打码；链外 5 家 |
-| **S2 部分发现** | auth.json 仅含主候选 key（US3：发现到几家启用几家） | 就绪（绿） | 主行 `自动发现 · pi CLI`；备行 `缺失（调用时自动跳过）`、密钥 `—`；链外 5 家 |
-| **S3 未配置正常态** | 无手配、无发现（auth.json 不存在或无真值表候选 key） | 未配置（灰） | 无链表格→empty 提示（默认链将自动启用的说明）+ 手配指引；无链外行 |
-| **S4 遮蔽警告** | `.env.local` 保存了模型+key，process env 另有同名 key（显式赢） | 就绪（绿） | 模型来源 `.env.local`；密钥来源 `环境变量` + 打码（生效值）；遮蔽警告行（G5）；链外 6 家 |
-| **S5 配置错误** | `.env.local` 保存真值表模型 + 网关 → 工厂急错（G6 语义冲突） | 配置错误（红） | `error-list` 原因摘要（工厂原文）；链卡仍画误配行（模型 `.env.local` + key 打码）+ 网关行；链外 6 家 |
-| **S6 faux** | `MF_LLM_BACKEND=faux`（D10 短路在前，不触发现） | 演示模式（accent） | **不显示**链卡与任何发现结果；说明 faux 不读取本机凭据 |
-| **S7 保存成功反馈** | POST 保存有效模型（+key）→ 303 `?saved=1` 重渲染 | 就绪（绿） | 顶部成功横幅卡；链卡=手动配置单行（`.env.local`+打码）；链外 6 家 |
-| **S8 422（仅 slash 违例）** | POST 模型不含 `/`（或 `/` 在首/尾）→ 422 同页重渲染 | 底层态不变（示例为零配置机器→就绪） | 表单卡内 `error-list`（server 现行文案原文）；模型输入仍留空，`aria-invalid` + `aria-describedby` 关联；查看面不受扰动 |
-| **S9 清除覆盖反馈** | POST `/settings/clear` 或模型留空保存（G6 等效）→ 303 `?cleared=1` | 就绪（绿，示例回退到自动发现） | 顶部「已清除覆盖 · 回退自动发现」横幅；链卡恢复默认链 |
+设置页统计卡状态（one file per state，见 §7.2）：
 
-> 反馈机制声明（零脚本约束下的保存反馈）：保存/清除成功用 303 重定向携带 `?saved=1` / `?cleared=1` 查询参数，GET `/settings` 据此渲染一次性横幅卡；422 为同页重渲染（沿用现状语义，D7「422 语义不变」）。这是 G5「保存后重渲染」与「保存成功反馈」的落地机制，不新增 PRD 需求。
-
-### SE-B · 首页 `/` —— AI 模型状态芯片行（D8/G7 四分支三态）
-
-首页「AI 模型」卡内一行：**芯片本体可点击（`<a href="/settings">`）** + 语义小字。四分支：
-
-| 分支 | 芯片 | 小字/引导 |
+| 态 | 场景 | 呈现 |
 |---|---|---|
-| **H1 configured·自动发现** | 绿 `chip-ok`：`就绪 · <生效主模型>` | `来源：自动发现` |
-| **H2 configured·手动配置** | 绿 `chip-ok`：`就绪 · <生效主模型>` | `来源：手动配置` |
-| **H3 unconfigured** | 灰 `chip-queue`：`未配置` | 正常态引导：`本机已有 pi CLI 凭据即可零配置直接使用；或去设置手动配置（不配置也可用模板微调全流程）` |
-| **H4 error** | 红 `chip-fail`：`配置错误` | 原因摘要（工厂报错原文，只含变量名）+ `去设置` |
-| **H5 faux** | accent `chip-accent`：`演示模式` | `faux 确定性后端（零网络），供体验与测试；配置真实模型后自动切换` + `去设置`（第四分支，不占三态名额——D10 短路的直接推论） |
+| **ST1 正常** | 真实后端、账本有条目、未配置预算上限 | 全卡（两行 chip + 按模型表 + 留存脚注）；无任何警告元素 |
+| **ST2 预算警告** | `MF_LLM_BUDGET_TOKENS=22,000,000`，累计 18,354,209（83.4%） | ST1 + `累计` 行尾 `预算已用 83%` warn chip + `（tokens 上限 22,000,000）` 小字；表格照常（警告为叠加态，非残缺态） |
+| **ST3 审计降级** | UI server 进程内审计写盘失败（D3 never-throw：I/O 异常吞掉 + 一次性降级标志置位） | 卡顶 `审计降级` warn chip + 一句说明（写盘失败改内存丢弃、调用不受影响）；`今日` 行 = `不可用（时间口径来自审计文件）`；`累计` 行照显（账本源）；按模型表塌缩为单行——模型列与 generate/refine 列 = `不可用`，调用次数/tokens = 账本聚合总量；追加降级脚注（含「标志仅反映当前工作台进程」披露，R2 探索即答②） |
+| **ST4 faux** | `MF_LLM_BACKEND=faux`（D9 工厂短路） | **整卡替换**为说明：`演示模式` chip-accent + `faux 不记账：…`——零数字、零表格、零脚注（历史真实数据亦不显示；faux 零文件依赖，US10） |
+| **ST5 空态** | 真实后端、账本零条目（刚启用/账本刚清/文件不存在） | 两行 chip 显示 `0 次 · 0 tokens`；表格位置为一句 `暂无调用记录…`；留存脚保留 |
 
-生效主模型 = 链首（自动发现/默认链时为 minimax-cn/MiniMax-M3）；configured 不分来源共用绿 chip，来源差异只进小字（G7）。
+> 边界披露：账本/审计文件不存在或不可读按 ST5 空态呈现；「append 尾读半行跳过」之外的文件损坏呈现 PRD 未定义——本契约不发明新态（如需要「账本损坏」专属 UI 态，须回 PRD，BLOCKED 边界）。
+
+### SE-B ·（同卡）审计降级态语义（D3/G8/R2②）
+
+降级的**唯一** M3 UI 呈现位置 = 统计卡（D7「审计降级态在此页呈现」）。语义钉死：
+
+- **token 总量照显**（账本源）：`累计` 行次数与 tokens 来自 `model-budget.json` 聚合，与审计 sink 无关。
+- **模型/时间列标 `不可用`**：模型归因、今日/累计时间窗（审计 `at`）、generate/refine 用途拆分（taskId 前缀）均源自审计事件——降级期间这些数据未落盘，**不得**以链配置推断或任何估计值充数。
+- **脚注说明降级含义**：`审计降级：审计 JSONL 写盘失败，本次进程内的调用改为内存丢弃、不落盘；模型调用不受影响。模型归因与时间口径依赖审计文件，故标「不可用」。降级标志仅反映当前工作台进程（CLI/MCP 进程的降级不在此显示）；写盘恢复或重启后新调用重新落盘。`
+- 标志为一次性、进程生命周期内粘滞（D3）；跨进程不可见为已披露限制（R2 探索即答②，单用户可接受）。
+
+### SE-C · draft job 错误页 `/drafts/jobs/:id` —— 预算超限呈现（D4/G7，零新页面）
+
+沿用现行结构（server.ts 422 + `jobErrorPage`，render-drafts.ts）：卡标题 `AI 草案生成失败`（现行原文）+ `error-list`（`job.error` **原文透传**，单 `<li>`）+ 既有两按钮（`返回重试` → `/drafts`、`检查模型设置` → `/settings`）。当错误含「预算已耗尽」时，message 即 pi-client 错误组装点（G7）拼装的**四要素文案**，契约钉死模板：
+
+```
+预算已耗尽：本次模型调用被预算上限阻断。<维度> 已用 <X> / 上限 <Y>。账本文件：<绝对路径>。两条出路：1) 调高或取消上限（环境变量 <MF_LLM_BUDGET_TOKENS | MF_LLM_BUDGET_CALLS>）；2) 删除账本文件重新计数。
+```
+
+- `<维度>` ∈ `tokens（input+output 合计）` ｜ `调用次数`；X/Y 千分位。
+- 超限语义（红线）：只阻断**新的 LLM 调用发起**；已产草案的人审/导出不受影响（US2/D4——错误文案不展开此句，四要素即全部）。
+- UI 对该错误**零结构改动、零新路由、零新页面**；`issues` 为空数组（预算错误无输出校验条目）；内部错误码 `BUDGET_EXHAUSTED` 不进页面文案（测试断言用，非用户词）。
 
 ---
 
@@ -64,34 +62,33 @@
 
 | # | 入口 | 动作 | 结果态 |
 |---|---|---|---|
-| 1 | GET `/settings` | 查看 | 按合成结果（G2 `{env, sources}` + llmStatus）呈现 S1–S6 之一；含遮蔽键时叠加遮蔽警告（渲染与保存后重渲染均显示，G5） |
-| 2 | GET `/` | 查看 | 按 llmStatus 四分支呈现 H1–H5 之一 |
-| 3 | 首页芯片（任一分支） | 点击 | GET `/settings` → 对应 S 态（H1→S1、H2→S7 稳态、H3→S3、H4→S5、H5→S6） |
-| 4 | `/settings` 覆盖表单 | 填模型+key，保存 | 303 `?saved=1` → **S7**（写 `.env.local`；显式永远赢） |
-| 5 | `/settings` 覆盖表单 | 填模型、key 留空，保存 | 303 `?saved=1` → **S7**（只存模型；key 来源标示显示 来自发现或缺失，G6） |
-| 6 | `/settings` 覆盖表单 | **模型留空**，保存 | 清除语义（`MF_LLM_MODEL`/`MF_LLM_BASE_URL`/前一 provider key 全置 null，忽略 api_key/base_url 输入）→ 303 `?cleared=1` → **S9**（G6） |
-| 7 | `/settings` 覆盖表单 | 模型 slash 违例（无 `/` 或 `/` 在首/尾），保存 | 422 同页重渲染 → **S8**；唯一 422，slash 之外无保存时校验（G6） |
-| 8 | `/settings` 清除卡 | 点击清除 | 303 `?cleared=1` → **S9** |
-| 9 | 保存后仍存在遮蔽键 | 重渲染 | 成功横幅 + 遮蔽警告并存（G5「保存即覆盖」承诺在 shadow 场景不失信） |
+| 1 | GET `/settings`（真实后端，账本有条目，未设上限） | 查看 | **ST1** |
+| 2 | GET `/settings`（已设上限且用量 ≥80%） | 查看 | **ST2**（N = floor 百分比；超限后 N=100；未设上限恒不出现） |
+| 3 | GET `/settings`（UI server 进程审计写盘曾失败） | 查看 | **ST3**（一次性标志，进程生命周期内粘滞） |
+| 4 | GET `/settings`（`MF_LLM_BACKEND=faux`） | 查看 | **ST4**（M2 S6 基座 + faux 不记账卡） |
+| 5 | GET `/settings`（真实后端，账本零条目/文件不存在） | 查看 | **ST5** |
+| 6 | `/drafts` 提交生成/微调 → fire-and-forget job → `complete()` 抛 `BUDGET_EXHAUSTED` | 轮询 `/drafts/jobs/:id` 至 error | **F1** 错误页（四要素原文，G7：三入口零额外改造即「点名预算」自带解除指引） |
+| 7 | F1 页 `检查模型设置` | 点击 | GET `/settings` → ST2（此时用量 ≥100% → `预算已用 100%`，同一态不新设） |
+| 8 | 预算解除（调高/取消 env 上限，或删除 `model-budget.json`，US8）后重试 | 再次提交 | 恢复生成；GET `/settings` 按新账本回 ST1/ST2/ST5 |
+| 9 | 统计卡内 | — | **无任何动作**（纯只读卡：无控件、无表单、无链接） |
 
 **Loading / empty / partial / failure 状态汇总**：
-- **loading**：无局部加载态——纯服务端整页渲染，保存/清除为同步 303/422（项目零脚本基线）。
-- **empty**：S3（无链、无凭据、无链外行）；链外行本身随发现结果增减（无发现则不渲染）。
-- **partial**：S2（1/2 家候选凭据，缺失行 `缺失（调用时自动跳过）`）；S4/S5/S7 单候选链（手动配置无 fallback 时链只有主行）。
-- **explicit failure**：S5（工厂急错原文摘要）、S8（422 slash）、H4（红芯片 + 原因摘要）。
+- **loading**：无局部加载态——纯服务端整页渲染（零脚本基线）。
+- **empty**：ST5（账本零条目）；ST4（faux——不是数据空，是不记账）。
+- **partial**：ST3（降级：账本聚合可见、审计归因不可用）；ST2 为叠加警告非残缺。
+- **explicit failure**：F1（预算超限四要素错误页）。ST3 是**呈现降级**不是调用失败（调用不受影响，US6）。
 
 ---
 
-## 3. Affordances（输入、控件、键盘/焦点、可达性——项目现行 plain-HTML 基线）
+## 3. Affordances（控件、键盘/焦点、可达性——项目现行 plain-HTML 基线）
 
-- **输入**（均在覆盖表单卡内，`<label for>` ↔ `<input id>` 一一关联：`set-model` / `set-key` / `set-base`）：
-  - 模型：`type=text`，`value` 永远空（G9c 查看/覆盖物理分离），placeholder 承载当前生效值；
-  - API Key：`type=password` + `autocomplete="off"`，永不回显（任何重渲染）；
-  - 网关地址：`type=text`，`value` 空，placeholder 承载当前保存值。
-- **控件**：`保存配置`（`btn-primary` submit）→ POST `/settings/save`；`清除本页管理的配置`（`btn-danger` submit）→ POST `/settings/clear`；首页芯片 = `<a class="chip chip-*">` 可聚焦可回车。
-- **键盘/焦点顺序**（原生 tab，无 tabindex 重排）：状态卡文本 → 链卡表格（只读）→ 表单 模型→密钥→网关→保存 → 清除按钮 → 注脚 → 首页芯片在首页卡片流内原生顺序；`:focus-visible` 轮廓沿用 CSS 既有规则。
-- **可达性**：`lang="zh-CN"`；表格 `<th scope="col">` 语义表头；错误 `error-list` 加 `role="alert"`；S8 模型输入 `aria-invalid="true"` + `aria-describedby="settings-issues"`（沿用 releaseBlock 两级错误先例）；芯片锚点有可辨识文本 + `title` 提示；无 `aria-live`/无脚本（整页渲染语义）。
-- **零脚本不变式**：全部文件/生产实现不含 `<script>`；交互全部为原生表单提交与链接导航。
+- **统计卡纯只读**：卡内无 `<input>`/`<button>`/`<a>`/tabindex——不进键盘焦点序列；阅读流 = 文档顺序（标题 → 汇总行 → 表格 → 脚注）。数字单元格用 `.num`（tabular-nums），模型名用 `.mono`。
+- **表格语义**：`<th scope="col">` 语义表头（M2 链卡先例）；表格外包 `overflow-x:auto` 防窄屏裁切（现行惯用法）。
+- **chip 语义**（`<span>`，非链接、不可聚焦）：`今日`/`累计` = `chip-queue`（中性标签，非状态）；`预算已用 N%` = `chip-warn`；`审计降级` = `chip-warn`；`演示模式`（faux 卡内，沿用 M2 词）= `chip-accent`。统计卡内无 chip-ok/chip-fail 用例。
+- **焦点顺序**（设置页整页，原生 tab 无重排）：状态卡文本 → 链卡表格（只读）→ **统计卡（只读，零焦点目标）** → 表单 模型→密钥→网关→保存 → 清除按钮 → 注脚；`:focus-visible` 轮廓沿用 CSS 既有规则。
+- **错误页沿用既有 affordance**：`error-list`（现行结构，无 role 属性——与 render-drafts.ts 逐字一致）+ 两链接按钮（原生可聚焦）。
+- **可达性**：`lang="zh-CN"`；无 `aria-live`/无脚本（整页渲染语义）。
+- **零脚本不变式**：全部原型文件/生产实现不含 `<script>`；交互全部为原生表单提交与链接导航。
 
 ---
 
@@ -99,38 +96,38 @@
 
 | 钉死文案 | 使用处 |
 |---|---|
-| `就绪 · <生效主模型>` | 首页 configured 芯片（H1/H2） |
-| `未配置` | 设置页 S3 状态 chip；首页 H3 芯片（灰） |
-| `配置错误` | 设置页 S5 状态 chip；首页 H4 芯片（红）——**由现行「配置有误」改词** |
-| `演示模式` | 设置页 S6 与首页 H5 芯片（accent）——首页由「AI 演示模式」改词，设置页沿用 |
-| `自动发现 · pi CLI` | 链表格密钥来源标签（发现 key） |
-| `环境变量` / `.env.local` | 链表格密钥来源标签（process env / env-file） |
-| `缺失（调用时自动跳过）` | 链表格密钥来源标签（候选在链、无 key） |
-| `模型留空保存 = 清除覆盖、回退自动发现` | 模型字段下注记（G6 页面注明） |
-| `留空则不修改` | API Key label（语义延续） |
-| `遮蔽警告` + `需先 unset 才生效` | S4 警告行（G5 措辞） |
-| `另检测到 N 个 pi CLI 凭据：…（手配对应模型即可用）` | 链外凭据提示行（G9b 句式，仅 provider 名） |
-| `来源：自动发现` / `来源：手动配置` | 首页就绪芯片来源小字（G7 二值） |
-| `去设置` | 未配置/错误/faux 引导链接 |
-| 工厂报错原文（如 `缺少模型密钥：请设置环境变量 …`、`…命中内置已验证模型，MF_LLM_BASE_URL 对其不生效：请清除网关变量或改用其他模型`） | S5/H4 原因摘要——逐字引用 `src/llm/index.ts`，不改写 |
-| server 422 文案原文：`模型需为 <provider>/<model-id> 形式（收到 "…"），如 openai/gpt-4o` | S8 error-list（`src/ui/server.ts` 现行文案） |
+| `调用统计` | 卡标题（ST1–ST5 通用） |
+| `今日` / `累计` | 汇总行 chip（今日 = 本地时区自然日；累计 = 留存期内） |
+| `<N> 次 · <N> tokens` | 汇总行数字体（千分位，`.num`） |
+| `预算已用 N%` | warn chip（仅已配置上限且 ≥80%；N = floor，超限 = 100） |
+| `（tokens 上限 <N>）` / `（调用上限 <N> 次）` | warn chip 后小字注记 |
+| `审计降级` | ST3 卡顶 warn chip |
+| `不可用` | ST3 模型/时间/用途单元格与今日行 |
+| `faux 不记账：当前确定性 faux 后端零网络、零文件，调用不写审计与预算账本，无统计数据；配置真实模型后，统计自真实调用开始累计。` | ST4 整卡说明（`演示模式` chip-accent 开头） |
+| `累计 = 审计与账本留存期内` | 留存脚注核心句（后接 `（审计文件 50MB × 2 代轮转、预算账本 FIFO 剪老，仅统计留存条目）`） |
+| `按模型（累计，留存期内）：` | 表格引导行 |
+| `模型` / `调用次数` / `tokens（in+out）` / `generate 次数` / `refine 次数` / `合计` | 表列头与末行 |
+| `暂无调用记录——第一次真实调用（生成/微调草案、CLI、MCP）后，此处开始按模型累计。` | ST5 空态说明 |
+| `预算已耗尽` / `已用 <X> / 上限 <Y>` / `账本文件：<绝对路径>` / `两条出路` | F1 四要素（模板见 §1 SE-C） |
+| `AI 草案生成失败` / `返回重试` / `检查模型设置` | F1 沿用 `jobErrorPage` 现行原文，不改 |
+| M2 全部钉死文案（`就绪`/`未配置`/`配置错误`/`演示模式`/来源标签/遮蔽警告句式等） | 设置页既有卡原样沿用（M2 契约 §4 对既有表面继续有效） |
 
-**chip 色映射**（既有类 + §7.3 一条增量）：就绪=`chip-ok`（绿）· 未配置=`chip-queue`（灰，由现行 warn 改灰——未配置是正常态）· 配置错误=`chip-fail`（红，新增类）· 演示模式=`chip-accent`。来源标签色：`自动发现 · pi CLI`=ok · `.env.local`=accent · `环境变量`=queue · `缺失（调用时自动跳过）`=warn。
+**数字格式**：次数与 tokens 千分位分组（如 `18,354,209`）；百分比整数无小数；tokens 恒为 input+output 合计口径。**不发明新词**：不出现「用量看板」「成本」「余额」「配额」等 PRD 外词汇；无金额/货币折算（PRD Out of Scope）。
 
 ---
 
 ## 5. Negative cases（禁止路径——验收时逐条反证）
 
-1. **密钥永不显示明文**：一切 key 只经 `maskKey`（`****`+末 4 位）呈现；密码框任何重渲染不回显；链外凭据行只列 provider 名（G9b/D11/US11）。
-2. **faux 永不显示为「就绪」**：H5 恒 accent「演示模式」；S6 不显示链与发现结果（D10 短路在前，US13）。
-3. **未配置永不显示为错误红**：S3/H3 恒灰正常态 + 引导（US4/D12/红队 KA5）。
-4. **发现层错误永不显示**：auth.json 不存在 / JSON 坏 / 条目非 object / OAuth 缺 key / 空白 key 一律静默降级为「未配置」——页面不得出现任何发现层报错或文件级诊断（D2/US12）。
-5. **密钥来源细节不越界**：页面永不显示 auth.json 路径以外的密钥来源细节（keychain/1Password 等为 Out of Scope，连提都不提）；遮蔽警告只含环境变量名，不含任何 key 值，被遮蔽值即使打码也不与生效值并列显示。
-6. **422 仅 slash 违例**：slash 之外的配置错误不得以 422 呈现——由状态区/芯片以错误态浮现（G6）；422 重渲染不得扰动查看面。
-7. **芯片不出现第五分支**：faux 是第四分支不占三态名额；configured 不分来源共用绿 chip（G7）。
-8. **表单 value 永不回填当前模型**（含 422 重渲染）——查看与覆盖物理分离（G9c）；违例值只出现在 422 错误信息的 `收到 "…"` 引用内。
-9. **自动发现的 key 永不写入 `.env.local`、永不进日志/导出物**（D11）——设置页保存只写用户显式输入。
-10. **「零配置」叙事限定**：首页/设置页文案恒限定「本机已有 pi CLI 凭据」，不作普遍承诺（D12/US15）。
+1. **统计永不显示密钥/prompt 明文**：卡内只有 digest 类聚合数据（次数、tokens、provider/model-id）；连 AuditEvent 的 `digest` 字段也不展示（页面无此粒度）。（US11/D11/proposal 红线）
+2. **faux 恒「不记账」**：ST4 无数字、无表格、无脚注；即使账本有历史真实数据也不显示（G8 整卡替换）；不得显示任何假造统计数。（D9/US10）
+3. **降级不给假模型列**：ST3 模型/时间/用途单元格恒 `不可用`，仅账本聚合（累计次数/tokens）照显；不得以链配置推断模型归因充数。（G8）
+4. **预算警告只在配置了上限时出现**：缺省不限（G6）→ 恒无 warn chip；阈值固定 80%，无 env、不可配置、不可关闭。
+5. **统计卡不得改变 M2 既有卡片结构与语义**：只插入新卡；状态卡/链卡/表单卡/清除卡/注脚及全部 M2 钉死文案原样。（D7）
+6. **不做提交前预算拦截弹窗**：无预检 confirm/modal/拦截页；超限唯一 UI 呈现 = 调用后 F1 错误页（G7 双真相源：真值在账本 settle，提交时预读会造假象）。
+7. **统计卡只读**：无「清账本」「调上限」按钮或链接；解除 = env/文件操作（US8）。增设任何写操作 = 新 PRD 需求 → BLOCKED。
+8. **F1 不新增页面、不改结构**：`jobErrorPage` 原结构原文；不挂「模型原始输出」类误导标题（UI 恒不显示模型原始输出；该 G7 项属 CLI stage:call）；内部错误码 `BUDGET_EXHAUSTED` 不进页面。
+9. **预算 UI 元素不出现在首页/草案工坊**：仅统计卡 warn chip + F1 错误页（G7 警告呈现清单 exhaustive）；drafts 页 llm 卡不变。
+10. **无金额计价**：不折算货币、不显示单价/费用/余额。（PRD Out of Scope）
 
 ---
 
@@ -138,58 +135,49 @@
 
 | 表面/状态 | PRD 溯源 |
 |---|---|
-| S1 自动发现全链 | US1、US2、US7、D5、D7、D9、G3、G9(a)(b)(c)、G4 裁决 B（链序） |
-| S2 部分发现 | US3、US7、D5、G9(a)、G4 |
-| S3 未配置正常态 | US4、D5、D12、G8（文案口径同源）、红队 KA5 |
-| S4 遮蔽警告 | US5、US7、D4（②A 优先级）、D9、G5 |
-| S5 配置错误 | US7、D7、G6（slash 外错误由状态区浮现）、G7（工厂报错可透出） |
-| S6 faux | US13、D10、G7（第四分支） |
-| S7 保存成功 | US8、US5、D7、G6（填模型+key 留空=只存模型） |
-| S8 422 | D7（422 语义不变）、G6（仅 slash 违例）、G9(c)（value 永空） |
-| S9 清除覆盖 | US8、G6（空保存 ≡ clear）、D7 |
-| H1/H2 就绪 | US9、US5、D8、G7、D9 |
-| H3 未配置 | US4、US9、D8、G7、G8、D12 |
-| H4 错误 | US9、D8、G7（原因摘要） |
-| H5 演示模式 | US13、US9、D8、D10、G7 |
+| ST1 正常 | US5、US9、D1、D6、D7、G8（两行 chip + 按模型表口径） |
+| ST2 预算警告 | US3、G6（双维度/缺省不限/80% 固定）、G7（UI warn chip）、G1（留存条目口径） |
+| ST3 审计降级 | US6、D3（never-throw + 一次性降级标志）、G8（token 照显/模型时间不可用）、R2 探索即答②（进程态可见性脚注） |
+| ST4 faux | US10、D9、G8（整卡换说明）、proposal 红线（faux 零网络/零文件） |
+| ST5 空态 | US5、G8（读路径只读两文件） |
+| F1 超限错误页 | US2、US8、D4（`BUDGET_EXHAUSTED` → pi-client 点名预算）、G7（四要素 + 不做预检 + 三入口零改造）、G1；既有结构 = render-drafts.ts `jobErrorPage` + server.ts `/drafts/jobs/:id` |
+| 负 1 密钥/明文 | US11、D11、proposal 红线 |
+| 负 6 无预检弹窗 | G7 |
+| 负 7 只读无解除按钮 | US8（解除 = env/文件操作） |
+| 负 9 元素位置约束 | G7、D7 |
 
 ---
 
 ## 7. Visual artifact（必需产出——静态 HTML 原型集）
 
-### 7.1 格式声明
+### 7.1 格式声明 + 数据保真
 
-- **格式**：静态 HTML 集，一文件一表面×状态；每个文件为完整独立页面（双击可开），`<style>` 内嵌 `src/ui/render.ts` 顶部 CSS 全量副本 + §7.3 两条增量；**零 `<script>`**、零外部依赖（logo 走仓库内相对路径 `../../assets/juanerai-logo-slogan.png`）。
-- **演示数据**：虚构但镜像真实形状——统一合成 auth.json 宇宙 = 7 个 provider（`minimax-cn`、`xiaomi-token-plan-cn`、`openai`、`deepseek`、`kimi-coding`、`moonshot`、`zhipu`，与本机实测 7 条目同量级；各状态间守恒）；打码 = `****`+末 4 位；错误文案逐字取自工厂与 server；链序 per G4 裁决 B。
-- **原型内链接**：首页芯片/引导链接指向对应状态原型文件（可点击走查）；生产实现一律 `/settings`、`/settings/save`、`/settings/clear`（表单 action 已按生产路径书写）。`index.html` 为导航页。
+- **格式**：静态 HTML 集，一文件一状态；每个文件为完整独立页面（双击可开），`<style>` 内嵌 `src/ui/render.ts` 顶部 CSS **全量逐字副本**（含 M2 §7.3 增量——已在生产 render.ts 内）；**零 `<script>`**、零外部依赖（logo 走仓库内相对路径 `../../assets/juanerai-logo-slogan.png`）。
+- **演示数据**（虚构但守恒，形状逐字镜像真实实现）：
+  - 基座 = M2 S1 设置页（自动发现全链：主 minimax-cn/MiniMax-M3 + 备 xiaomi-token-plan-cn/mimo-v2.6-flash，`自动发现 · pi CLI` + 打码 `****e2f9`/`****7c0a`，链外 5 家）；ST4 基座 = M2 S6（演示模式、无链卡）。
+  - 今日 12 次 = MiniMax-M3 9（generate 6 / refine 3）+ mimo 3（generate 2 / refine 1）；今日 tokens 2,152,486 = 1,744,262 + 408,224。
+  - 累计 87 次 = MiniMax-M3 68（generate 43 / refine 25）+ mimo 19（generate 12 / refine 7）；累计 tokens 18,354,209 = 15,236,918 + 3,117,291。**mimo 行非零 = 主备容灾回退真值**（D5/proposal 验收场景）。
+  - ST2：`MF_LLM_BUDGET_TOKENS=22,000,000` → 18,354,209 / 22,000,000 = 83.4% → floor = 83。
+  - F1：同账本后续调用至 22,047,513 ≥ 22,000,000 触发阻断；账本路径 = `/Users/demo/.metric-factory/model-budget.json`（G3 缺省 `~/.metric-factory/` 的虚构用户展开）。
+  - 字段名保真：taskId = `mf:generate-<seq>` / `mf:refine-<seq>`（D6）；AuditEvent = `version/taskId/runId/sequence/kind(run.started|model.admitted|model.finished|run.finished)/at/provider/model`（按模型计数取 `model.admitted`/`model.finished`，G8）；usage = `modelCalls/inputTokens/outputTokens`（G4）；文件 = `model-audit.jsonl`(+`.1`) / `model-budget.json`（G3，50MB × 2 代轮转）。
+- **原型内链接**：`index.html` 导航至各状态文件；设置页表单 action 沿用生产路径（`/settings/save`、`/settings/clear`）；错误页两按钮按生产路径 `/drafts`、`/settings` 书写（M2 同惯例：既有表面不因原型改路径）。
 
 ### 7.2 文件清单（全部位于 `.flow/ui/`，均已落盘）
 
 | 文件 | 状态 | 一句话说明 |
 |---|---|---|
-| `index.html` | 导航 | 全部状态 ↔ 文件对照表 + 原型约定 |
-| `settings-autodiscovered.html` | S1 | 零配置默认链全绿：两候选 `自动发现 · pi CLI` + 打码 + 链外 5 家 |
-| `settings-partial.html` | S2 | US3 部分发现：备候选 `缺失（调用时自动跳过）`、密钥 `—` |
-| `settings-unconfigured.html` | S3 | 未配置正常态：灰 chip + empty 链卡 + 手配/零配置指引 |
-| `settings-shadowed.html` | S4 | 遮蔽警告：key 生效来源=环境变量，`.env.local` 值被覆盖需先 unset |
-| `settings-error.html` | S5 | 配置错误：工厂原文摘要（真值表模型 × 网关冲突）+ 误配链行 + 网关行 |
-| `settings-faux.html` | S6 | 演示模式：不显示链与发现（D10 短路） |
-| `settings-saved.html` | S7 | 保存成功横幅 + 手动配置链行（openai/gpt-4o · .env.local） |
-| `settings-invalid.html` | S8 | 422 仅 slash 违例：server 原文 error-list + aria 关联 + 查看面不扰动 |
-| `settings-cleared.html` | S9 | 已清除覆盖横幅 + 回退自动发现（默认链） |
-| `home-chip-ready-discovery.html` | H1 | 绿 `就绪 · minimax-cn/MiniMax-M3` + `来源：自动发现` |
-| `home-chip-ready-manual.html` | H2 | 绿 `就绪 · openai/gpt-4o` + `来源：手动配置` |
-| `home-chip-unconfigured.html` | H3 | 灰 `未配置` + 零配置/去设置引导 |
-| `home-chip-error.html` | H4 | 红 `配置错误` + 工厂原文原因摘要（缺密钥）+ 去设置 |
-| `home-chip-faux.html` | H5 | accent `演示模式`（维持现有芯片） |
+| `index.html` | 导航 | ST1–ST5 + F1 ↔ 文件对照表 + 原型约定 |
+| `settings-stats-normal.html` | ST1 | S1 基座 + 全卡：两行汇总 chip + 按模型表（含 mimo 回退行 + 合计勾稽）+ 留存脚注；无警告元素 |
+| `settings-stats-warn80.html` | ST2 | 同 ST1 + `累计` 行尾 `预算已用 83%` warn chip + `（tokens 上限 22,000,000）` |
+| `settings-stats-degraded.html` | ST3 | `审计降级` warn chip；今日 = `不可用`；累计照显（账本源）；表塌缩单行（模型/用途 = `不可用`）；降级脚注（进程态披露） |
+| `settings-stats-faux.html` | ST4 | S6 基座（演示模式、无链卡）+ `faux 不记账` 整卡替换 |
+| `settings-stats-empty.html` | ST5 | `0 次 · 0 tokens` 两行 + `暂无调用记录…` + 留存脚注 |
+| `job-error-budget.html` | F1 | drafts 错误页现行结构 + 四要素原文（tokens 维度样例，83% 快照之后越过上限） |
 
-### 7.3 CSS 增量声明（生产实现须同步加入 render.ts；除此零新类）
+### 7.3 CSS 增量声明（对照 M2 §7.3 惯例）
 
-```css
-/* M2 UI 契约增量：红芯片补 fail 语义色（沿用既有 chip 模式与 --fail token）；芯片作链接时去下划线 */
-.chip-fail { background: var(--fail-soft); color: var(--fail); border-color: var(--fail-line); }
-a.chip { text-decoration: none; }
-```
+**零新增类。** 全部复用 `src/ui/render.ts` 既有类：`card`/`card-h`/`tbl`（+ `th scope`）/`chip`/`chip-queue`/`chip-warn`/`chip-accent`/`num`/`mono`/`composer-note`/`error-list`/`btn`/`btn-row`。M3 无任何新视觉语言；生产实现无需向 render.ts 增加一行 CSS。
 
 ### 7.4 生产落点（爆炸半径声明，非本契约实现物）
 
-`src/ui/render-settings.ts`（settingsPage 消费链/sources/链外/遮蔽/横幅）、`src/ui/render-home.ts`（llmLine 四分支）、`src/ui/render.ts`（§7.3 两行 CSS）、`src/ui/server.ts`（GET `/settings` 读取 `?saved/?cleared` 横幅；POST 路径不变）——与 PRD Further Notes 一致；数据事实源 = G2 `resolveLlmEnvAuto → {env, sources}` 单份。
+`src/ui/render-settings.ts`（新增 statsCard 渲染分支，组装位 = 链卡后表单前）、`src/ui/server.ts`（GET `/settings` 读 `MF_DATA_DIR` 两文件 + 审计降级 getter（进程态）+ 预算上限 env；无新路由）、`src/llm`（pi-client 四要素错误模板 / 审计 sink / 预算 store——后端落点，非 UI 契约实现物）。**F1 零 UI 代码改动**（`job.error` 原文透传即可）。与 PRD Further Notes（src/ui = 设置页统计卡片 + 降级态）一致。

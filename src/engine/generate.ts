@@ -59,8 +59,12 @@ export async function generateDraft(
   now: string
 ): Promise<GenerateResult> {
   let raw: string;
+  let truthModel: string | undefined;
   try {
-    raw = await client.complete(prompt);
+    const completion = await client.complete(prompt);
+    raw = completion.text;
+    // M3 D5：provenance 真值——实际出稿 provider/model（主备回退后为备候选）；无真值（faux）回退 modelLabel
+    truthModel = completion.provider !== undefined ? `${completion.provider}/${completion.model ?? ""}` : undefined;
   } catch (e) {
     return { ok: false, stage: "call", raw: (e as Error).message };
   }
@@ -89,14 +93,14 @@ export async function generateDraft(
   const metrics: Metric[] = payloads.data.map((p) => ({
     ...p,
     caliber_switches: {},
-    provenance: { origin: "llm", model: modelLabel, prompt_version: PROMPT_VERSION },
+    provenance: { origin: "llm", model: truthModel ?? modelLabel, prompt_version: PROMPT_VERSION },
     review: { required: true }
   }));
 
   return {
     ok: true,
     draft: {
-      generator: { model: modelLabel, prompt_version: PROMPT_VERSION, describe, created_at: now },
+      generator: { model: truthModel ?? modelLabel, prompt_version: PROMPT_VERSION, describe, created_at: now },
       added: metrics,
       modified: [],
       removed: [],
@@ -113,8 +117,12 @@ export async function generateRefineDraft(
   now: string
 ): Promise<GenerateResult> {
   let raw: string;
+  let truthModel: string | undefined;
   try {
-    raw = await client.complete(prompt);
+    const completion = await client.complete(prompt);
+    raw = completion.text;
+    // M3 D5：provenance 真值——实际出稿 provider/model（主备回退后为备候选）；无真值（faux）回退 modelLabel
+    truthModel = completion.provider !== undefined ? `${completion.provider}/${completion.model ?? ""}` : undefined;
   } catch (e) {
     return { ok: false, stage: "call", raw: (e as Error).message };
   }
@@ -139,14 +147,14 @@ export async function generateRefineDraft(
   const added: Metric[] = payload.data.added.map((p) => ({
     ...p,
     caliber_switches: {},
-    provenance: { origin: "llm", model: modelLabel, prompt_version: PROMPT_VERSION },
+    provenance: { origin: "llm", model: truthModel ?? modelLabel, prompt_version: PROMPT_VERSION },
     review: { required: true }
   }));
 
   return {
     ok: true,
     draft: {
-      generator: { model: modelLabel, prompt_version: PROMPT_VERSION, describe: instruction, created_at: now },
+      generator: { model: truthModel ?? modelLabel, prompt_version: PROMPT_VERSION, describe: instruction, created_at: now },
       added,
       modified: payload.data.modified,
       removed: payload.data.removed,

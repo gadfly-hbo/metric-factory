@@ -1,4 +1,5 @@
 import { chip, escapeHtml } from "./render.js";
+import type { CallStats } from "../llm/call-stats.js";
 
 // 密钥来源标签（G9a：四标签钉死，chip 色按契约 §4）
 type KeySourceLabel = "process" | "env-file" | "discovery" | "default-chain" | "missing";
@@ -35,6 +36,18 @@ export interface SettingsValues {
   baseUrl?: string;
 }
 
+/** M3 统计卡视图（契约 SE-A/SE-B）：faux 整卡替换；real 携带双源聚合 + 降级标志 + 预算警告 chips。 */
+export type StatsView =
+  | { mode: "faux" }
+  | {
+      mode: "real";
+      stats: CallStats;
+      degraded: boolean;
+      warns: { label: string; note: string }[];
+    };
+
+const fmt = (n: number): string => n.toLocaleString("en-US");
+
 const SOURCE_LABEL: Record<KeySourceLabel, string> = {
   process: "环境变量",
   "env-file": ".env.local",
@@ -59,7 +72,7 @@ const MODEL_SOURCE_NOTE: Record<"process" | "env-file" | "default-chain", string
 
 export function settingsPage(
   status: LlmStatus,
-  opts: { errors?: string[]; values?: SettingsValues; banner?: "saved" | "cleared" } = {}
+  opts: { errors?: string[]; values?: SettingsValues; banner?: "saved" | "cleared"; statsView?: StatsView } = {}
 ): string {
   const errorsHtml = opts.errors?.length
     ? `<ul class="error-list" id="settings-issues" role="alert">${opts.errors.map((e) => `<li>${escapeHtml(e)}</li>`).join("")}</ul>`
@@ -157,5 +170,71 @@ export function settingsPage(
 
   const note = `<p class="composer-note">配置写入仓库根目录 .env.local（已被 git 忽略），工作台与 CLI 共用；密钥不会出现在页面、日志或导出物中。自动发现的密钥仅内存使用、永不写盘。</p>`;
 
-  return `${bannerHtml}<div class="card"><div class="card-h">AI 模型连接</div>${stateHtml}</div>${chainCard}${form}${clear}${note}`;
+  const statsCard = renderStatsCard(opts.statsView);
+
+  return `${bannerHtml}<div class="card"><div class="card-h">AI 模型连接</div>${stateHtml}</div>${chainCard}${statsCard}${form}${clear}${note}`;
+}
+
+/** M3 统计卡（D7/G8 + 契约 ST1-ST5）：纯只读、零新 CSS 类、faux 整卡替换、降级不给假数。 */
+function renderStatsCard(view?: StatsView): string {
+  if (!view) return "";
+  if (view.mode === "faux") {
+    return `<div class="card"><div class="card-h">调用统计</div>
+      <p>${chip("accent", "演示模式")} faux 不记账：当前确定性 faux 后端零网络、零文件，调用不写审计与预算账本，无统计数据；配置真实模型后，统计自真实调用开始累计。</p></div>`;
+  }
+  const { stats, degraded, warns } = view;
+  if (degraded) {
+    return `<div class="card"><div class="card-h">调用统计</div>
+      <p>${chip("warn", "审计降级")} 审计 JSONL 写盘失败，已降级为内存丢弃；模型调用不受影响（见下方说明）。</p>
+      <p><span class="chip chip-queue">今日</span> 不可用（时间口径来自审计文件）</p>
+      <p><span class="chip chip-queue">累计</span> <span class="num">${fmt(stats.total.calls)}</span> 次 · <span class="num">${fmt(stats.total.tokens)}</span> tokens（账本源）</p>
+      <p style="margin:10px 0 4px">按模型（累计，留存期内）：</p>
+      <div style="padding:0;overflow-x:auto"><table class="tbl">
+        <thead><tr><th scope="col">模型</th><th scope="col">调用次数</th><th scope="col">tokens（in+out）</th><th scope="col">generate 次数</th><th scope="col">refine 次数</th></tr></thead>
+        <tbody><tr><td>不可用</td><td class="num">${fmt(stats.total.calls)}</td><td class="num">${fmt(stats.total.tokens)}</td><td>不可用</td><td>不可用</td></tr></tbody>
+      </table></div>
+      <p class="composer-note">审计降级：审计 JSONL 写盘失败，本次进程内的调用改为内存丢弃、不落盘；模型调用不受影响。模型归因与时间口径依赖审计文件，故标「不可用」。降级标志仅反映当前工作台进程（CLI/MCP 进程的降级不在此显示）；写盘恢复或重启后新调用重新落盘。</p>
+      <p class="composer-note">tokens 为 input+output 合计；累计 = 审计与账本留存期内（审计文件 50MB × 2 代轮转、预算账本 FIFO 剪老，仅统计留存条目）。</p></div>`;
+  }
+  const empty = stats.total.calls === 0 && stats.total.tokens === 0;
+  if (empty) {
+    return `<div class="card"><div class="card-h">调用统计</div>
+      <p><span class="chip chip-queue">今日</span> <span class="num">0</span> 次 · <span class="num">0</span> tokens</p>
+      <p><span class="chip chip-queue">累计</span> <span class="num">0</span> 次 · <span class="num">0</span> tokens</p>
+      <p style="color:var(--text-3);font-size:0.85rem;margin:8px 0 0">暂无调用记录——第一次真实调用（生成/微调草案、CLI、MCP）后，此处开始按模型累计。</p>
+      <p class="composer-note">tokens 为 input+output 合计；累计 = 审计与账本留存期内（审计文件 50MB × 2 代轮转、预算账本 FIFO 剪老，仅统计留存条目）。</p></div>`;
+  }
+  const warnHtml = warns
+    .map((w) => ` ${chip("warn", escapeHtml(w.label))} <span style="color:var(--text-2);font-size:0.78rem">${escapeHtml(w.note)}</span>`)
+    .join("");
+  const todayLine = stats.todayAvailable
+    ? `<span class="num">${fmt(stats.today.calls)}</span> 次 · <span class="num">${fmt(stats.today.tokens)}</span> tokens`
+    : `<span class="chip chip-queue">不可用</span>`;
+  const rows = stats.byModel
+    .map(
+      (r) => `<tr>
+        <td class="mono">${escapeHtml(`${r.provider}/${r.model}`)}</td>
+        <td class="num">${fmt(r.calls)}</td>
+        <td class="num">${fmt(r.tokens)}</td>
+        <td class="num">${fmt(r.generateCalls)}</td>
+        <td class="num">${fmt(r.refineCalls)}</td>
+      </tr>`
+    )
+    .join("");
+  const sumGen = stats.byModel.reduce((a, r) => a + r.generateCalls, 0);
+  const sumRef = stats.byModel.reduce((a, r) => a + r.refineCalls, 0);
+  const tableHtml = stats.byModel.length > 0
+    ? `<p style="margin:10px 0 4px">按模型（累计，留存期内）：</p>
+      <div style="padding:0;overflow-x:auto"><table class="tbl">
+        <thead><tr><th scope="col">模型</th><th scope="col">调用次数</th><th scope="col">tokens（in+out）</th><th scope="col">generate 次数</th><th scope="col">refine 次数</th></tr></thead>
+        <tbody>${rows}
+          <tr><td><strong>合计</strong></td><td class="num"><strong>${fmt(stats.total.calls)}</strong></td><td class="num"><strong>${fmt(stats.total.tokens)}</strong></td><td class="num"><strong>${fmt(sumGen)}</strong></td><td class="num"><strong>${fmt(sumRef)}</strong></td></tr>
+        </tbody>
+      </table></div>`
+    : `<p style="margin:10px 0 4px">按模型（累计，留存期内）：<span style="color:var(--text-3)">不可用</span></p>`;
+  return `<div class="card"><div class="card-h">调用统计</div>
+    <p><span class="chip chip-queue">今日</span> ${todayLine}</p>
+    <p><span class="chip chip-queue">累计</span> <span class="num">${fmt(stats.total.calls)}</span> 次 · <span class="num">${fmt(stats.total.tokens)}</span> tokens${warnHtml}</p>
+    ${tableHtml}
+    <p class="composer-note">tokens 为 input+output 合计；累计 = 审计与账本留存期内（审计文件 50MB × 2 代轮转、预算账本 FIFO 剪老，仅统计留存条目）。</p></div>`;
 }

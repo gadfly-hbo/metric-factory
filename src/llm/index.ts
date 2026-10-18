@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
+import { join } from "node:path";
 import { createPiTransport, type ModelConfig } from "pi-agent-runtime";
 import { getBuiltinModels, type BuiltinProvider } from "@earendil-works/pi-ai/providers/all";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { LlmClient } from "./types.js";
 import { createFakeClient } from "./fake-client.js";
 import { createPiClient, type PiCandidate } from "./pi-client.js";
+import { createJsonlAuditSink, resolveDataDir } from "./audit-sink.js";
+import { createFileBudgetStore, type BudgetCaps } from "./budget-store.js";
 import { providerEnvKey } from "./provider-keys.js";
 
 export type { LlmClient, LlmRequest } from "./types.js";
@@ -184,12 +187,62 @@ export function createLlmClientFromEnv(env: NodeJS.ProcessEnv = process.env, cal
     throw new Error(`缺少模型密钥：请设置环境变量 ${missingEnvNames.join(" / ")}（候选链 ${chain.map((c) => `${c.model.provider}/${c.model.id}`).join(" → ")}）`);
   }
   const keys = chain.filter((c) => c.apiKey !== null).map((c) => c.apiKey!);
-  return createPiClient(candidates, { cacheKey: chainCacheKey(candidates, keys), caller, timeoutMs });
+  // M3（D3/D12）：审计 JSONL 落盘——数据目录经注入 env（MF_DATA_DIR，测试密闭缝），sink 惰性
+  const dataDir = resolveDataDir(env);
+  const auditSink = createJsonlAuditSink(join(dataDir, "model-audit.jsonl"));
+  const caps = parseBudgetCaps(env);
+  const budgets = createFileBudgetStore(dataDir, caps);
+  return createPiClient(candidates, {
+    cacheKey: chainCacheKey(candidates, keys, dataDir, caps),
+    caller,
+    timeoutMs,
+    auditSink,
+    budgets
+  });
 }
 
-/** D3/G3 缓存键：候选链 + key 指纹（sha256 截断，仅存内存、永不进日志）。 */
-function chainCacheKey(candidates: PiCandidate[], keys: string[]): string {
+/** D3/G3/D8 缓存键：候选链 + key 指纹 + 审计数据目录身份（I/O-free 字符串；同链同 key 异目录须异实例，防测试注入被缓存吞）。 */
+function chainCacheKey(candidates: PiCandidate[], keys: string[], dataDir: string, caps: BudgetCaps): string {
   const chain = candidates.map((c) => `${c.model.provider}/${c.model.id}@${c.model.endpoint}`);
   const fingerprints = keys.map((k) => createHash("sha256").update(k).digest("hex").slice(0, 12));
-  return JSON.stringify({ chain, fingerprints });
+  return JSON.stringify({ chain, fingerprints, auditDir: dataDir, caps });
+}
+
+/** G7：预算用量警告行（≥80% 固定阈，每已达标维度一条；未配置上限返回 undefined）。只读账本，不做预检。 */
+export function budgetUsageWarning(env: NodeJS.ProcessEnv): string | undefined {
+  const caps = parseBudgetCaps(env);
+  if (caps.maxTokens === undefined && caps.maxCalls === undefined) return undefined;
+  const d = createFileBudgetStore(resolveDataDir(env), caps).describeBudget();
+  const lines: string[] = [];
+  if (caps.maxTokens !== undefined && d.usedTokens >= caps.maxTokens * 0.8) {
+    const pct = Math.min(100, Math.floor((d.usedTokens / caps.maxTokens) * 100));
+    lines.push(`WARNING 预算已用 ${pct}%（tokens 已用 ${d.usedTokens} / 上限 ${caps.maxTokens}）`);
+  }
+  if (caps.maxCalls !== undefined && d.usedCalls >= caps.maxCalls * 0.8) {
+    const pct = Math.min(100, Math.floor((d.usedCalls / caps.maxCalls) * 100));
+    lines.push(`WARNING 预算已用 ${pct}%（调用次数 已用 ${d.usedCalls} / 上限 ${caps.maxCalls}）`);
+  }
+  return lines.length > 0 ? lines.join("\n") : undefined;
+}
+
+/** 读路径宽松版（统计卡警告 chips 用）：非法值静默视为未配置（急错校验在工厂构造时已做）。 */
+export function tryParseBudgetCaps(env: NodeJS.ProcessEnv): BudgetCaps {
+  try {
+    return parseBudgetCaps(env);
+  } catch {
+    return {};
+  }
+}
+
+/** G6：预算双维度可选上限（缺省不限——保 M2 零配置语义）；校验照 parseTimeoutMs 急错先例。 */
+function parseBudgetCaps(env: NodeJS.ProcessEnv): BudgetCaps {
+  const parse = (name: "MF_LLM_BUDGET_TOKENS" | "MF_LLM_BUDGET_CALLS"): number | undefined => {
+    const raw = env[name];
+    if (raw === undefined || raw.trim() === "") return undefined;
+    if (!/^\d+$/.test(raw.trim()) || Number(raw) <= 0) {
+      throw new Error(`${name} 必须是正整数（收到 "${raw}"）`);
+    }
+    return Number(raw);
+  };
+  return { maxTokens: parse("MF_LLM_BUDGET_TOKENS"), maxCalls: parse("MF_LLM_BUDGET_CALLS") };
 }

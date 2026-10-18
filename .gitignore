@@ -5,3 +5,7 @@ dist/
 .flow/state.json
 imports/
 .env.local
+# M3 审计/账本运行时产物（MF_DATA_DIR 指进仓库时的防御；缺省在 ~/.metric-factory）
+model-audit.jsonl*
+model-budget.json
+.model-budget-lock

@@ -1,13 +1,14 @@
 <!doctype html>
 <!--
-  metric-factory · M2「零配置体验：密钥自动发现 + 默认链自动启用」· UI-GATE 可点击原型 · 导航页
+  metric-factory · M3「治理闭环」· UI-GATE 可点击原型 · 导航页
   · 契约源：.flow/ui-contract.md；每个状态一个可直接打开的静态 HTML（零 JS、零外部依赖，logo 走仓库内相对路径）
-  · 样式：CSS 逐字取自 src/ui/render.ts 顶部 CSS 块 + 契约 §7.3 两条增量（.chip-fail / a.chip 去下划线）
-  · 演示数据为虚构但镜像真实形状（maskKey=****+末4位、工厂报错原文、合成 auth.json=7 provider、链序 per G4 裁决 B）
+  · 样式：CSS 逐字取自 src/ui/render.ts 顶部 CSS 块（含 M2 §7.3 增量）；M3 零新增类（契约 §7.3）
+  · 演示数据虚构但守恒、形状逐字镜像真实实现（taskId 前缀 / AuditEvent / usage 字段名 / G3 数据目录；见「原型约定」卡）
 -->
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>M2 UI 原型导航 · Metric Factory</title>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>M3 UI 原型导航 · Metric Factory</title>
 <style>
+
 :root {
   --bg: #f5f6f8; --surface: #ffffff; --surface-2: #eef1f5; --soft: #f6f7f9;
   --border: #dfe3ea; --border-strong: #ccd3dd;
@@ -50,6 +51,12 @@ body { background: var(--bg); color: var(--text); font: 400 15px/1.55 var(--font
 .chip-warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-line); }
 .chip-queue { background: var(--queue-soft); color: var(--queue-ink); border-color: var(--queue-line); }
 .chip-accent { background: var(--accent-soft); color: var(--accent-strong); border-color: var(--accent-line); }
+/* M2 UI 契约 §7.3 增量：红芯片 fail 语义色；芯片作链接去下划线 */
+.chip-fail { background: var(--fail-soft); color: var(--fail); border-color: var(--fail-line); }
+a.chip { text-decoration: none; }
+/* M2 一次性横幅（G6 反馈机制） */
+.banner { padding: 12px 16px; font-size: 0.88rem; }
+.banner-ok { border-color: var(--ok-line); background: var(--ok-soft); color: var(--ok); }
 .btn { display: inline-block; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); border-radius: var(--rounded-sm); padding: 6px 12px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; }
 .btn-primary { background: var(--accent); border-color: var(--accent-strong); color: #fff; }
 .btn:hover { border-color: var(--text-3); }
@@ -149,11 +156,7 @@ a { color: var(--accent-strong); }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .pulse-dot { width: 9px; height: 9px; border-radius: 999px; background: var(--accent); display: inline-block; animation: mf-pulse 1.2s ease-in-out infinite; margin-right: 8px; vertical-align: middle; }
 @keyframes mf-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
-
-/* M2 UI 契约增量（.flow/ui-contract.md §7.3）：红芯片补 fail 语义色（沿用既有 chip 模式与 --fail token）；芯片作链接时去下划线 */
-.chip-fail { background: var(--fail-soft); color: var(--fail); border-color: var(--fail-line); }
-a.chip { text-decoration: none; }
-</style>
+</style></head>
 <body>
 <header class="topbar">
   <div class="brand" aria-label="JuanerAI，持续做出更好的决策；Metric Factory">
@@ -175,53 +178,45 @@ a.chip { text-decoration: none; }
       <a href="#">我的实例</a>
       <a href="#">AI 草案</a>
       <a href="#">审核中心</a>
-      <a href="#">设置</a>
+      <a href="#" class="active">设置</a>
     </nav>
     <div class="boundary">写操作仅限本地实例、映射文件与 releases/ 发布登记<br>页面无脚本 · 纯服务端表单</div>
   </aside>
   <main class="main">
-    <h1 class="page-title">M2 UI 原型导航</h1>
-    <p class="page-desc">M2「零配置体验」两个用户可见表面的冻结状态：设置页（/settings，查看+覆盖）与首页（/）AI 模型芯片行（四分支三态）。每个文件为完整页面快照，双击即可打开；首页芯片/引导链接指向对应设置页状态文件（生产实现一律 /settings）。</p>
-
+    <h1 class="page-title">M3 UI 原型导航</h1>
+    <p class="page-desc">M3「治理闭环：审计落盘 + 预算账本 + provenance 真值 + 调用统计」用户可见表面 = 设置页新卡「调用统计」（ST1–ST5）+ draft job 错误页预算超限呈现（F1）。每个状态一个可直接打开的静态 HTML（零 JS、零外部依赖）。</p>
     <div class="card">
-      <div class="card-h">设置页 /settings · 状态 ↔ 原型文件（契约 §1 SE-A）</div>
+      <div class="card-h">设置页 · 调用统计卡 · 状态 ↔ 原型文件（契约 §1 SE-A，D7/G8）</div>
       <table class="tbl">
         <thead><tr><th>状态</th><th>文件</th><th>一句话说明</th></tr></thead>
         <tbody>
-          <tr><td><strong>S1 自动发现全链</strong></td><td><a href="settings-autodiscovered.html">settings-autodiscovered.html</a></td><td>零配置 happy path：默认链主+备均「自动发现 · pi CLI」+ 打码；链外 5 家凭据提示（GET /settings）</td></tr>
-          <tr><td><strong>S2 部分发现</strong></td><td><a href="settings-partial.html">settings-partial.html</a></td><td>US3：1/2 家候选凭据，备候选「缺失（调用时自动跳过）」、密钥 —（GET /settings）</td></tr>
-          <tr><td><strong>S3 未配置正常态</strong></td><td><a href="settings-unconfigured.html">settings-unconfigured.html</a></td><td>灰 chip + empty 链卡 + 手配/零配置指引；无任何发现层报错（GET /settings）</td></tr>
-          <tr><td><strong>S4 遮蔽警告</strong></td><td><a href="settings-shadowed.html">settings-shadowed.html</a></td><td>.env.local 保存 key 被 process env 覆盖：生效来源=环境变量 + 「需先 unset 才生效」警告（G5）</td></tr>
-          <tr><td><strong>S5 配置错误</strong></td><td><a href="settings-error.html">settings-error.html</a></td><td>红 chip + 工厂报错原文（真值表模型 × 网关冲突）+ 误配链行与网关行（GET /settings）</td></tr>
-          <tr><td><strong>S6 演示模式</strong></td><td><a href="settings-faux.html">settings-faux.html</a></td><td>accent chip；faux 短路在前——不显示生效链与本机凭据（D10）</td></tr>
-          <tr><td><strong>S7 保存成功反馈</strong></td><td><a href="settings-saved.html">settings-saved.html</a></td><td>成功横幅 + 手动配置链行（openai/gpt-4o · .env.local）；稳态=同页无横幅（POST 200 → 303 ?saved=1）</td></tr>
-          <tr><td><strong>S8 422（仅 slash 违例）</strong></td><td><a href="settings-invalid.html">settings-invalid.html</a></td><td>server 现行文案原文 + aria 关联；模型输入仍留空、查看面不扰动（POST 422）</td></tr>
-          <tr><td><strong>S9 清除覆盖反馈</strong></td><td><a href="settings-cleared.html">settings-cleared.html</a></td><td>「已清除覆盖 · 回退自动发现」横幅 + 恢复默认链（POST /settings/clear 或模型留空保存 → 303 ?cleared=1）</td></tr>
+          <tr><td><strong>ST1 正常</strong></td><td><a href="settings-stats-normal.html">settings-stats-normal.html</a></td><td>两行汇总 chip（今日/累计）+ 按模型表（mimo 回退行 + 合计勾稽）+ 留存脚注；未配置预算上限 → 无警告（GET /settings）</td></tr>
+          <tr><td><strong>ST2 预算警告（≥80%）</strong></td><td><a href="settings-stats-warn80.html">settings-stats-warn80.html</a></td><td>累计行尾 warn chip「预算已用 83%」+（tokens 上限 22,000,000）；表格照常（G6 阈值固定 80%，缺省不限恒无警告）</td></tr>
+          <tr><td><strong>ST3 审计降级</strong></td><td><a href="settings-stats-degraded.html">settings-stats-degraded.html</a></td><td>「审计降级」warn chip；今日 = 不可用；累计照显（账本源）；模型/用途列 = 不可用；降级脚注含进程态披露（D3/G8/R2②）</td></tr>
+          <tr><td><strong>ST4 faux</strong></td><td><a href="settings-stats-faux.html">settings-stats-faux.html</a></td><td>整卡替换为「faux 不记账」说明——零数字零表格（D9；S6 基座无链卡）</td></tr>
+          <tr><td><strong>ST5 空态</strong></td><td><a href="settings-stats-empty.html">settings-stats-empty.html</a></td><td>0 次 · 0 tokens + 暂无调用记录 + 留存脚注（账本零条目/文件不存在）</td></tr>
         </tbody>
       </table>
     </div>
 
     <div class="card">
-      <div class="card-h">首页 / 芯片行 · 分支 ↔ 原型文件（契约 §1 SE-B，D8/G7）</div>
+      <div class="card-h">draft job 错误页 · 预算超限呈现（契约 §1 SE-C，D4/G7，零新页面）</div>
       <table class="tbl">
-        <thead><tr><th>分支</th><th>文件</th><th>一句话说明</th></tr></thead>
+        <thead><tr><th>状态</th><th>文件</th><th>一句话说明</th></tr></thead>
         <tbody>
-          <tr><td><strong>H1 就绪 · 自动发现</strong></td><td><a href="home-chip-ready-discovery.html">home-chip-ready-discovery.html</a></td><td>绿 chip「就绪 · minimax-cn/MiniMax-M3」+ 来源小字「自动发现」</td></tr>
-          <tr><td><strong>H2 就绪 · 手动配置</strong></td><td><a href="home-chip-ready-manual.html">home-chip-ready-manual.html</a></td><td>绿 chip「就绪 · openai/gpt-4o」+ 来源小字「手动配置」</td></tr>
-          <tr><td><strong>H3 未配置</strong></td><td><a href="home-chip-unconfigured.html">home-chip-unconfigured.html</a></td><td>灰 chip 正常态 + 引导（本机有 pi CLI 凭据可零配置 / 去设置）——永不显示为错误红</td></tr>
-          <tr><td><strong>H4 配置错误</strong></td><td><a href="home-chip-error.html">home-chip-error.html</a></td><td>红 chip + 工厂原文原因摘要（缺密钥，只含变量名）+ 去设置</td></tr>
-          <tr><td><strong>H5 演示模式</strong></td><td><a href="home-chip-faux.html">home-chip-faux.html</a></td><td>维持现有 accent chip（第四分支，不占三态名额）</td></tr>
+          <tr><td><strong>F1 超限错误页</strong></td><td><a href="job-error-budget.html">job-error-budget.html</a></td><td>现行 jobErrorPage 结构 + 四要素原文（预算字样/已用 X 上限 Y/账本路径/两条出路）；issues 为空</td></tr>
         </tbody>
       </table>
     </div>
 
     <div class="card">
       <div class="card-h">原型约定</div>
-      <p>CSS 逐字取自 <span class="mono">src/ui/render.ts</span> 顶部 CSS 块，外加契约 §7.3 声明的两条增量（<span class="mono">.chip-fail</span> 红 chip、<span class="mono">a.chip</span> 去下划线），零其他新增类；全部文件不含 <span class="mono">&lt;script&gt;</span>（生产实现同为零客户端脚本）。</p>
-      <p style="margin-top:6px">演示数据为虚构但镜像真实形状：打码 = <span class="mono">maskKey</span> 实际形状（<span class="mono">****</span>+末 4 位，如 <span class="mono">****e2f9</span>）；错误文案逐字取自 <span class="mono">src/llm/index.ts</span> 工厂急错与 <span class="mono">src/ui/server.ts</span> 设置 422；链序 per G4 裁决 B（minimax-cn/MiniMax-M3 主 / xiaomi-token-plan-cn/mimo-v2.6-flash 备）。合成 auth.json 宇宙 = 7 个 provider（<span class="mono">minimax-cn、xiaomi-token-plan-cn、openai、deepseek、kimi-coding、moonshot、zhipu</span>），各状态间守恒（链外提示行数量随之增减）。</p>
-      <p style="margin-top:6px">表单 action 按生产路径书写（<span class="mono">/settings/save</span>、<span class="mono">/settings/clear</span>）；首页芯片在原型内链接到对应设置页状态文件，生产实现一律 <span class="mono">href="/settings"</span>。</p>
+      <p>CSS 逐字取自 <span class="mono">src/ui/render.ts</span> 顶部 CSS 块（含 M2 §7.3 增量 <span class="mono">.chip-fail</span> / <span class="mono">a.chip</span>）；<strong>零新增类</strong>（契约 §7.3）；全部文件不含 <span class="mono">&lt;script&gt;</span>（生产实现同为零客户端脚本）。M2 既有表面逐字沿用，零改名零重构。</p>
+      <p style="margin-top:6px">演示数据虚构但守恒：今日 12 次 = 9 + 3；累计 87 次 = 68 + 19 =（43+25）+（12+7）；tokens 今日 2,152,486 = 1,744,262 + 408,224、累计 18,354,209 = 15,236,918 + 3,117,291；mimo 行非零 = 主备容灾回退真值（D5）。ST2：18,354,209 / 22,000,000 → floor 83%；F1 为同账本后续调用至 22,047,513 ≥ 上限触发。</p>
+      <p style="margin-top:6px">字段名保真：taskId 前缀 <span class="mono">mf:generate-</span> / <span class="mono">mf:refine-</span>（D6）；AuditEvent <span class="mono">version/taskId/runId/sequence/kind/at/provider/model</span>（按模型计数取 model.admitted / model.finished，G8）；usage <span class="mono">modelCalls/inputTokens/outputTokens</span>（G4）；数据目录 <span class="mono">~/.metric-factory/</span>（G3：<span class="mono">model-audit.jsonl</span>(+.1) / <span class="mono">model-budget.json</span>；原型内虚构展开为 /Users/demo/…）。链序 per M2 G4 裁决 B（MiniMax-M3 主 / mimo 备）。</p>
+      <p style="margin-top:6px">设置页表单 action 沿用生产路径（<span class="mono">/settings/save</span>、<span class="mono">/settings/clear</span>）；错误页按钮按生产路径 <span class="mono">/drafts</span>、<span class="mono">/settings</span> 书写。</p>
     </div>
   </main>
 </div>
-<div class="statusbar"><span>Metric Factory 工作台</span><span>UI-GATE 原型 · M2（零配置体验：设置页查看+覆盖 / 首页芯片四分支三态）</span><span>本机 127.0.0.1</span></div>
+<div class="statusbar"><span>Metric Factory 工作台</span><span>UI-GATE 原型 · M3（治理闭环：调用统计 / 审计降级 / 预算超限呈现）</span><span>本机 127.0.0.1</span></div>
 </body></html>

@@ -160,11 +160,21 @@ node dist/cli.js mcp    # stdio 协议；工具：mf_generate / mf_refine / mf_a
 | `MF_LLM_FALLBACK_MODELS` | 逗号分隔备模型链（同四分映射；笔误急切报错点名、缺 key 候选跳过、全缺才报错） |
 | `OPENAI_API_KEY` / `MINIMAX_CN_API_KEY` / `XIAOMI_TOKEN_PLAN_CN_API_KEY` 等 | provider 对应凭证（`<PROVIDER>_API_KEY`，连字符转下划线大写；未设置的键可由自动发现补齐） |
 | `MF_LLM_AUTH_JSON_PATH` | 密钥自动发现源路径覆盖（缺省 `~/.pi/agent/auth.json`；指向不存在文件即停用发现） |
+| `MF_LLM_BUDGET_TOKENS` | 预算上限：tokens（input+output 合计）累计达到上限后阻断新调用（缺省不限；解除=调高/取消本变量或删账本文件） |
+| `MF_LLM_BUDGET_CALLS` | 预算上限：调用次数（按 attempt 计，容灾重试计 2）累计达到上限后阻断新调用（缺省不限） |
+| `MF_DATA_DIR` | 治理数据目录（审计 JSONL 与预算账本落盘处；缺省 `~/.metric-factory/`，不进 git） |
 | `MF_LLM_BASE_URL` | OpenAI 兼容内部网关覆盖（对已验证真值表模型不生效，同设会报错提示） |
 | `MF_LLM_API` | 网关协议覆盖：`openai-completions`（缺省）/ `anthropic-messages` |
 | `MF_LLM_TIMEOUT_MS` | 单次模型超时毫秒数（正整数，缺省 300000） |
 | `MF_LLM_BACKEND=faux` + `MF_FAUX_RESPONSE` | 确定性脚本（测试/演示，零网络） |
 | `MF_REVIEWER` | review 默认审核人 |
+
+### 治理（M3：审计 / 预算 / provenance / 统计）
+
+- **审计留痕**：每次真实 LLM 调用的完整事件链（run.started → model.admitted → model.finished → run.finished）追加写入 `<MF_DATA_DIR>/model-audit.jsonl`（50MB × 2 代轮转，`.1` 后缀；并发窗口可能丢 1-2 行）。事件含 provider/model/taskId/attempt 与 prompt 的 sha256 digest（内容指纹，**永不写密钥或 prompt 明文**）。写盘失败自动降级为内存丢弃（调用不受影响），设置页统计卡显示「审计降级」。
+- **预算账本**：`<MF_DATA_DIR>/model-budget.json`（跨进程文件锁、原子写）。设 `MF_LLM_BUDGET_TOKENS` / `MF_LLM_BUDGET_CALLS` 后，累计用量达到上限即阻断**新的调用发起**（报错含已用/上限/账本路径与两条出路）；用量 ≥80% 时 CLI/MCP stderr 一行警告、设置页 warn chip。已产草案的人审/导出不受影响。
+- **provenance 真值**：draft 的 `provenance.model` 记录**实际出稿**的 provider/model（主备容灾回退后为备候选），不再是配置面链首标签。
+- **调用统计**：设置页「调用统计」卡（今日/累计 tokens 与次数、按模型表含 generate/refine 拆分）。口径：tokens = input+output 合计、次数按 attempt 计；累计 = 审计与账本留存期内；faux 不记账。
 
 真实链路发布前冒烟：`zsh scripts/llm-smoke.sh`——默认循环两真值表候选并留档输出供人工评估口径质量（密钥缺失时自动从 `~/.pi/agent/auth.json` 抽取注入，smoke 专用 dev 便利；设置 `MF_LLM_MODEL` 则退化为单模型模式）。
 

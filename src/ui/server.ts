@@ -15,6 +15,11 @@ import type { Template } from "../schema/template.js";
 import { createLlmClientFromEnv } from "../llm/index.js";
 import { readEnvFile, writeManagedEnv, apiKeyEnvName, maskKey } from "./env-file.js";
 import { resolveLlmEnvAuto, DEFAULT_CHAIN } from "../llm/env-auto.js";
+import { aggregateCallStats } from "../llm/call-stats.js";
+import { isAuditDegraded, resolveDataDir } from "../llm/audit-sink.js";
+import { tryParseBudgetCaps } from "../llm/index.js";
+import { createFileBudgetStore } from "../llm/budget-store.js";
+import type { StatsView } from "./render-settings.js";
 import { settingsPage, type ChainEntry, type LlmStatus } from "./render-settings.js";
 import { wizardStep1Page, wizardStep2Page } from "./render-wizard.js";
 import { homePage } from "./render-home.js";
@@ -158,6 +163,10 @@ async function llmStatus(envFilePath: string, authJsonPath?: string): Promise<Ll
 
 function nonEmptyEnv(v: string | undefined): boolean {
   return v !== undefined && v.trim() !== "";
+}
+
+function fmtNum(n: number): string {
+  return n.toLocaleString("en-US");
 }
 
 async function readFormBody(req: import("node:http").IncomingMessage): Promise<URLSearchParams> {
@@ -326,7 +335,7 @@ export function createUiServer(opts: UiOptions): Server {
     void (async () => {
       try {
         const { env } = await resolveLlmEnvAuto({ processEnv: process.env, envFilePath, authJsonPath: opts.authJsonPath });
-        const client = createLlmClientFromEnv(env);
+        const client = createLlmClientFromEnv(env, job.kind); // M3 D6：caller 标签（generate/refine）
         const modelLabel = env.MF_LLM_MODEL ?? (env.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
         const now = new Date().toISOString();
         const result =
@@ -1174,8 +1183,33 @@ export function createUiServer(opts: UiOptions): Server {
             : url.searchParams.get("cleared") === "1"
               ? "cleared"
               : undefined;
+        // M3 统计卡（D7/G8）：faux 整卡替换；真实后端双源聚合 + 降级标志 + 预算警告 chips
+        let statsView: StatsView | undefined;
+        if (status.mode === "faux") {
+          statsView = { mode: "faux" };
+        } else {
+          const { env } = await resolveLlmEnvAuto({ processEnv: process.env, envFilePath, authJsonPath });
+          const dataDir = resolveDataDir(env);
+          const caps = tryParseBudgetCaps(env);
+          const d = createFileBudgetStore(dataDir, caps).describeBudget();
+          const warns: { label: string; note: string }[] = [];
+          if (caps.maxTokens !== undefined && d.usedTokens >= caps.maxTokens * 0.8) {
+            const pct = Math.min(100, Math.floor((d.usedTokens / caps.maxTokens) * 100));
+            warns.push({ label: `预算已用 ${pct}%`, note: `（tokens 上限 ${d.usedTokens >= caps.maxTokens ? fmtNum(caps.maxTokens) : fmtNum(caps.maxTokens)}）` });
+          }
+          if (caps.maxCalls !== undefined && d.usedCalls >= caps.maxCalls * 0.8) {
+            const pct = Math.min(100, Math.floor((d.usedCalls / caps.maxCalls) * 100));
+            warns.push({ label: `预算已用 ${pct}%`, note: `（调用上限 ${fmtNum(caps.maxCalls)} 次）` });
+          }
+          statsView = {
+            mode: "real",
+            stats: aggregateCallStats(dataDir),
+            degraded: isAuditDegraded(join(dataDir, "model-audit.jsonl")),
+            warns
+          };
+        }
         const html = layout("settings", "设置", "AI 模型连接与工作台信息。配置仅存本机 .env.local（git 已忽略），页面不回显密钥。",
-          settingsPage(status, { banner }), statusInfo);
+          settingsPage(status, { banner, statsView }), statusInfo);
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
         return;
       }

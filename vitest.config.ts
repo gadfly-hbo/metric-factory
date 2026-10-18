@@ -5,6 +5,7 @@ import { defineConfig } from "vitest/config";
 // 15s 只放宽挂死守卫，行为断言不变；单元测试为毫秒级，不受影响。
 export default defineConfig({
   test: {
-    testTimeout: 15_000
+    testTimeout: 15_000,
+    setupFiles: ["./test/setup-data-dir.ts"]
   }
 });

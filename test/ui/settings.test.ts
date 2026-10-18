@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, expect } from "vitest";
@@ -260,4 +260,126 @@ test("R2：S5 错误态工厂报错经 error-list role=alert 容器呈现", asyn
   const html = await (await fetch(`${base}/settings`)).text();
   expect(html).toMatch(/<ul class="error-list"[^>]*role="alert">[\s\S]*?MF_LLM_BASE_URL 对其不生效/);
   server.close();
+});
+
+// ---- T5 · 统计卡（契约 ST1-ST5 + F1 透传）----
+
+function statsWorkspace(auditLines: string[], budgetTasks: Record<string, unknown>): { dir: string; envFile: string; restoreDataDir(): void } {
+  const dir = mkdtempSync(join(tmpdir(), "mf-stats-ui-"));
+  const dataDir = join(dir, "data");
+  mkdirSync(dataDir, { recursive: true });
+  if (auditLines.length > 0) writeFileSync(join(dataDir, "model-audit.jsonl"), `${auditLines.join("\n")}\n`, "utf8");
+  if (Object.keys(budgetTasks).length > 0) {
+    writeFileSync(join(dataDir, "model-budget.json"), JSON.stringify({ version: 1, tasks: budgetTasks }), "utf8");
+  }
+  const envFile = join(dir, ".env.local");
+  writeFileSync(envFile, `MF_DATA_DIR=${dataDir}\n`, "utf8");
+  // ②A 优先级 process > env-file：setup 注入的进程级变量会遮蔽 fixture——测试在进程层指回 fixture
+  const prev = process.env.MF_DATA_DIR;
+  process.env.MF_DATA_DIR = dataDir;
+  return { dir, envFile, restoreDataDir: () => { if (prev === undefined) delete process.env.MF_DATA_DIR; else process.env.MF_DATA_DIR = prev; } };
+}
+
+function auditLine(taskId: string, provider: string, model: string, at: string, kind = "model.finished"): string {
+  return JSON.stringify({ version: "1.0", taskId, runId: "r", sequence: 1, kind, at, provider, model, contextVersions: {} });
+}
+
+test("ST1 正常：两行汇总 chip + 按模型表（含合计勾稽与用途拆分）+ 留存脚注", async () => {
+  const { dir, envFile, restoreDataDir } = statsWorkspace(
+    [auditLine("mf:generate-1", "minimax-cn", "MiniMax-M3", new Date().toISOString())],
+    { "mf:generate-1": { configuration: "c", limits: {}, usage: { modelCalls: 1, inputTokens: 1000, outputTokens: 500, reservedOutputTokens: 0 } } }
+  );
+  const server = createUiServer({ templatesDir: "templates", workspaceDir: dir, envFilePath: envFile, authJsonPath: join(dir, "no-auth.json") });
+  const port = await listenUi(server, 0);
+  const html = await (await fetch(`http://127.0.0.1:${port}/settings`)).text();
+  expect(html).toContain("调用统计");
+  expect(html).toContain('minimax-cn/MiniMax-M3');
+  expect(html).toContain("1,500");
+  expect(html).not.toContain("<p>今日 <span"); // RB5：无纯文本前缀，标签唯一在 chip
+  expect(html).not.toContain("<p>累计 <span");
+  expect(html).toContain("generate 次数");
+  expect(html).toContain("合计");
+  expect(html).toContain("留存期内");
+  expect(html).not.toContain("预算已用"); // 未配置上限恒无警告（负例 4）
+  server.close();
+  restoreDataDir();
+});
+
+test("ST2 预算警告：tokens 上限 80% 以上 → warn chip + 上限小字", async () => {
+  const { dir, envFile, restoreDataDir } = statsWorkspace(
+    [auditLine("mf:generate-1", "minimax-cn", "MiniMax-M3", new Date().toISOString())],
+    { "mf:generate-1": { configuration: "c", limits: {}, usage: { modelCalls: 1, inputTokens: 900, outputTokens: 100, reservedOutputTokens: 0 } } }
+  );
+  writeFileSync(envFile, `MF_DATA_DIR=${join(dir, "data")}\nMF_LLM_BUDGET_TOKENS=1000\n`, "utf8");
+  const server = createUiServer({ templatesDir: "templates", workspaceDir: dir, envFilePath: envFile, authJsonPath: join(dir, "no-auth.json") });
+  const port = await listenUi(server, 0);
+  const html = await (await fetch(`http://127.0.0.1:${port}/settings`)).text();
+  expect(html).toContain("预算已用 100%"); // 1000/1000
+  expect(html).toContain("tokens 上限 1,000");
+  server.close();
+  restoreDataDir();
+});
+
+test("ST3 审计降级：token 总量照显（账本源）、模型列不可用、降级说明", async () => {
+  const { dir, envFile, restoreDataDir } = statsWorkspace(
+    [], // 审计文件缺失（降级形态：无归因）
+    { "mf:generate-1": { configuration: "c", limits: {}, usage: { modelCalls: 2, inputTokens: 300, outputTokens: 200, reservedOutputTokens: 0 } } }
+  );
+  // 进程内降级标志：把 dataDir 置只读，向服务读取的同一路径写一次失败 append（账本只读仍可读）
+  const dataDir = join(dir, "data");
+  const { createJsonlAuditSink } = await import("../../src/llm/audit-sink.js");
+  chmodSync(dataDir, 0o555);
+  try {
+    await createJsonlAuditSink(join(dataDir, "model-audit.jsonl")).append({ kind: "run.finished" } as never, undefined as never);
+    const server = createUiServer({ templatesDir: "templates", workspaceDir: dir, envFilePath: envFile, authJsonPath: join(dir, "no-auth.json") });
+    const port = await listenUi(server, 0);
+    const html = await (await fetch(`http://127.0.0.1:${port}/settings`)).text();
+    expect(html).toContain('class="chip chip-warn">审计降级</span>'); // RB8/N-D：chip 形断言
+    expect(html).toContain("已降级为内存丢弃；模型调用不受影响（见下方说明）"); // RB6/B2'：一句说明
+    expect(html).toContain('<span class="chip chip-queue">今日</span> 不可用（时间口径来自审计文件）'); // RB6/B3'
+    expect(html).not.toContain("<p>今日 <span"); // RB5
+    expect(html).toContain("不可用");
+    expect(html).toContain("500"); // 账本 tokens 照显
+    expect(html).toContain("按模型（累计，留存期内）："); // RB1：塌缩单行表在场
+    expect(html).toMatch(/<td>不可用<\/td><td class="num">2<\/td><td class="num">500<\/td><td>不可用<\/td><td>不可用<\/td>/);
+    expect(html).toContain("审计降级：审计 JSONL 写盘失败"); // SE-B 全句降级脚注
+    expect(html).toContain("留存期内（审计文件 50MB"); // 留存脚注在场
+    expect(html).not.toMatch(/minimax-cn[^"（]*MiniMax-M3<\/td>/); // 不给假模型行
+    server.close();
+  } finally {
+    chmodSync(dataDir, 0o755);
+    restoreDataDir();
+  }
+});
+
+test("ST4 faux：整卡替换「不记账」，零数字零表格（历史真实数据亦不显示）", async () => {
+  const { dir, envFile, restoreDataDir } = statsWorkspace(
+    [auditLine("mf:generate-1", "minimax-cn", "MiniMax-M3", new Date().toISOString())],
+    { "mf:generate-1": { configuration: "c", limits: {}, usage: { modelCalls: 1, inputTokens: 999, outputTokens: 999, reservedOutputTokens: 0 } } }
+  );
+  writeFileSync(envFile, `MF_DATA_DIR=${join(dir, "data")}\nMF_LLM_BACKEND=faux\n`, "utf8");
+  const server = createUiServer({ templatesDir: "templates", workspaceDir: dir, envFilePath: envFile, authJsonPath: join(dir, "no-auth.json") });
+  const port = await listenUi(server, 0);
+  const html = await (await fetch(`http://127.0.0.1:${port}/settings`)).text();
+  expect(html).toContain("faux 不记账");
+  expect(html).not.toContain("1,998");
+  expect(html).not.toContain("generate 次数");
+  server.close();
+  restoreDataDir();
+});
+
+test("ST5 空态：0 次 · 0 tokens + 暂无调用记录", async () => {
+  const { dir, envFile, restoreDataDir } = statsWorkspace([], {});
+  const server = createUiServer({ templatesDir: "templates", workspaceDir: dir, envFilePath: envFile, authJsonPath: join(dir, "no-auth.json") });
+  const port = await listenUi(server, 0);
+  const html = await (await fetch(`http://127.0.0.1:${port}/settings`)).text();
+  expect(html).toContain('<span class="num">0</span> 次');
+  expect(html).toContain('<span class="chip chip-queue">今日</span>');
+  expect(html).toContain('<span class="chip chip-queue">累计</span>');
+  expect(html).not.toContain("<p>今日 <span"); // RB5
+  expect(html).not.toContain("<p>累计 <span");
+  expect(html).toContain("暂无调用记录");
+  expect(html).toContain("留存期内（审计文件 50MB"); // RB3：空态留存脚注保留
+  server.close();
+  restoreDataDir();
 });

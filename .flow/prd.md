@@ -1,121 +1,86 @@
-# M2 · 零配置体验：密钥自动发现 + 默认链自动启用 · PRD
+# M3 · 治理闭环：审计落盘 + 预算账本 + provenance 真值 + 调用统计 · PRD
 
-> 规格源：`.flow/proposal.md`（唯一裁决源）+ `.flow/red-team.md`（go，5 条件并入）。无 issue tracker，落盘本文件。M1 地基事实见 proposal「M1 交付地基」节（commit `655b84d`）。
+> 规格源：`.flow/proposal.md`（唯一裁决源）+ `.flow/red-team.md`（GO，5 条件并入）。无 issue tracker，落盘本文件。地基事实见 proposal「M1/M2 交付地基」节（commits `655b84d`、`902574c`）。
 
 ## Problem Statement
 
-新用户 clone + build 之后，必须先读懂 README 的 provider 配置表、手填 `MF_LLM_MODEL` 和密钥环境变量，才能跑通第一次 generate——而这台机器上往往已经存在 pi CLI 凭据（`~/.pi/agent/auth.json`，本机实测 7 个 provider 条目，含真值表两候选）。手配是重复劳动，也是新用户第一公里的流失点。M1 交付了引擎与配置面，但「零配置」仍是 smoke 脚本里的 dev 便利，没有产品化。
+M1/M2 之后 LLM 调用仍是无痕的：审计 sink 是 no-op（调用不留痕）、没有预算概念（失控调用无闸）、draft 的 provenance.model 是配置面链首标签（主备容灾下失真——M2 零配置默认链下「谁实际出稿」不可知）、设置页看不到用量。治理挂点已埋好（auditSink / taskId / caller 参数），但没接真实账本。
 
 ## Solution
 
-已有 pi CLI 凭据的机器上，clone + build 后**零配置**直接 generate：发现层从 `~/.pi/agent/auth.json` 读取密钥（仅内存、永不写盘），默认链自动启用（真值表已验证候选，缺 key 自动跳过）。设置页从「必填表单」降级为「查看 + 覆盖」：当前生效链、每候选密钥来源与打码可见，手配保存即覆盖（显式永远赢）。首页芯片三态化：就绪 / 未配置（正常态）/ 错误，一眼可知模型状态。没有 pi CLI 凭据的用户体验不变（手配路径完整保留）。
+把挂点接上账本，一次治理闭环：**审计 JSONL 落盘+轮转**（每次调用留痕：何时/哪个模型/成败/tokens，never-throw 降级语义）；**预算账本**（原生 runtime budgets 缝 + host 文件 store，可设上限、超限阻断新调用并有清晰报错）；**provenance 真值**（complete() 边界交还 text+usage+实际出稿 provider/model，组装层回填 draft）；**设置页调用统计**（按账本回看次数/tokens）。真值管道为**双源**：审计事件（provider/model/kind/taskId）⋈ usage 计量（RunResult/BudgetStore settle），按 taskId 连接——红队证伪了「审计单一数据源」（AuditEvent 无 usage 字段）。
 
 ## User Stories
 
-1. 作为**已装 pi CLI 的新用户**，我想 clone+build 后直接 `generate` 成功（不配置任何环境变量），以便第一公里零摩擦。
-2. 作为**已装 pi CLI 的新用户**，我想默认链是已验证模型（MiniMax-M3 / mimo-v2.6-flash），以便首跑输出质量可信。
-3. 作为**只有一家 key 的用户**，我想缺 key 的候选被自动跳过（发现到几家启用几家），以便不因缺一家而报错。
-4. 作为**无 pi CLI 凭据的用户**，我想看到「未配置」是正常态而非报错页，并有清晰的手配指引，以便知道下一步做什么。
-5. 作为**手配用户**，我想显式配置（process env / .env.local）永远覆盖自动发现，以便我的选择不被静默劫持。
-6. 作为**手配用户**，我想同 provider 部分配置时（env 有模型无 key）能由发现补齐 key，以便少配一项。
-7. 作为**设置页访问者**，我想看到当前生效的模型链与每个候选的密钥来源（环境变量 / .env.local / 自动发现·pi CLI / 缺失）及打码，以便理解系统在用什么。
-8. 作为**设置页访问者**，我想模型/密钥字段不再必填、保存即写入 `.env.local` 覆盖、清除即回退自动发现，以便覆盖操作轻量可逆。
-9. 作为**首页访问者**，我想状态芯片显示三态（就绪 / 未配置 / 错误）并可点击去设置页，以便不看文档也能判断。
-10. 作为**CLI 用户**，我想 `generate`/`refine`/MCP 工具同样享受自动发现，以便 UI 内外体验一致。
-11. 作为**所有用户**，我想我的密钥永不进页面明文/日志/导出物（发现来的也一样，只显示打码），以便安全预期不被打破。
-12. 作为**auth.json 被 pi CLI 改坏/改结构的用户**，我想发现层静默降级为未配置（文件不存在/JSON 坏/条目非 object/OAuth 形态缺 key 均不抛错），以便坏文件不把「零配置」变成「零启动」。
-13. 作为**faux 用户/测试**，我想 `MF_LLM_BACKEND=faux` 路径完全不触碰发现层，以便测试/演示零网络语义不变。
-14. 作为**CI**，我想测试门在有/无真实 auth.json 的机器上结果一致，以便验证门不做环境抽签。
-15. 作为**README 读者**，我想「零配置」叙事明确限定「本机已有 pi CLI 凭据」，以便不产生普遍承诺的误解。
+1. 作为**用户**，我想每次 LLM 调用留痕到 JSONL（时间/模型/成败/tokens/用途），以便审计与排查。
+2. 作为**用户**，我想设 token 预算上限，超限后**新调用**被阻断且报错点名预算，以便控成本（不影响已产草案的人审/导出）。
+3. 作为**用户**，我想预算接近上限时看到警告，以便提前处理。
+4. 作为**用户**，我想 draft 的 provenance 记录**实际出稿**的 provider/model（主备回退后显示备候选），以便知道草案到底谁写的。
+5. 作为**用户**，我想在设置页看到调用统计（次数/tokens，按模型/用途），以便回看用量。
+6. 作为**用户**，我想审计写盘失败**不杀死**模型调用（降级继续 + 页面提示），以便审计故障不变成可用性故障。
+7. 作为**用户**，我想审计文件自动轮转（不无限增长），以便长期使用。
+8. 作为**用户**，我想预算的解除简单（改 env 上限或清账本文件即恢复），以便快速恢复。
+9. 作为**CLI/MCP 用户**，我想 CLI 与 MCP 调用记同一本账（同路径账本），以便 UI/CLI 一本账。
+10. 作为**测试/CI**，我想审计/账本路径可注入临时目录、faux 路径零文件依赖，以便测试密闭（全门跑完 git status 零新增）。
+11. 作为**用户**，我想密钥与 prompt 明文永不进审计文件（只有 sha256 digest），以便安全预期不变。
 
 ## Implementation Decisions
 
-- **D1 · 发现层独立纯模块**：新增密钥发现模块（src/llm 内，guard 边界内），导出纯函数——输入 auth.json 路径，输出 `provider → key` 映射。**工厂 `createLlmClientFromEnv` 保持 env-only 纯函数，发现逻辑不进工厂**（红队 KA2）。发现到的 key 仅内存使用，永不写盘、永不进日志/导出物（红线）。
-- **D2 · auth.json 解析与容错**：扁平结构 `{provider: {key?: string, ...}}`；文件不存在 / JSON 解析失败 / 条目非 object / 缺 `key` 字段（OAuth 形态，本机 `openai-codex` 条目实证）一律**静默跳过**，整体降级为「未发现」。永不因发现层抛错（红队 KA4）。
-- **D3 · 注入缝（测试密闭性）**：发现函数与 UI server 均接受 `authJsonPath` 参数（缺省 `~/.pi/agent/auth.json`）；全部测试经注入路径指向临时构造 fixture，**默认不触达真实 auth.json**；验证门在有/无真实 auth.json 两环境结果一致写入验收（红队 KA2）。**禁止 mutate process.env**（RF `loadKeysFromDisk` 的模块级 process.env 写入机制明确不抄）。
-- **D4 · 共享 env 合成 helper**：新增合成函数，输入 `{processEnv, envFilePath?, authJsonPath?}`，按 **process env > .env.local > 自动发现** 合成最终 env（红队 KA2/决策 5）；发现只填充未被显式设置的 `*_API_KEY`。CLI / MCP / UI 各入口统一经此合成后调用工厂（CLI/MCP 读取 .env.local 的范围裁决见 **diff 门 ②**）。
-- **D5 · 默认链自动启用**：`MF_LLM_MODEL` 未设置时，按默认链顺序探测候选 key（env → 发现），发现到几家启用几家（沿用 M1 D5 缺 key 跳过语义）；全部无 key → 未配置态（不抛错，UI 正常态呈现 / CLI 报错文案指引向手配）。默认链组成与顺序（mimo 是否升主，参考 M1 handoff 延期项 2 的质量证据）交 GRILL 裁决。默认链与 `MF_LLM_BASE_URL` 同设的交互（红队 What-I-Couldn't-Assess 项）交 GRILL。
-- **D6 · provider→key 映射三处合一**：`envKeyFor`（src/llm）/ `apiKeyEnvName`（src/ui/env-file）/ 发现层 provider→auth.json 条目名，合一为 src/llm 单一映射表 + 公式化回退，UI 侧改为引用（兑现 M1 handoff 延期项 F3；消除含 `.` provider 的分叉）。
-- **D7 · 设置页降级「查看+覆盖」**：模型/密钥字段不再必填；页面显示当前生效链（主 + 备）与每候选密钥来源标示 + 打码（D1 红线：只有打码）；保存 = 写入 `.env.local`（覆盖语义，沿用 writeManagedEnv 管理键集合）；清空模型字段保存 = 回退自动发现。保存校验沿用 `<provider>/<model-id>` 形式校验（422 语义不变）。
-- **D8 · 首页芯片三态**：就绪（自动发现或已配置，显示生效主模型）/ 未配置（正常态，引导手配）/ 错误（配置有误，显示原因摘要）；芯片点击去设置页。确切状态机与文案交 GRILL + UI-GATE。
-- **D9 · llmStatus 扩展**：状态增加密钥来源维度（每候选来源：env / env-file / discovery / missing），供设置页与芯片呈现；`configured` 分类语义不变（M1 探针行为不破）。
-- **D10 · faux 短路在前**：`MF_LLM_BACKEND=faux` 分支先于一切发现/合成逻辑（红队验证：发现不泄漏进 faux 路径）。
-- **D11 · 密钥安全**：发现到的 key 在 UI 只经 `maskKey` 打码呈现；不写入 `.env.local`（发现是读取，不是落盘）；不进日志（含报错文案）；不进导出物（红线）。
-- **D12 · 文案口径**：README/首页「零配置」叙事限定「本机已有 pi CLI 凭据」；未配置三态为正常态而非异常（红队 KA5）。设置页「与 CLI 共用」文案按 diff 门 ② 裁决修正（红队 KA3）。
-- **D13 · refine 红态处置**：按 **diff 门 ①** 裁决（目标文案降级 vs prompt 加固入批）。
+- **D1 · 双源真值管道**：审计事件供 provenance 与调用次数（每事件带 provider/model/kind/taskId/runId/attempt）；tokens 真值从 `RunResult.usage` 交还；两源按 taskId 连接。**不采信「审计事件含 usage」**（红队 KA1 证伪）。
+- **D2 · LlmClient 返回加宽（调用点零语义变化）**：`complete()` 返回 `{ text, usage?, provider?, model?, taskId? }`——现有调用点取 `.text`（或解构同名）语义不变；**禁止**「最近一次事件」式全局回填 hack（UI 并发 draft job 会串线）。形状细节（返回对象 vs ctx 出参）GRILL 定，倾向返回对象。
+- **D3 · 审计 JSONL sink（never-throw）**：`opts.auditSink` 替换为文件实现——append 时才 mkdir（惰性构造，设置页探针不落文件）；内部串行队列保行序；**一切 I/O 异常吞掉**（内存丢弃 + 一次性降级标志，设置页呈现「审计降级」态）——审计是事后记账，故障不得杀调用（红线；红队 KA4：抛错语义 = AUDIT_FAILED 杀调用 + 30s×N 挂起，明确不采）。轮转照 DR 值：**50MB × 保留 2 代、`.1` 后缀、并发窗口丢 1-2 行披露**。
+- **D4 · 预算账本走原生 budgets 缝**：`createRuntime({ budgets })` 接 host `FileBudgetStore`（照 DR 布局：JSON 状态文件、tmp+rename 原子写、O_EXCL 跨进程锁、死 owner 接管、FIFO 剪老）；uncapped 策略必须实现 `claimUncapped`；**超限 = claim 抛 `BUDGET_EXHAUSTED`** → runText blocked → pi-client 抛错文案点名预算 → generate.ts call 桶（天然只阻断新调用，红线保住）。上限配置走 env（维度/默认值 GRILL 定，形态 `MF_LLM_BUDGET_*`）；**超限语义为本批净新决策**（DR 无 token 上限先例，红队 KA3）。
+- **D5 · provenance 真值回填**：generate/refine 组装层（engine/generate.ts）从 complete() 返回的真值写 `draft.provenance.model = "<provider>/<model>"`（实际出稿），`prompt_version` 保留；modelLabel 同步取真值（CLI 摘要/MCP note/UI 摘要里的模型名不再用配置面标签）。
+- **D6 · caller 标签接上**：五处调用点（CLI generate/refine、MCP mf_generate/mf_refine、UI draft job）传 `caller: "generate" | "refine"`——taskId 变 `mf:generate-<seq>` 等，审计/统计可按用途区分。
+- **D7 · 设置页调用统计**：新卡片（不改既有卡片语义），读账本聚合（口径 GRILL 定 + UI-GATE 契约）；审计降级态在此页呈现。
+- **D8 · pi-client 单例缓存键并入 sink/store 身份**：cacheKey 增加审计路径/预算 store 身份指纹（红队 KA3 附带一击：否则测试注入被缓存吞掉）；faux 分支不受影响。
+- **D9 · faux 不记账**：faux 在工厂短路，天然零文件依赖（红线「测试/演示零网络」不破；统计页对 faux 显示「不记账」说明）。
+- **D10 · 审计/账本文件不进 git**：`.gitignore` 补条目；验收门加「全门跑完 `git status --porcelain` 零新增」+ 负测试「仅构造 client 不落任何文件」。
+- **D11 · 审计行内容口径**：只写 AuditEvent 原生字段（含 prompt 的 sha256 digest——内容指纹非明文）；永不写 env/key/prompt 明文。
+- **D12 · 密闭注入缝**：审计路径与账本路径均可经参数/env 注入（测试指向 mkdtemp）；默认路径 GRILL 定（工作区相对 vs `~/.metric-factory`，红队未能裁决）。
 
 ## Testing Decisions
 
-- 好测试标准：只测外部行为（解析输出、合成优先级、UI 呈现），不测内部实现；既有先例：`test/unit/llm-config.test.ts`（配置缝纯函数）、`test/unit/llm-runtime.test.ts`（引擎缝）、`test/ui/settings.test.ts`（HTTP 边界）。
-- **发现解析器单测**（新）：构造 fixture——正常扁平条目、OAuth 形态条目（无 key）、JSON 截断、非 object 条目、空文件、文件不存在——全部静默语义断言。
-- **合成优先级单测**（新）：process env > .env.local > 发现；部分配置组合（env 有模型无 key + 发现有 key → 补齐；env key ≠ 发现 key → env 赢）。
-- **默认链单测**（新）：无模型配置时链组成、缺 key 跳过、全无 key → 未配置；faux 短路不触发现（构造 authJsonPath 指向必爆 fixture 证明不读）。
-- **测试密闭性验收**：全量验证门在有/无真实 auth.json 两环境结果一致（本机真实路径 + 临时 HOME 隔离路径各跑一次）。
-- **UI 测试**：设置页来源标示三态、保存/清除覆盖回退、首页芯片三态（HTTP 边界，注入临时 envFile + authJsonPath）。
-- **真实依赖用例**：无 `MF_LLM_MODEL`、无 provider key 环境变量时，CLI `generate` 经发现 + 默认链真实跑通（本机 auth.json 两候选在手）。
-- guard 测试、全量 e2e faux 回归：验证门不变（`npm run lint && npm run typecheck && npm run test && npm run contract-test`）。
+- 好测试标准：外部行为（返回值、文件内容、页面呈现），不测内部实现。先例：llm-runtime.test.ts（引擎缝 scripted transport + capture sink）、llm-env-auto.test.ts（配置缝纯函数）、settings.test.ts（HTTP 边界）。
+- **引擎缝单测**：双候选主畸形回退 → complete() 返回备候选 provider/model（无网络复现红队建议的容灾 provenance 场景）；usage 透传；taskId 返回；never-throw（注入抛错 sink → complete() 仍成功 + 降级标志置位）。
+- **审计文件单测**：事件链完整落盘（run.started/model.admitted/model.finished/run.finished 顺序与字段）；轮转触发（小上限构造 → rename 出 `.1`）；仅构造不落文件（负测试）；并发行序（串行队列）。
+- **预算单测**：构造低上限 store → complete() 抛错含 BUDGET_EXHAUSTED/预算字样；settle 后账本文件 tokens 正确；解除（清账本文件/调高上限）恢复。
+- **缓存键单测**：同链同 key 不同 sink/store → 各自收到事件（红队 3 行测试）。
+- **UI 测试**：统计卡片呈现（注入临时账本）；审计降级态；预算超限错误页点名预算。
+- **密闭性验收**：全门后 `git status --porcelain` 零新增；faux 路径无文件产出。
+- **真实用例**：真实调用后审计文件出现完整事件链 + provenance.model = 实际出稿模型（本机 auth.json 默认链）。
+- 验证门不变：`npm run lint && npm run typecheck && npm run test && npm run contract-test`。
 
 ## Out of Scope
 
-- M3 全部：审计 JSONL 落盘+轮转、预算账本、provenance 记录实际出稿 provider/model、设置页调用统计。
 - M4：runAgent 会话/工具化草案（红线否决）。
-- auth.json 以外密钥来源（系统 keychain、1Password CLI 等）。
-- 多用户密钥托管（本地单用户定位不变）。
-- refine prompt 枚举加固 / 松解析（M1 handoff 延期项 1，产品决策——除非 diff 门 ① 裁决入批）。
-- CLI/MCP 读取 `.env.local`（除非 diff 门 ② 裁决入批）。
-- 密钥写入/编辑 auth.json（发现只读）。
+- 多用户密钥托管/多租户账本。
+- refine prompt 加固（M1 延期项 1，独立产品决策）。
+- M2 遗留 non-blocking 收口包与代码卫生包（handoff 延期项 3/4/5）。
+- 审计数据跨实例聚合/导出报表。
+- 金额计价（本批只记 tokens/次数，不折算货币）。
 
 ## Further Notes
 
-- 爆炸半径声明：src/llm（发现模块 + 合成 helper + 映射合一）、src/ui（server/render-settings/render-home/env-file）、CLI/MCP 调用点（diff 门 ② 决定深度）、README、设置页/首页文案、测试。引擎通道（pi-client runtime 装配）不动。
-- 验证门沿用：`npm run lint && npm run typecheck && npm run test && npm run contract-test`；真实依赖用例 = 零配置 CLI generate（本机 auth.json）。
-
----
-
-## Diff-gate 待裁决项（2026-10-18，auto 模式：涉 proposal 决策变更，升级用户裁决）
-
-### ① refine 红态了断（红队 KA1：proposal 目标「跑通 generate/refine」与验收方向「只验证 generate」自相矛盾）
-
-- **选项 A（推荐）**：目标文案降级——本批验收零配置 **generate** 跑通；refine 双候选红态如实披露为已知项（M1 handoff 延期项 1，fail-closed 兜住零写盘、smoke WARN 门挂着），prompt 加固/松解析维持「产品决策」不入批。理由：refine 红态是 M1 已挂门的延期伤而非 M2 新伤；prompt 加固是评估循环驱动的独立工作流，与 M2 工程批性质不同；红队明确「非本批新伤，但矛盾须了断」。
-- **选项 B**：refine prompt 枚举加固纳入本批（+约半日~1日 prompt 迭代 + 真实评估），目标文案保持 generate/refine 全验收。
-
-### ② CLI/MCP 的 .env.local 语义（红队 KA3：「显式永远赢」当前仅 UI 成立——CLI/MCP 只读 process env，全仓无 .env.local 读取）
-
-- **选项 A（推荐）**：CLI/MCP 改走共享 env 合成（process env > `.env.local`（cwd）> 发现）——「显式永远赢」在所有入口一致兑现；消除「设置页保存覆盖、CLI 静默不理」的失效陷阱（M2 设置页降级后这个陷阱会更扎眼）；红队估约半日；「工作台与 CLI 共用」文案由假变真。
-- **选项 B**：保守限定——CLI/MCP 只加发现合成（process env > 发现），不读 .env.local；设置页「与 CLI 共用」文案改为如实描述；覆盖语义验收限定 UI。
-
-> 两项均给「推荐」。批准即按推荐入 PRD 正文（D13/D12 落定）；逐项裁决亦可。
-
----
-
-## Diff-gate 附录（2026-10-18 用户批准）
-
-- **批准 ①A**：目标文案降级——本批验收零配置 **generate**；refine 双候选红态（M1 smoke 留档实证：模型自创 `sum`/`measure` 枚举被 schema 拒，fail-closed 零写盘）如实披露为已知延期项，prompt 加固/松解析维持产品决策不入批。D13 落定。
-- **批准 ②A**：CLI/MCP 改走共享 env 合成（process env > `.env.local`(cwd) > 自动发现），四入口「显式永远赢」语义统一；设置页「与 CLI 共用」文案由假变真。D4/D12 落定。
-- 自批增量（红队条件并入）：D1 工厂 env-only 纯函数+发现前置纯步骤（KA2）、D2 auth.json 全容错静默降级（KA4）、D3 注入缝+测试密闭性验收+禁 mutate process.env（KA2）、D12 文案口径（KA5）、D6 映射三处合一（M1 F3 兑现）。
+- 爆炸半径：src/llm（pi-client 返回加宽 + 缓存键 + 审计 sink 模块 + 预算 store 模块）、src/engine/generate.ts（provenance 组装）、五调用点（caller 标签 + 返回值取用）、src/ui（设置页统计卡片 + 降级态）、.gitignore、README、测试。env-auto/faux 路径不动。
+- 事实修正披露：proposal 目标句「四项共用同一数据源（审计事件）」经红队证伪（AuditEvent 无 usage 字段），PRD 改为双源管道——proposal 已定决策 2 本就并列「审计事件/usage」，决策未变，仅叙事修正。
 
 ---
 
 ## GRILL 附录（2026-10-18，2x9 预算）
 
-### Round 1（author-blind 子代理，9 包；8 包按推荐自批，包 4 涉 proposal 决策 2 冲突留升级）
+### Round 1（author-blind 子代理，8 包全按推荐裁决）
 
-- **G1（包1-A）· 注入缝三入口统一**：新增环境变量缝 `MF_LLM_AUTH_JSON_PATH`（发现层缺省路径的唯一覆盖点，合成 helper 缺省读它；README 补行）+ `buildMcpServer(opts?: { authJsonPath?, envFilePath? })` 参数化 + CLI 不加 flag（e2e 以 `MF_LLM_AUTH_JSON_PATH` 指向不存在路径密闭）。CI「有/无真实 auth.json 两环境各跑一次」（D3 验收）只需 flip 一个变量。
-- **G2（包2-A）· 合成 helper 返回 `{ env, sources }`**：`sources: Record<string, "process" | "env-file" | "discovery" | "default-chain">`，覆盖 `MF_LLM_MODEL`/`MF_LLM_FALLBACK_MODELS`/`MF_LLM_BASE_URL`/每个被触及的 `*_API_KEY`；空串一律按未设置（与工厂 `if (!spec)` 及 readEnvFile trim 语义一致）。llmStatus/设置页/芯片三 UI 面共用同一事实源，优先级逻辑单份化（防 F3 类漂移）。
-- **G3（包3-A）· 默认链在合成 helper 内物化**：仅当 `MF_LLM_MODEL` 未设 **且 `MF_LLM_BASE_URL` 未设** 且默认链至少一个候选 key 可解析（env 或发现）时，注入 `MF_LLM_MODEL`+`MF_LLM_FALLBACK_MODELS`（sources 标 `default-chain`）；baseUrl 已设 → 不注入、维持未配置正常态（避开 G6 真值表+网关矛盾陷阱，文案指引网关需显式设模型）；只设 fallbacks 不设主模型 → 不注入、维持 M1 急切抛错（残缺显式配置应响亮）。工厂一行不动（D1 全保）。
-- **G5（包5-A）· 设置页遮蔽警告**：②A 优先级（process env > .env.local）下，渲染与保存后重渲染均对「.env.local 有值但被 process env 覆盖」的键显示警告（需先 unset 才生效）——「保存即覆盖」承诺在 shadow 场景不失信；纯 sources 消费，无新机制。
-- **G6（包6-A）· 空模型保存 ≡ /settings/clear 语义**：`MF_LLM_MODEL`/`MF_LLM_BASE_URL`/前一 provider key 全置 null，忽略 api_key/base_url 输入并页面注明「模型留空保存 = 清除覆盖、回退自动发现」；模型填+key 空 = 只存模型（「留空则不修改」语义延续，来源标示显示 key 来自发现或缺失）；slash 之外不做保存时解析校验（维持现状，错误由状态区/芯片浮现）。422 测试仅对 slash 违例保留。
-- **G7（包7-A）· 首页芯片四分支呈现、三态语义**：`configured`（不分来源）→ 绿 chip「就绪 · <生效主模型>」+ 来源小字（自动发现/手动配置）；`unconfigured` → 灰 chip 正常态 + 引导链接；`error` → 红 chip + 原因摘要（工厂报错只含变量名不含 key 值，已逐条核实可透出）；`faux` → 维持现有 accent「演示模式」chip（第四分支，不占三态名额——D10 短路的直接推论）。芯片点击去 /settings。
-- **G8（包8-A）· 零配置时代未配置文案**：工厂报错升级为条件式表述——「自动发现未找到可用候选凭据（~/.pi/agent/auth.json 不存在或无真值表候选 key）。手配路径：1) 工作台设置页保存（写 .env.local，CLI/MCP 同读）；2) export MF_LLM_MODEL=… + 对应 *_API_KEY；3) MF_LLM_BACKEND=faux」——保留 `MF_LLM_MODEL` 与 `faux` 两 token（MCP 测试断言不断）；工厂不感知发现过程（env-only 纯洁），路径细节放 README。
-- **G9（包9-A）· 设置页「查看」面三细节**：(a) 画全链——每候选一行：模型名+来源标签（环境变量/.env.local/自动发现 · pi CLI/缺失（调用时自动跳过））+有 key 时打码；(b) 链外凭据提示——仅列 provider 名（永不列 key）：「另检测到 N 个 pi CLI 凭据：…（手配对应模型即可用）」；(c) 表单输入框 value 永远留空、placeholder 显示当前生效模型——「查看」与「覆盖」物理分离，不与 G6 空保存语义互搏。
-- R1 自查即答（附证据入录）：①发现结果**不缓存**、每次合成即重读（resolveLlmEnv 现状即每请求重读，KB 级 JSON 成本可忽略，保存后/pi CLI 改动后自然生效，无需 mtime）；②D6 公式化回退取 `apiKeyEnvName` 的 `[^A-Z0-9]→_`（envKeyFor 现行公式对含 `.` provider 产出非法变量名），已知表取两边并集；③CLI/MCP 的 draft modelLabel 改读合成后 env（链首语义与 M1 一致；记录实际出稿 provider 是 M3 明确不做项）；④auth.json 空串/纯空白 key 视同缺失（与 smoke 判空先例一致）。
-- **包 4 保留升级**：默认链顺序（mimo 升主 vs 维持 MiniMax-M3 主）与 proposal 已定决策 2 冲突，主代理核对属实，依规则 5 升级用户裁决（见文末「GRILL 升级项」）。
+- **G1（Q1-a）· 上限判定点**：MF FileBudgetStore 在 `claimUncapped` 入口对文件内全部 `mf:*` 条目聚合（tokens=Σ(input+output)，calls=ΣmodelCalls），超限抛 `BUDGET_EXHAUSTED`——保住 D4「原生缝+claim 抛错」字面与 DR 落盘形状。披露三口径：在飞越限（claim 检查/settle 后置，并发 job 可联合越过一个在飞量——成本闸可忍）；FIFO 剪老后累计只数留存条目；崩溃未结算 reservedOutputTokens 计入（保守方向，更早断闸）。
+- **G2（Q2-a）· 跨进程锁改 per-op 短临界区**：acquire(O_EXCL)→读→变更→tmp+rename→release，锁绝不横跨模型 HTTP 调用；文件为唯一权威（弃 DR 进程持锁+内存权威——那是单进程服务器形态，照抄会让 UI 开着时 CLI 首调即崩）；DR 五件套（JSON 状态/tmp+rename/O_EXCL/死 owner 接管/FIFO 剪老）保留，仅持锁时长偏离。**store 与锁惰性到首次 complete()**（与 audit sink 同一口径，保 D10 负测试）。红利：文件即权威后无需路径级单例，D8 store 指纹退化为纯路径+上限值（I/O-free）。
+- **G3（Q3-a）· 数据目录**：缺省 `~/.metric-factory/`（三入口 cwd 不齐，唯 home 成全 story 9 一本账与全局上限；DR 工作区相对的 git 同步动机与 MF「不进 git」红线相反）；单一 `MF_DATA_DIR` 覆盖；文件名保 DR 原名（`model-audit.jsonl`(+.1)/`model-budget.json`/`.model-budget-lock`）；**vitest 守卫**：测试环境（VITEST 变量在场）未注入时缺省解析直接 throw，堵 home 泄漏对 git 门的盲区。
+- **G4（Q4-a）· complete() 返回定稿**：`Promise<{ text: string; usage?: { modelCalls: number; inputTokens?: number; outputTokens: number }; provider?: string; model?: string; taskId?: string }>`；faux 返回 `{text}`；INVALID_OUTPUT 返回 `{text:"", usage, provider, model, taskId}`（截断但出稿的调用统计/provenance 不留口径洞）；失败仍 throw（调用形态不变）。usage 收窄三字段防误用（toolCalls 等恒 0 不暴露）。`modelLabel` 参数降级为 fallback 标签（仅 faux 用）。机械更新既有 llm-runtime 断言。
+- **G5（Q5-a）· provenance 捕获走 onEvent**：`createRuntime({ onEvent })` 同步写 client 闭包内 `Map<taskId, provider/model>`，complete() 后取本调用 taskId 并删除——按关联键归因，并发零串线（DR lastProviderByTask 同构、生命周期缩到单调用）；取 `model.finished` 无 reason 者 last-wins。时序疑点已关闭（onEvent 同步处理器在 runText resolve 前执行完毕，dist 逐行核验）。auditSink 保持哑写盘单一职责。
+- **G6（Q6-a）· 预算维度与缺省**：`MF_LLM_BUDGET_TOKENS`（input+output 合计）与 `MF_LLM_BUDGET_CALLS`（attempt 计量，容灾重试=2 calls 如实披露）双维度可选；**均缺省不限**（保 M2 零配置语义）；窗口=账本文件生命周期（重置=删文件或调高 env 即时生效）；校验照 parseTimeoutMs 急错先例；警告阈**固定 80% 不加 env**（配置面最小化）。
+- **G7（Q7-a）· 阻断与警告呈现**：四要素文案（预算字样/已用 X 上限 Y/账本路径/两条出路）在 pi-client 错误组装点拼装——三入口零额外改造即「点名预算」自带解除指引；CLI stage:call 对含「预算」的错误改独立标题（不挂「模型原始输出」头，消排障陷阱）；警告：CLI/MCP stderr 一行（每次调用后至多一条）+ UI 统计卡 warn chip；不做提交前预检拦截（双真相源）。
+- **G8（Q8-a）· 统计卡口径**：两行汇总 chip（今日/累计——本地时区自然日，来源审计 `at`）+ 表（行=provider/model，列=次数、tokens(in+out)、用途 generate/refine 拆分——taskId 前缀红利）；faux 整卡换「faux 不记账」说明；脚注「累计=审计与账本留存期内」诚实披露轮转/FIFO 边界；审计降级时 token 总量照显（账本源）而模型/时间列标「不可用」。按模型计数数 `model.admitted/model.finished` 而非 run.started（后者带链首）。读路径渲染时只读两文件（rename 原子、append 尾读安全，无需锁）。
 
-### Round 2（主代理，0 新包 + 3 项探索即答）
+### Round 2（主代理，0 新包 + 4 项探索即答/精化）
 
-- 探索即答：①合成 helper 落 `src/llm/env-auto.ts`（guard 边界内，CLI/MCP/UI 均可 import），`resolveLlmEnvAuto({processEnv, envFilePath?, authJsonPath?}) → {env, sources}`；env-file.ts 保留 read/write/mask，`resolveLlmEnv` 由新 helper 取代（D4 形状落定）；②`MF_LLM_API`/`MF_LLM_TIMEOUT_MS` 走 process env + .env.local 透传，发现只补 `*_API_KEY`，sources 不追踪此二键（网关路径专用，G2 键集合边界内）；③clear 写键集合不扩（G6 已含 baseUrl/prev-key）——`.env.local` 残留 `MF_LLM_FALLBACK_MODELS` 的边界无害：llmStatus 在 spec 缺失时直接返 unconfigured（不触工厂），CLI 由 G8 新文案指引，不改 M1 报错语义。
-- **GRILL converged after 2 rounds**（预算 2x9；R2 新增开放问题归零）。全程 1 次升级（包 4）。
-
-### GRILL 升级项裁决（2026-10-18 用户裁决）
-
-- **包 4 → B：维持 MiniMax-M3 主 / mimo-v2.6-flash 备**（proposal 决策 2 原文不改）。配套：README 零配置节把「MiniMax-M3 输出畸形」从观察注记升级为带留档的已知风险注记（M1 handoff 延期项 2；fail-closed 兜住零写盘，重试或切备候选可恢复）。G4 落定。
+- 探索即答：①**MF_DATA_DIR 走 env 而非新参数**——工厂从注入 env 读 `MF_DATA_DIR`（与 MF_LLM_* 家族同构；UI 测试写 .env.local、CLI/MCP 测试设 process env 即注入，零新 API 面；vitest 守卫挂在缺省解析处：VITEST 在场且无 MF_DATA_DIR 即 throw）；②**审计降级标志暴露**——sink 模块级 per-path 一次性标志 + 导出 getter，设置页读 UI server 自身进程态（跨进程降级不可见，单用户可接受，脚注披露）；③轮转上限可注入（测试用小值触发，生产 50MB 不变）；④README 增量清单：预算双 env + MF_DATA_DIR + 数据目录说明 + 统计卡 + 密钥/digest 口径注记。
+- **GRILL converged after 2 rounds**（预算 2x9；R2 新增开放问题归零）。全程零升级——8 包均为 D1-D12 与红线的补全而非重开。

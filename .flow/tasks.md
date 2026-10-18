@@ -1,103 +1,114 @@
-# M2 · 任务切片（tracer-bullet 垂直切片）
+# M3 · 任务切片（tracer-bullet 垂直切片）
 
-> 规格源：`.flow/prd.md`（含 diff-gate 附录 ①A②A、GRILL 附录 G1–G9/G4 裁决 B）+ `.flow/ui-contract.md`（S1–S9/H1–H5）。无 tracker，落盘本文件。切片自批记录见 state.json history。
+> 规格源：`.flow/prd.md`（D1–D12 + GRILL 附录 G1–G8 + R2 探索即答）+ `.flow/ui-contract.md`（ST1–ST5/F1）。无 tracker，落盘本文件。
 
-- [x] 1. 发现层 + 合成 helper 地基（prefactor）
-- [x] 2. 默认链自动启用 + CLI/MCP 接线（零配置 tracer）
-- [x] 3. 设置页写侧：save/clear 降级 + 遮蔽警告
-- [x] 4. 设置页读侧「查看」面 + 首页芯片 + 文案同步
-- [x] 5. 密闭性双环境验证 + 零配置真实用例
+- [x] 1. 真值管道（tracer：complete() 返回加宽 + onEvent 捕获）
+- [x] 2. 审计 JSONL sink + 数据目录 + 缓存键身份
+- [x] 3. 预算账本（原生 budgets + 四要素阻断）
+- [x] 4. caller 标签 + provenance 回填 + 三入口接线
+- [x] 5. 统计卡 + 密闭性验收 + 真实用例 + README
 
 ---
 
-## 1. 发现层 + 合成 helper 地基（prefactor）
+## 1. 真值管道（tracer）
 
 **Blocked by**: 无
-**User stories**: US11、US12、US14（+D1/D2/D3/D4/D6/G1/G2）
+**User stories**: US4（+D1/D2/D5/G4/G5）
 
 ### What to build
 
-密钥自动发现与三层 env 合成的纯函数地基：发现模块读 auth.json（扁平 `{provider:{key?}}`），文件不存在/JSON 坏/条目非 object/缺 key（OAuth 形态）/空串 key 一律静默跳过、永不抛错、永不写盘；合成 helper 返回 `{env, sources}`——`process env > .env.local > 发现` 三层合并，空串按未设置，sources 覆盖 `MF_LLM_MODEL`/`MF_LLM_FALLBACK_MODELS`/`MF_LLM_BASE_URL`/被触及的 `*_API_KEY`（取值 `process|env-file|discovery|default-chain`）；provider→环境变量名映射三处合一（已知表并集 + `[^A-Z0-9]→_` 公式，env-file 侧改为引用）；环境变量缝 `MF_LLM_AUTH_JSON_PATH` 作为发现路径唯一覆盖点。工厂 `createLlmClientFromEnv` 一行不动。
+`LlmClient.complete()` 返回加宽为 `{ text, usage?: { modelCalls; inputTokens?; outputTokens }, provider?, model?, taskId? }`：pi-client 用 `createRuntime({ onEvent })` 同步写闭包内 `Map<taskId, {provider, model}>`（取无 reason 的 `model.finished` last-wins），runText 后按本调用 taskId 取真值并删除；INVALID_OUTPUT 路径返回 `{text:"", usage, provider, model, taskId}`（截断但出稿照带真值）；失败仍 throw。faux/fake-client 返回 `{text}`。usage 收窄三字段。既有引擎缝断言机械更新。
 
 ### Acceptance criteria
 
-- [ ] 发现容错单测全绿：正常条目、OAuth 条目、JSON 截断、非 object、空串 key、文件不存在——全部静默语义
-- [ ] 合成优先级单测：process > .env.local > 发现；部分配置组合（env 有模型无 key + 发现有 key → 补齐；env key ≠ 发现 key → env 赢）
-- [ ] sources 断言：每被触及键的来源正确；空串按未设置
-- [ ] 映射合一：含 `.` provider 产出合法变量名；已知表存量（MINIMAX_CN_API_KEY 等）不变；env-file 与 llm 模块单一名义源
-- [ ] `MF_LLM_AUTH_JSON_PATH` 覆盖缺省路径（单测证明）；全量验证门绿
+- [ ] 双候选主畸形回退：complete() 的 provider/model = 备候选（scripted transport，无网络）
+- [ ] usage/taskId 透传断言；INVALID_OUTPUT 带真值；faux 只带 text
+- [ ] 并发两次 complete() 各自归因正确（关联键证明，零串线）
+- [ ] typecheck + 全量单测绿
 
-## 2. 默认链自动启用 + CLI/MCP 接线（零配置 tracer）
+## 2. 审计 JSONL sink + 数据目录 + 缓存键身份
 
 **Blocked by**: 1
-**User stories**: US1、US2、US3、US5、US6、US10（+D5/G3/G4/G8/G1）
+**User stories**: US1、US6、US7、US10、US11（+D3/D8/D10/D11/D12/G2/G3）
 
 ### What to build
 
-零配置端到端走通：合成 helper 内物化默认链——`MF_LLM_MODEL` 未设且 `MF_LLM_BASE_URL` 未设且默认链（MiniMax-M3 主 / mimo-v2.6-flash 备，G4 裁决 B）至少一个候选 key 可解析时注入 `MF_LLM_MODEL`+`MF_LLM_FALLBACK_MODELS`（sources 标 `default-chain`）；发现到几家启用几家。CLI generate/refine 与 MCP 两工具改走共享合成（processEnv + cwd/.env.local + 发现，②A），draft modelLabel 读合成后 env；`buildMcpServer` 参数化（authJsonPath/envFilePath 可注入）；工厂未配置报错文案升级（保留 `MF_LLM_MODEL`/`faux` token，MCP 测试断言不断）。
+`src/llm/audit-sink.ts`：never-throw 文件 sink——内部串行队列保行序、append 时才 mkdir（惰性）、一切 I/O 异常吞掉 + per-path 一次性降级标志（导出 getter）、轮转 50MB×2 代 `.1` 后缀（上限可注入供测试）。数据目录：`MF_DATA_DIR` env（缺省 `~/.metric-factory/`，文件名 `model-audit.jsonl`/`.model-budget-lock` 等 DR 原名）+ **vitest 守卫**（VITEST 在场且未注入时缺省解析 throw）。工厂接线：真实后端的 auditSink 从 no-op 换文件实现（路径从注入 env 读）。pi-client 缓存键并入审计路径指纹（I/O-free 字符串）。`.gitignore` 补条目。
 
 ### Acceptance criteria
 
-- [ ] 默认链单测：双 key → 主+备注入；单 key → 主+备（备缺失跳过）；零 key → 不注入（未配置）；baseUrl 在场 → 不注入；只设 fallbacks → 不注入（M1 急切抛错维持）
-- [ ] CLI/MCP 零配置合成生效（注入 fixture 证明链生效）；`buildMcpServer(opts)` 注入缝可用
-- [ ] 未配置新文案含三条手配路径 + 两 token；既有 MCP 断言不改语义通过
-- [ ] 全量验证门绿（既有 e2e 以 `MF_LLM_AUTH_JSON_PATH` 密闭）
+- [ ] 事件链完整落盘（run.started→model.admitted→model.finished→run.finished 顺序与字段，含 digest 字段）
+- [ ] 轮转触发（注入小上限 → rename 出 `.1`）；仅构造 client 不落任何文件（负测试）
+- [ ] never-throw：注入抛错 sink → complete() 仍成功 + 降级标志置位（getter 可读）
+- [ ] 缓存键：同链同 key 不同审计路径 → 各自收到事件（红队 3 行测试）
+- [ ] vitest 守卫测试：测试环境未注入 MF_DATA_DIR 构造真实后端 → 急切 throw
+- [ ] 全量验证门绿；门后 `git status --porcelain` 零新增
 
-## 3. 设置页写侧：save/clear 降级 + 遮蔽警告
+## 3. 预算账本（原生 budgets + 四要素阻断）
 
 **Blocked by**: 2
-**User stories**: US5、US8（+D7/G5/G6/契约 S7/S8/S9/S4）
+**User stories**: US2、US3、US8（+D4/G1/G2/G6/G7）
 
 ### What to build
 
-设置页写侧降级：模型字段不再 required；空模型保存 ≡ `/settings/clear` 语义（`MF_LLM_MODEL`/`MF_LLM_BASE_URL`/前一 provider key 全置 null，忽略 api_key/base_url 输入，页面注明「模型留空保存 = 清除覆盖、回退自动发现」）；模型填+key 空 = 只存模型（「留空则不修改」延续）；422 仅 slash 违例；保存/清除成功 303 + `?saved=1`/`?cleared=1` 一次性横幅；渲染与保存后重渲染均对被 process env 遮蔽的键显示警告行（需先 unset 才生效，只含变量名）。
+`src/llm/budget-store.ts`：照 DR 布局的 FileBudgetStore（JSON 状态文件、tmp+rename、O_EXCL、死 owner 接管、FIFO 剪老），**锁改 per-op 短临界区**（不横跨模型调用）、文件为唯一权威；`claimUncapped` 入口聚合全部 `mf:*` 条目（tokens=Σ(in+out)、calls=ΣmodelCalls）超限抛 `BUDGET_EXHAUSTED`；store/锁惰性到首次 complete()。env：`MF_LLM_BUDGET_TOKENS`/`MF_LLM_BUDGET_CALLS`（照 parseTimeoutMs 急错，缺省不限）。pi-client 错误组装点拼四要素文案（预算字样/已用 X 上限 Y/账本路径/两条出路）。缓存键并入上限值。
 
 ### Acceptance criteria
 
-- [ ] 空模型保存 = clear 键集合（单测逐键断言）；模型+空 key 只存模型；slash 违例 422 同页重渲染、查看面不扰动
-- [ ] 横幅 `?saved=1`/`?cleared=1` 一次性呈现；裸 GET 无横幅
-- [ ] 遮蔽警告：process env 覆盖 .env.local 键时渲染出现（含保存后重渲染），文案只含变量名
-- [ ] 既有 settings 测试适配（注入 authJsonPath 空 fixture）+ 全量验证门绿
+- [ ] 低上限构造 → complete() 抛错含「预算已耗尽」四要素；settle 后账本文件 tokens 正确
+- [ ] 解除：删账本文件 / 调高 env（新构造）→ 恢复
+- [ ] UI/CLI 并发安全：per-op 锁下交替变更无损坏（单测模拟交错）
+- [ ] 警告数据：用量 ≥80% 可查询（供 T4/T5 消费）；calls 按 attempt 计（重试=2）
+- [ ] 全量验证门绿；门后 git status 零新增
 
-## 4. 设置页读侧「查看」面 + 首页芯片 + 文案同步
+## 4. caller 标签 + provenance 回填 + 三入口接线
 
 **Blocked by**: 3
-**User stories**: US4、US7、US9、US15（+D7/D8/D9/D12/G7/G9 + UI 契约全状态）
+**User stories**: US4、US9（+D5/D6/G7）
 
 ### What to build
 
-读侧呈现按 UI 契约落地：llmStatus 消费 `{env, sources}`；设置页状态 chip 四分支、生效链全表格（每候选：角色/模型/来源 chip/打码或 `—`）、链外 pi CLI 凭据提示行（仅 provider 名）、表单 value 永空 + placeholder 生效模型；首页芯片四分支三态（就绪绿+来源小字/未配置灰正常态/配置错误红 `.chip-fail`/演示模式 accent）可点击去设置；术语改词（「配置错误」「演示模式」）；CSS 增量两行（契约 §7.3）；README 零配置叙事（限定 pi CLI 凭据、MiniMax 已知风险注记带留档、`MF_LLM_AUTH_JSON_PATH` 补行、provider 表更新）。
+五调用点（CLI generate/refine、MCP 两工具、UI draft job）传 `caller: "generate"|"refine"`（taskId `mf:generate-<seq>`）；`generateDraft/generateRefineDraft` 组装层从 complete() 真值写 `provenance.model = provider ? "<provider>/<model>" : modelLabel`（modelLabel 降级 fallback，faux 用 "fake"）；CLI stage:call 对含「预算」错误改独立标题（不挂「模型原始输出」头）；CLI/MCP 调用后 stderr 一行预算警告（≥80% 时，每次调用至多一条）。
 
 ### Acceptance criteria
 
-- [ ] UI 测试覆盖契约关键态：S1/S2/S3/S4/S5 + H1/H3/H4（HTTP 边界，注入临时 envFile + authJsonPath fixture）
-- [ ] 契约负例逐条成立：密钥只打码、faux 恒演示模式、未配置恒灰、发现层错误不显示、表单 value 永不回填
-- [ ] `a.chip`/`.chip-fail` CSS 落地；术语与契约 §4 钉死文案一致
-- [ ] README 四处同步（零配置节/风险注记/新 env 行/provider 表）；全量验证门绿
+- [ ] taskId 前缀按用途（审计事件断言）；provenance.model = 实际出稿（引擎缝双候选回退场景端到端断言到 draft 字段）
+- [ ] CLI 预算错误输出无「模型原始输出」标题、含四要素（e2e）
+- [ ] 全量验证门绿（既有 e2e 断言机械更新）
 
-## 5. 密闭性双环境验证 + 零配置真实用例
+## 5. 统计卡 + 密闭性验收 + 真实用例 + README
 
 **Blocked by**: 4
-**User stories**: US1、US14（+D3 验收/验证门）
+**User stories**: US5、US10、US11（+D7/D9/G8 + UI 契约全状态）
 
 ### What to build
 
-验收执行切片：双环境一致性——全量验证门在「真实 auth.json 在场」与「发现路径指向不存在文件」两环境各跑一次、结果一致（D3/KA2 验收）；零配置真实用例——清空 MF_LLM_MODEL 与 provider key 环境变量，CLI `generate` 经自动发现 + 默认链真实跑通并留档（本机 auth.json 两候选 key 在手，G4 链序 = MiniMax 主）；faux 全量回归确认。
+设置页统计卡按契约 ST1–ST5（两行汇总 chip 今日/累计、按模型表含用途拆分与合计勾稽、留存脚注、预算警告 chip、降级态、faux 整卡替换、空态）——读路径渲染时只读两文件（无锁）+ 降级 getter（进程态）；F1 错误页零 UI 改动验证。README：预算双 env + `MF_DATA_DIR` + 数据目录说明 + 统计卡口径 + digest 注记。验收执行：全门后 git status 零新增；真实用例——真实零配置调用后审计文件事件链完整 + provenance 真值 + 账本文件 tokens 与 usage 一致。
 
 ### Acceptance criteria
 
-- [ ] 双环境全量门 exit code 与测试数一致（留档两份日志）
-- [ ] 零配置 CLI generate 真实 exit=0 + 草案留档（provenance 显示默认链链首）
-- [ ] faux e2e 全量绿；验证门 `npm run lint && npm run typecheck && npm run test && npm run contract-test` 全绿
+- [ ] UI 测试覆盖 ST1/ST2/ST3/ST4/ST5 关键断言（注入临时 MF_DATA_DIR 构造账本/审计 fixture）+ 契约负例抽检（faux 零数字、降级不给假模型列、未设上限无警告）
+- [ ] 真实用例：真实调用 exit=0 + 审计事件链留档 + provenance.model 真值 + 账本 tokens 勾稽
+- [ ] README 四处同步；全量验证门绿；门后 git status 零新增
 
 ---
 
-**VERIFY 备忘**：验证门同 M1；真实依赖用例 = 零配置 generate（本机 auth.json）；node 地板维持 22.19（engines 已声明，本批不动工程面）。
+**VERIFY 备忘**：验证门同 M1/M2；真实依赖用例 = 零配置真实调用后审计/provenance/账本三件套勾稽；密闭性门 = git status 零新增。
 
 ---
 
 ## REVIEW cycle 1 工作项（2026-10-18，源自 .flow/review-findings.md）
 
-- [x] R1（F1 blocking）：S8 422 重渲染——表单 error-list 加 `id="settings-issues"`，模型输入在错误态加 `aria-invalid="true"` + `aria-describedby="settings-issues"`（契约 §3）
-- [x] R2（F2 blocking）：S5 错误态——工厂报错原文改经 `error-list` + `role="alert"` 容器呈现（契约 §1）
-- [x] R3（F3 blocking）：faux 短路改用合成后终值（先合并层叠再判 BACKEND==="faux"），显式非 faux BACKEND 覆盖 .env.local faux 时发现层照常运行（D4 显式赢语义）
+- [x] RB1（B1 blocking）：ST3 降级卡补塌缩单行表（不可用｜账本 calls｜账本 tokens｜不可用｜不可用）+ SE-B 全句降级脚注 + 留存脚注；ST3 测试改正向断言
+- [x] RB2（B2 blocking）：F1 四要素 X/Y 千分位；taskId 移出四要素串（模板止于「删除账本文件重新计数。」）
+- [x] RB3（B3 blocking）：ST5 空态补留存脚注
+- [x] RB4（B4 blocking）：汇总行 chip 语义归位——今日/累计为 chip-queue 标签、数字 .num 在外（ST1-ST5 全态一致）
+
+---
+
+## REVIEW cycle 2 工作项（2026-10-18）
+
+- [x] RB5（B1'）：五态汇总行删除纯文本「今日/累计」前缀（唯一 chip 标签），测试加负断言 not.toContain("<p>今日 <span")
+- [x] RB6（B2'+B3'）：ST3 卡顶补一句说明（原型 degraded:212 逐字）+ 今日行 chip 归位（今日进 chip、不可用纯文本）
+- [x] RB7（B4'+N-A）：F1 两条出路按超限维度择一 env 名（仅双维同超才并列）；维度短语后空格对齐原型
+- [x] RB8（N-B/N-D）：预算测试补千分位实断言（预置大用量账本 ≥10⁴）；ST3 测试加 warn chip 形断言

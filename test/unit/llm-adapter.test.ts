@@ -26,7 +26,7 @@ async function walkSrc(dir: string): Promise<string[]> {
 
 test("fake client 返回脚本化响应（引擎级测试注入用）", async () => {
   const client = createFakeClient('{"metrics": []}');
-  const out = await client.complete({ system: "s", user: "u" });
+  const out = (await client.complete({ system: "s", user: "u" })).text;
   expect(out).toBe('{"metrics": []}');
 });
 
@@ -42,7 +42,7 @@ test("脚本化 transport 经 pi-client 完成零网络调用并返回脚本文�
   const faux = createPiFauxClient();
   faux.setResponses(["faux 口径响应"]);
 
-  const out = await faux.client.complete({ system: "你是指标体系设计师", user: "描述业务" });
+  const out = (await faux.client.complete({ system: "你是指标体系设计师", user: "描述业务" })).text;
   expect(out).toContain("faux 口径响应");
   expect(faux.callCount()).toBe(1);
 });

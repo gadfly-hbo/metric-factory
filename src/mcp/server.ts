@@ -9,6 +9,13 @@ import { auditInstance } from "../engine/audit.js";
 import { buildGeneratePrompt, buildRefinePrompt } from "../llm/prompt.js";
 import { createLlmClientFromEnv, estimateTokens } from "../llm/index.js";
 import { resolveLlmEnvAuto } from "../llm/env-auto.js";
+import { budgetUsageWarning } from "../llm/index.js";
+
+// M3 G7：调用后至多一行预算警告（stderr，agent 客户端可见；真值在账本 settle）
+function emitBudgetWarning(llmEnv: NodeJS.ProcessEnv): void {
+  const line = budgetUsageWarning(llmEnv);
+  if (line) console.error(line);
+}
 import { generateDraft, generateRefineDraft } from "../engine/generate.js";
 import { metricflowExporter } from "../export/metricflow.js";
 import { excelExporter } from "../export/excel.js";
@@ -76,9 +83,10 @@ export function buildMcpServer(opts: McpServerOptions = {}): McpServer {
         });
       }
       const llmEnv = await resolveEnv();
-      const client = createLlmClientFromEnv(llmEnv);
+      const client = createLlmClientFromEnv(llmEnv, "generate"); // M3 D6：caller 标签
       const modelLabel = llmEnv.MF_LLM_MODEL ?? (llmEnv.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
       const result = await generateDraft(client, prompt, describe, modelLabel, new Date().toISOString());
+      emitBudgetWarning(llmEnv);
       if (!result.ok) {
         throw new Error(`生成失败（阶段 ${result.stage}），模型输出整批拒绝；可先 dryRun=true 评估 prompt。原始输出：${result.raw.slice(0, 2000)}`);
       }
@@ -108,9 +116,10 @@ export function buildMcpServer(opts: McpServerOptions = {}): McpServer {
         });
       }
       const llmEnv = await resolveEnv();
-      const client = createLlmClientFromEnv(llmEnv);
+      const client = createLlmClientFromEnv(llmEnv, "refine"); // M3 D6：caller 标签
       const modelLabel = llmEnv.MF_LLM_MODEL ?? (llmEnv.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
       const result = await generateRefineDraft(client, prompt, instruction, modelLabel, new Date().toISOString());
+      emitBudgetWarning(llmEnv);
       if (!result.ok) {
         throw new Error(`微调草案生成失败（阶段 ${result.stage}）；可先 dryRun=true。原始输出：${result.raw.slice(0, 2000)}`);
       }

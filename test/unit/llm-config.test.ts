@@ -1,5 +1,11 @@
 import { beforeEach, expect, test } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createLlmClientFromEnv, resolveModelChain } from "../../src/llm/index.js";
+
+// M3（G3 守卫）：工厂成功路径会解析数据目录——字面量 env 显式注入临时目录
+const DATA_DIR = process.env.MF_DATA_DIR ?? mkdtempSync(join(tmpdir(), "mf-cfg-data-"));
 import { __testHooks } from "../../src/llm/pi-client.js";
 
 // 配置缝（D4/D5/G1/G5/G6）：四分映射 + 主备链 + 急切校验，全部经纯函数 resolver 与工厂观察
@@ -125,14 +131,14 @@ test("G6：MF_LLM_TIMEOUT_MS 非正整数急切抛错，合法值放行", () => 
     /MF_LLM_TIMEOUT_MS/
   );
   expect(() =>
-    createLlmClientFromEnv({ MF_LLM_MODEL: "minimax-cn/MiniMax-M3", MF_LLM_TIMEOUT_MS: "5000", ...MINIMAX })
+    createLlmClientFromEnv({ MF_LLM_MODEL: "minimax-cn/MiniMax-M3", MF_LLM_TIMEOUT_MS: "5000", MF_DATA_DIR: DATA_DIR, ...MINIMAX })
   ).not.toThrow();
 });
 
 test("G3：密钥改后同进程生效（新 key → 新缓存实例），process.env 桥已删", () => {
   __testHooks.clearCache();
-  createLlmClientFromEnv({ MF_LLM_MODEL: "minimax-cn/MiniMax-M3", MINIMAX_CN_API_KEY: "sk-one" });
+  createLlmClientFromEnv({ MF_LLM_MODEL: "minimax-cn/MiniMax-M3", MINIMAX_CN_API_KEY: "sk-one", MF_DATA_DIR: DATA_DIR });
   const sizeAfterFirst = __testHooks.cacheSize();
-  createLlmClientFromEnv({ MF_LLM_MODEL: "minimax-cn/MiniMax-M3", MINIMAX_CN_API_KEY: "sk-two" });
+  createLlmClientFromEnv({ MF_LLM_MODEL: "minimax-cn/MiniMax-M3", MINIMAX_CN_API_KEY: "sk-two", MF_DATA_DIR: DATA_DIR });
   expect(__testHooks.cacheSize()).toBe(sizeAfterFirst + 1);
 });

@@ -19,6 +19,13 @@ import { auditInstance } from "../engine/audit.js";
 import { deriveTrackingPlan, toJsonSchemas } from "../engine/tracking.js";
 import { buildGeneratePrompt, buildRefinePrompt } from "../llm/prompt.js";
 import { resolveLlmEnvAuto } from "../llm/env-auto.js";
+import { budgetUsageWarning } from "../llm/index.js";
+
+// M3 G7：调用后至多一行预算警告（≥80%，stderr；用量真值在账本 settle——不做提交前预检）
+function emitBudgetWarning(llmEnv: NodeJS.ProcessEnv): void {
+  const line = budgetUsageWarning(llmEnv);
+  if (line) console.error(line);
+}
 
 // ②A：CLI 与工作台共用配置合成（process env > cwd/.env.local > 自动发现）；零配置默认链（G3）在此物化
 async function resolveCliLlmEnv(): Promise<NodeJS.ProcessEnv> {
@@ -379,7 +386,7 @@ program
     const llmEnv = await resolveCliLlmEnv();
     let client;
     try {
-      client = createLlmClientFromEnv(llmEnv);
+      client = createLlmClientFromEnv(llmEnv, "generate"); // M3 D6：caller 标签（taskId mf:generate-<seq>）
     } catch (e) {
       console.error(`ERROR ${(e as Error).message}`);
       console.error("提示：先用 --dry-run 评估 prompt；测试/演示可用 MF_LLM_BACKEND=faux");
@@ -388,12 +395,18 @@ program
 
     const modelLabel = llmEnv.MF_LLM_MODEL ?? (llmEnv.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
     const result = await generateDraft(client, prompt, opts.describe, modelLabel, new Date().toISOString());
+    emitBudgetWarning(llmEnv);
     if (!result.ok) {
       console.error(`ERROR 生成失败（阶段：${result.stage}），模型输出整批拒绝，未写入任何文件`);
       if (result.issues) {
         for (const i of result.issues) console.error(`  - ${i}`);
       }
-      console.error("===== 模型原始输出 =====");
+      // M3 G7：call 阶段的 raw 是调用错误文案（含预算四要素），不是模型输出——独立标题消排障陷阱
+      if (result.stage === "call") {
+        console.error("===== 调用失败（未产生模型输出）=====");
+      } else {
+        console.error("===== 模型原始输出 =====");
+      }
       console.error(result.raw);
       process.exit(1);
     }
@@ -518,7 +531,7 @@ program
     const llmEnv = await resolveCliLlmEnv();
     let client;
     try {
-      client = createLlmClientFromEnv(llmEnv);
+      client = createLlmClientFromEnv(llmEnv, "refine"); // M3 D6：caller 标签（taskId mf:refine-<seq>）
     } catch (e) {
       console.error(`ERROR ${(e as Error).message}`);
       console.error("提示：先用 --dry-run 评估 prompt；测试/演示可用 MF_LLM_BACKEND=faux");
@@ -527,12 +540,18 @@ program
 
     const modelLabel = llmEnv.MF_LLM_MODEL ?? (llmEnv.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
     const result = await generateRefineDraft(client, prompt, opts.instruction, modelLabel, new Date().toISOString());
+    emitBudgetWarning(llmEnv);
     if (!result.ok) {
       console.error(`ERROR 微调草案生成失败（阶段：${result.stage}），模型输出整批拒绝，未写入任何文件`);
       if (result.issues) {
         for (const i of result.issues) console.error(`  - ${i}`);
       }
-      console.error("===== 模型原始输出 =====");
+      // M3 G7：call 阶段的 raw 是调用错误文案（含预算四要素），不是模型输出——独立标题消排障陷阱
+      if (result.stage === "call") {
+        console.error("===== 调用失败（未产生模型输出）=====");
+      } else {
+        console.error("===== 模型原始输出 =====");
+      }
       console.error(result.raw);
       process.exit(1);
     }

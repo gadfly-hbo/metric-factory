@@ -1,10 +1,15 @@
-import type { ModelReply, ModelTransport } from "pi-agent-runtime";
+import { ProviderFailure, type ModelReply, type ModelTransport } from "pi-agent-runtime";
 
 // 测试支持：脚本化 ModelTransport（系统边界 mock——模型 HTTP 调用是唯一外部依赖）。
-// 脚本项三种形态：脚本文本（stop:complete）/ { stop:"length" }（触发 INVALID_OUTPUT 路径）/ { throw }（触发 MODEL_FAILED）。
+// 脚本项四种形态：脚本文本（stop:complete）/ { stop:"length" }（触发 INVALID_OUTPUT）/
+// { throw }（普通 Error——穿透不触发 fallback）/ { providerFailure: "unavailable" 等 }（触发主备回退）。
 // 脚本耗尽后循环末项（modelRecovery 重试与多调用场景）。
 
-export type ScriptedReply = string | { stop: "length" } | { throw: Error };
+export type ScriptedReply =
+  | string
+  | { stop: "length" }
+  | { throw: Error }
+  | { providerFailure: "quota" | "rate-limit" | "unavailable" | "network" };
 
 export interface ScriptedTransportHandle {
   transport: ModelTransport;
@@ -21,6 +26,7 @@ export function createScriptedTransport(initial: ScriptedReply[]): ScriptedTrans
     const item = script[Math.min(calls, script.length - 1)]!;
     calls += 1;
     if (typeof item === "object" && "throw" in item) throw item.throw;
+    if (typeof item === "object" && "providerFailure" in item) throw new ProviderFailure(item.providerFailure);
     if (typeof item === "object" && "stop" in item) {
       return reply([], "length");
     }
