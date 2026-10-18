@@ -1,66 +1,87 @@
-# 批次 A+B · 任务切片（tracer-bullet 纵切；自批准，砍线 ≤6）
+# M1 · 任务切片（tracer-bullet 垂直切片）
 
-- [x] 1. F6 前置：装载行为特征测试（cli 坏模板目录 / 坏映射文件）
-- [x] 2. F6 共享装载核重构（loader/io 共享核 + cli/release 薄包装；cli 多坏文件终态=全量打印〔GRILL 目标〕、release 坏模板/映射输出保持基线格式，均以 e2e 钉住）
-- [x] 3. F3 CLI release 输出补登记序号
-- [x] 4. receipt 核心 + CLI `receipt add/list`（schema/对账/收编/重复拒绝）
-- [x] 5. UI 回执区块（第 7 块：列表/徽标/粘贴登记，POST /instance/receipts）
-- [x] 6. B2 净销售 v1.0.1 预发布 + 指引补句
+> 规格源：`.flow/prd.md`（含 diff-gate 附录 ①② 与 GRILL 附录 G1–G10）。无 tracker，落盘本文件。切片自批记录见 state.json history。
 
-## 1. F6 前置：装载行为特征测试
+- [x] 1. 依赖与工程面落地（prefactor）
+- [x] 2. runtime 通道贯通（tracer：一条 complete() 走通新引擎）
+- [x] 3. 配置解析与工厂接线（四分映射 + 急切校验 + 主备链）
+- [x] 4. faux 改写、全量回归与文档/冒烟同步
 
-**What to build**：重构前钉住 cli 装载行为的特征 e2e——(a) 坏模板目录（合法模板 + 损坏 YAML 同目录）跑 `validate <inst> -t <dir>`：非零退出、输出含坏文件路径与错误文本；(b) `export <inst> --format metricflow --mapping <损坏文件>`：非零退出、输出含 `[mapping]` 与路径。特征测试先行且通过（钉行为，非红绿）。
+---
 
-**Acceptance criteria**：
-- [ ] 两条特征测试通过并保留（重构后仍绿）
+## 1. 依赖与工程面落地（prefactor）
 
-**Blocked by**: None
+**Blocked by**: 无 — 可立即开始
+**User stories**: US8、US12
 
-## 2. F6 共享装载核重构
+### What to build
 
-**What to build**：`src/engine/loader.ts` 增 `loadTemplatesFromDir(dir)`（扫描+loadTemplate+**收集全部错误**不短路，抛错变体含全部格式化错误）；`src/engine/io.ts` 增 `defaultMappingPath` 与 `loadMappingFile(path)`（result 风格解析校验核）。cli `discoverTemplates`、`loadMapping`/`defaultMappingPath` 与 release `findBaseTemplate`、`loadMappingForRelease` 全部改薄包装（各自错误策略不变：cli 打印全量+exit / release 转 ReleaseError）。`src/ui/server.ts` 拷贝不动。
+vendored `pi-agent-runtime@0.4.3` 落地为可安装依赖（tgz 拷自 deep-research vendor，随仓提交），package-lock 同步刷新；Node 支持面抬至声明地板 `>=22.19.0`（CI node 22、tsup target node22、README 披露）；guard 边界测试的断言串扩为 `pi-agent-runtime` / `@earendil-works/pi-agent-core` / `@earendil-works/pi-ai` 三串并补一条负例测试（注入违规 import 字串可检出）。本切片结束时引擎尚未接线，但依赖可安装、guard 对新包名已有执法。
 
-**Acceptance criteria**：
-- [ ] 切片 1 特征测试 + 全量既有测试零回归（cli/release 行为逐字不变）
-- [ ] release 的错误行为（首个坏文件、映射 required 损坏）有既有 e2e 背书
+### Acceptance criteria
+
+- [ ] `vendor/pi-agent-runtime-0.4.3.tgz` 在仓内且被 package.json `file:` 引用；`npm install` 后 `npm ci` 绿（lockfile 已提交）
+- [ ] `engines.node >=22.19.0`；CI workflow node-version 22；tsup target node22；`npm run build` 绿
+- [ ] guard 测试断言三串齐全；负例测试注入 `import "pi-agent-runtime"` 字串可检出（红→绿）
+- [ ] `npm run typecheck` 绿（依赖类型面可解析）
+
+## 2. runtime 通道贯通（tracer）
 
 **Blocked by**: 1
+**User stories**: US1、US6、US7、US10、US13
 
-## 3. F3 CLI release 输出补登记序号
+### What to build
 
-**What to build**：`release` 成功输出「登记」行改 `登记：<indexPath>（追加为第 N 条）`。
+`src/llm` 内建起 runtime 通道并让一个 `complete()` 端到端走通：`createRuntime` 装配（authorize 无条件放行、no-op audit sink 永不抛错、limits 五键 builder、`modelRecovery.extraAttempts=1`）、`runText` 三分映射（succeeded→文本；INVALID_OUTPUT→空串；其余全部 status→抛错）、taskId `mf:<kind>-<seq>`（进程内自增）、runtime 进程级惰性单例（缓存键=候选链+key 指纹哈希，仅内存）。测试缝：手写脚本化 `ModelTransport`（响应队列+调用计数，`stop:'length'` 触发 INVALID_OUTPUT）。本切片只要求通道能力被单测证明；工厂接线（env 解析）属切片 3。
 
-**Acceptance criteria**：
-- [ ] release e2e 断言 stdout 含「（追加为第 1 条）」
+### Acceptance criteria
 
-**Blocked by**: None
+- [ ] 脚本化 transport 下 `complete()` 返回脚本文本且 callCount 正确
+- [ ] `stop:'length'` 路径映射为空字符串；其他失败/阻断/取消类 status 全部抛错且文案含 reason
+- [ ] no-op audit sink 连续调用不抛错
+- [ ] limits 五键与 modelRecovery 值符合 D6；taskId 含 kind 前缀且同进程唯一
+- [ ] 单例语义：同键复用、key 指纹变更新实例（单测证明）
 
-## 4. receipt 核心 + CLI
+## 3. 配置解析与工厂接线
 
-**What to build**：`src/sap/receipt.ts`：契约 v0.3 §6.2 zod schema（task_id 非空；package{id,version semver,content_fingerprint,package_fingerprint sha256:64hex}；adopted_metrics/adopted_scenarios 空数组合法；issues_found[]{kind 三枚举,metric?,detail 非空}；computed_at 非空；未知字段忽略）；对账（读 releases/index.yaml 查 id@version 比对 content_fingerprint → 对账一致/对账不一致）；`registerReceipt`（schema 校验→对账→收编副本 `releases/receipts/<slug(task_id)>.receipt.yaml` 含供应侧 received_at+reconciliation；重复文件名拒绝含原 task_id 与已登记时间；index 缺失/损坏拒绝提示先发布或 git 恢复；schema 违规逐行 `[receipt] path: message` 零写盘）；`listReceipts(packageId?)`（received_at 倒序）。CLI 嵌套子命令 `receipt add <file>` / `receipt list [--package <id>]`（列表六列：task_id/package@version/对账状态/adopted 数/issues 数/received_at）。
+**Blocked by**: 2
+**User stories**: US2、US3、US4、US5、US11（+G9）
 
-**Acceptance criteria**：
-- [ ] 单测：schema 逐字段 + 未知字段忽略 + kind 枚举 + 空数组合法
-- [ ] e2e：add 成功（副本落盘含供应侧字段+对账一致）/重复拒绝/schema 违规零写盘/index 缺失拒绝/损坏拒绝/list 与 --package 过滤
+### What to build
 
-**Blocked by**: None
+`createLlmClientFromEnv` 重写为急切校验工厂：四分映射 resolver（真值表两验证模型 → `MF_LLM_BASE_URL` 网关（protocol 缺省 openai-completions、`MF_LLM_API` 覆盖）→ catalog 回退（`openai-responses→openai-completions` 映射表；google 等未知 api 显式拒绝并给网关迁移指引）→ 显式拒绝且报错列出三条路径）；`MF_LLM_FALLBACK_MODELS` 解析（笔误急切抛错点名坏条目、缺 key 跳过、trim/空项/保序）；三个新 env 的非法值急切抛错（G6）；密钥从注入 env 实参读取并删除 process.env 桥（G3，修复设置页改 key 不生效暗坑）；faux 后端分支保持原样；`llmStatus` 呈现 `主 (+N 备)`。
 
-## 5. UI 回执区块
+### Acceptance criteria
 
-**What to build**：`.flow/ui-contract.md` RC0–RC6 逐字落地：`src/ui/render.ts` receiptsBlock（列表六列+chip-ok/chip-warn 徽标+空态；粘贴表单 textarea name=receipt 必填）挂实例页第 7 块；`src/ui/server.ts` POST `/instance/receipts`（成功 200 重渲染清空表单+列表含新行；失败 422 值保留逐行错误：schema `[receipt]`/重复含原 task_id+时间/index 缺失或损坏拒绝文案）。
+- [ ] 四分映射每路一条单测（含 `openai/gpt-4o` 经映射表可用、`google/*` 拒绝文案含网关指引、乱配置拒绝文案列三路径）
+- [ ] fallbacks：拼错条目抛错点名；无 key 跳过；全候选无 key 报错列出所需环境变量名
+- [ ] `MF_LLM_API`/`MF_LLM_TIMEOUT_MS` 非法值、真值表命中+baseUrl 同设，均工厂急切抛错
+- [ ] 密钥改后同进程生效（注入 env 新 key → 新 transport，单测证明）；process.env 桥已删
+- [ ] UI `llmStatus` 探针：configured/error 分类正确且显示 `主 (+N 备)`；`npm run build` 后设置页 UX 语义不变
 
-**Acceptance criteria**：
-- [ ] UI e2e：列表空态/条目+双徽标/RC3 清空表单/RC3m warn 徽标/RC4 值保留零写盘/RC5/RC6/G5 非本包回执不显示
-- [ ] 术语逐字（采用回执/登记回执/对账一致/对账不一致）；零 JS；boundary 文案不改（O1）
+## 4. faux 改写、全量回归与文档/冒烟同步
 
-**Blocked by**: 4
+**Blocked by**: 3
+**User stories**: US6、US7（回归面）、US12（验证面）
 
-## 6. B2 净销售 v1.0.1 预发布 + 指引补句
+### What to build
 
-**What to build**：`examples/net-sales-instance.yaml` 的 `refund_amount.refund_to_payment_period` true→false（实例保留翻转态，G10）；CLI 发布 v1.0.1（note="演示：退款归属期间翻转（支付期间→退款完成期间），供消费端验收计算变化"）；`docs/sap-consumption-guide.md` §6 补 v1.0.1 一句。仓库产物（快照+index）随 SHIP 入库。
+`src/llm/faux.ts` 弃用 pi-ai compat `registerFauxProvider`，改以切片 2 的脚本化 transport 驱动新引擎（测试外部行为不变）；既有 llm-adapter 测试适配新结构；`scripts/llm-smoke.sh` 扩展——key 环境变量缺失时从 `~/.pi/agent/auth.json` 抽取注入（不覆盖已设值）、循环两真值表候选各跑一次留档、头注释声明 smoke 专用 dev 便利（G7）；README provider 配置表补三个新 env + 真值表两模型 + catalog 最佳-effort 披露 + google 网关迁移指引 + 修正已失效的 `claude-sonnet-4` 示例 id（G10/R1 查证）；设置页 placeholder 与 README 示例对齐真值表候选。
 
-**Acceptance criteria**：
-- [ ] 发布输出无同内容警告；index 恰两条目且内容指纹不同；v1.0.0 快照字节不变（对账复核）
-- [ ] 指引 §6 含 v1.0.0/v1.0.1 差异说明
+### Acceptance criteria
 
-**Blocked by**: None
+- [ ] faux.ts 无 `@earendil-works/pi-ai/compat` import；引擎级 faux 测试断言行不变地通过
+- [ ] `npm run lint && npm run typecheck && npm run test && npm run contract-test` 全绿
+- [ ] smoke 脚本一条命令可对两真值表候选留档输出（本机 auth.json 两候选 key 均存在）
+- [ ] README/设置页/脚本注释三处配置示例一致；`MF_LLM_FALLBACK_MODELS`/`MF_LLM_API`/`MF_LLM_TIMEOUT_MS` 在 provider 表可查
+
+---
+
+**VERIFY 备忘**：验证门 `npm run lint && npm run typecheck && npm run test && npm run contract-test`；真实依赖用例=扩展后 smoke 脚本两候选实跑（G7）；node 地板实测=fnm v22.23.3 全量门（D10）。
+
+---
+
+## REVIEW cycle 1 工作项（2026-10-18，源自 .flow/review-findings.md）
+
+- [x] R1（F1 blocking）：e2e 5000ms 默认超时过紧——新增 vitest.config.ts 显式 testTimeout=15000（进程边界 e2e 合理阈值，不削弱行为断言）；node 22.23.3 全量门连跑 3 次 exit=0 + node 24 全量门 exit=0
+- [x] R2（F2 blocking）：smoke 循环逐候选容错——`run_smoke_for_model` 失败记入该候选目录 smoke-failure.txt 并继续下一候选；结尾逐候选汇总；任一候选失败脚本 exit=1 但双候选留档齐全；重跑产出真实双候选留档

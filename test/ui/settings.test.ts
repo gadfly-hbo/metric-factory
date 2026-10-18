@@ -51,6 +51,26 @@ test("POST /settings/save：坏 model 422 且零写盘", async () => {
   server.close();
 });
 
+test("GET /settings：配置主备链时显示 主 (+N 备)（G9）", async () => {
+  const { server, base, envFile } = await startUi();
+  writeFileSync(
+    envFile,
+    [
+      "MF_LLM_MODEL=minimax-cn/MiniMax-M3",
+      "MINIMAX_CN_API_KEY=sk-minimax-local-9999",
+      "MF_LLM_FALLBACK_MODELS=xiaomi-token-plan-cn/mimo-v2.6-flash"
+    ].join("\n"),
+    "utf8"
+  );
+  const res = await fetch(`${base}/settings`);
+  expect(res.status).toBe(200);
+  const html = await res.text();
+  expect(html).toContain("minimax-cn/MiniMax-M3");
+  expect(html).toContain("(+1 备)");
+  expect(html).toContain("****9999");
+  server.close();
+});
+
 test("POST /settings/save：保留 .env.local 中用户手写的其他行；clear 只删管理键", async () => {
   const { server, base, envFile } = await startUi();
   writeFileSync(envFile, "MY_CUSTOM_LINE=keep\n", "utf8");

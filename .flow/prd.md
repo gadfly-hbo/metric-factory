@@ -1,66 +1,111 @@
-# 批次 A+B · 评审收尾与回执登记备料 · PRD
+# PRD · M1 — LLM 运行时升级：pi-ai compat → pi-agent-runtime
 
-> 规格源：`.flow/proposal.md`（用户裁决"做 A+B"）；红队处置：`.flow/red-team.md`（R1–R3）。无 issue tracker，落盘本文件。
+> 规格源：`.flow/proposal.md`（唯一裁决源）+ `.flow/red-team.md`（go 附条件，KA1–KA5 已逐条并入本 PRD）。无 issue tracker 配置，按降级路径落盘本文件。
 
 ## Problem Statement
 
-批次 1 交付了"发布一个明确版本"的闭环，但还有三处尾巴：①CLI 发布输出缺登记序号（UI 有、CLI 无）；②模板/映射装载逻辑在 CLI 与 release 两处编排重复，存在漂移风险；③adoption receipt 格式已随契约 v0.3 冻结，但供应侧没有任何接收端——消费端（2b 启动后）回执无处登记，批次 3 的"追溯哪个任务采用了哪个版本"没有承载物。此外批次 3 验收点 2 需要的"口径翻转演示包"尚未备好。
+metric-factory 的 LLM 调用层是 `@earendil-works/pi-ai` compat `complete()` 裸单发：无重试、无主备容灾、无超时保护、无恢复机制。一次网络抖动或模型截断就直接毁掉整个草案任务；兄弟产品（deep-research / reports-factory）已在生产用 `pi-agent-runtime` 的 `runText` 通道解决了同一问题。用户（业务人员在工作台跑 AI 草案、开发者在 CLI 跑 generate/refine）承担单点失败的代价，而修复所需的所有零件都已在兄弟仓验证过。
 
 ## Solution
 
-四件事：①CLI `release` 输出补登记序号（F3）；②把模板目录装载与映射装载抽成共享核，CLI 与 release 改薄包装（F6，重构前先钉行为测试）；③实现回执的 zod schema + `releases/receipts/` 登记 + 对照 releases/index.yaml 的自动对账 + CLI 登记/列表命令 + 实例页回执区块（粘贴登记 + 列表 + 对账状态徽标）；④翻转净销售样板退款归属期间开关，预发布 v1.0.1 演示包。
+把 LLM 引擎换成 vendored `pi-agent-runtime` 0.4.3 的 `createRuntime().runText` 通道：**只换引擎，不换 UX**——`MF_LLM_MODEL` 等环境变量配置面不变、设置页不变、`LlmClient` 业务接口不变、工人模式与 fail-closed 人审门不变。换完之后，每一次模型调用自动获得：主备候选链容灾（无 key 候选跳过）、单次超时保护、输出截断恢复（`modelRecovery`）、以及（M3 落盘前的）审计挂点。
 
 ## User Stories
 
-1. As a 数据工程师, I want CLI 发布输出显示登记条目序号, so that 终端发布与工作台发布的信息面对等
-2. As a 数据工程师, I want 模板/映射装载只有一份共享实现, so that 未来改装载规则不会出现 CLI 与发布两处漂移
-3. As a 消费端工程师, I want 把回执 YAML 交给供应侧登记, so that 我的口径歧义与缺失数据反馈有正式通道
-4. As a 业务分析人员, I want 在实例页看到"哪些任务采用了这个包的哪些版本、对账是否一致、提出了什么问题", so that 资产被真实使用的反馈可见
-5. As a 业务分析人员, I want 粘贴 YAML 即可登记回执, so that 不用终端也能完成登记
-6. As a 审计者, I want 失真回执（指纹对不上）被记录但显式打上"对账不一致"徽标, so that 反馈不丢失也不被误信
-7. As a 消费端工程师, I want 供应侧预先发布 v1.0.1 演示包（归属期间翻转）, so that 我验收"合法改口径→计算真实变化"时有现成对照物
+1. 作为**工作台业务用户**，我希望 AI 草案任务在主力模型超时/截断时自动恢复或切换备模型，而不是直接失败，以便我不必重跑整份草案。
+2. 作为**CLI 用户**，我希望 `MF_LLM_MODEL=openai/gpt-4o`（README 文档配置）升级后照常可用，以便我不需要改任何本机配置。
+3. 作为**CLI 用户**，我希望 `MF_LLM_BASE_URL` 指向 OpenAI 兼容网关的用法升级后照常可用，以便内部网关部署不中断。
+4. 作为**CLI 用户**，我希望可以用 `MF_LLM_FALLBACK_MODELS` 声明一串备模型，以便主模型故障时自动降级。
+5. 作为**CLI 用户**，我希望候选链里没配 key 的模型被静默跳过、全部无 key 时才报错，以便错误文案告诉我具体缺哪个环境变量。
+6. 作为**测试作者**，我希望 faux 脚本化后端继续零网络驱动全部 LLM 测试，以便 CI 不需要任何真实密钥。
+7. 作为**测试作者**，我希望引擎级测试（走真实 runtime 管线、脚本化 transport）保留，以便三分映射逻辑被真实执行路径覆盖。
+8. 作为**维护者**，我希望 guard 测试同时锁定 `pi-agent-runtime`、`@earendil-works/pi-agent-core`、`@earendil-works/pi-ai` 三个包名，以便适配层边界在换包名后不失效。
+9. 作为**维护者**，我希望 `LlmClient.complete()` 接口逐字节不变、业务模块零改动，以便本次升级的爆炸半径收敛在 `src/llm`。
+10. 作为**维护者**，我希望 `INVALID_OUTPUT`（含截断）映射为空文本并落入既有解析失败桶（结构化 `{ok:false}`、零写盘），以便 fail-closed 语义不被引擎更换稀释。
+11. 作为**维护者**，我希望模型解析对未验证模型显式拒绝且报错文案列出可用配置路径，以便配置错误在调用前暴露。
+12. 作为**发布者**，我希望 CI 的 node 版本与 `engines` 声明和新依赖树一致，以便声明的支持面就是实测过的面。
+13. 作为**审计者（M3 预埋）**，我希望 M1 的装配点已存在审计 sink 挂点（当前为 no-op），以便 M3 只替换实现、不动装配结构。
 
 ## Implementation Decisions
 
-1. **F3**：CLI `release` 成功输出「登记」行改为 `登记：<indexPath>（追加为第 N 条）`；e2e 补断言。
-2. **F6 共享核**：
-   - `src/engine/loader.ts` 新增 `loadTemplatesFromDir(dir): Promise<Template[]>`——扫描 + loadTemplate + **收集全部错误**（不短路，红队 R1）后以抛错变体返回；`src/cli/index.ts` 的 `discoverTemplates` 与 `src/sap/release.ts` 的 `findBaseTemplate` 改薄包装（cli 保留打印+exit 策略，release 保留 ReleaseError 策略，行为逐字不变）
-   - `src/engine/io.ts` 新增 `defaultMappingPath(instancePath)` 与 `loadMappingFile(path): { ok: true; mapping } | { ok: false; reason: string }`（解析+校验核心）；cli 的 `loadMapping` 与 release 的 `loadMappingForRelease` 改薄包装（各自策略不变）
-   - **前置**：先补 cli 坏模板目录特征 e2e（输出含坏文件路径与错误、非零退出），钉住行为再重构
-   - `src/ui/server.ts` 既有拷贝本批不动（记录）
-3. **回执目录与命名**：`releases/receipts/<task_id>.receipt.yaml`（登记副本，收编原文件内容规范化重排后落盘；原始上传文件不保留）；`receipts/` 子目录不参与 index 对账、不是发布物（红队 R2）。
-4. **receipt schema（zod，对齐契约 v0.3 §6.2 逐字段）**：`task_id`（非空）、`package{id, version(semver), content_fingerprint(sha256:64hex), package_fingerprint(sha256:64hex)}`、`adopted_metrics[]`（name 非空，允许空数组）、`adopted_scenarios[]`（id 非空，允许空数组）、`issues_found[]`（kind ∈ caliber_ambiguity|missing_data|trial_issue，metric 可选，detail 非空，允许空数组）、`computed_at`（非空）。未知字段忽略（向前兼容）。
-5. **对账规则**：登记时读 `releases/index.yaml`（缺失/损坏 → 登记拒绝，提示先发布或修复登记）——查 `package.id@version` 条目：存在且 `content_fingerprint` 一致 → `对账一致`；存在但不一致，或条目不存在 → `对账不一致`（**记录入库 + 徽标**，不拒绝——红队 R3）。
-6. **CLI**：`receipt add <file>`（登记）与 `receipt list [--package <id>]`（列表）。登记成功输出：task、包@版本、对账状态、issue 数；重复 task_id → 拒绝（含已登记时间，append-only 纪律）；schema 违规 → 逐行 `[receipt] path: message`，零写盘。
-7. **UI 回执区块**：实例页**第 7 块**（发布区块之后）；两部分——(a) 本包回执列表（task_id / 版本 / 对账状态徽标 / adopted 数 / issues 数，按登记时间倒序），(b) 「登记回执」粘贴表单（textarea 粘贴回执 YAML + 提交）：服务端校验 + 对账，成功 200 重渲染列表含新回执、表单清空；失败 422 保留值逐行报错（schema 错 `[receipt] …`、重复 task、index 缺失/损坏各自明确文案）。零 JS、零写盘失败纪律与发布区块同款。区块仅在工作区存在 `releases/` 或已有回执时渲染列表部分，表单恒渲染。
-8. **B2 v1.0.1**：编辑 `examples/net-sales-instance.yaml` 的 `refund_amount.refund_to_payment_period` true→false，`release examples/net-sales-instance.yaml 1.0.1 --note "演示：退款归属期间翻转（支付期间→退款完成期间），供消费端验收计算变化"`；产物入库（v1.0.0 快照字节不变、内容指纹不同、无警告）；消费指引 §6 补 v1.0.1 一句。
+### 依赖与装配
+
+- **D1 · 依赖**：新增 vendored 依赖 `pi-agent-runtime@0.4.3`（`file:vendor/...`，tgz 拷自 deep-research 仓 vendor，随仓提交——`.gitignore` 不排除 `vendor/`，兄弟仓同法）。保留 `@earendil-works/pi-ai@^0.87.1` 顶层依赖（关闭提案开放问题 Q6：**不移除**；理由见 KA4 + D4(c) 的目录回退需要）。两版 pi-ai（顶层 0.87 / 传递 0.86.1）并存无类型互操作：适配层只以纯数据（provider/id/protocol/endpoint 字符串）喂给 runtime，不跨包传递类型实例。
+- **D2 · 引擎装配（收敛于 `src/llm` 适配层）**：`createRuntime` + `createPiTransport`，`RuntimeOptions` 必填项全给：`authorize` = 无条件放行常量（单机语义，决策 #7）；`audit` = **no-op sink**（吞事件、永不抛错——sink 抛错会以 `AUDIT_FAILED` 杀掉每次调用；M3 才替换为 JSONL 落盘实现，KA3 收口）；`budgets` 可选不传（M3 账本）。
+- **D3 · runtime 生命周期（关闭提案 Q3）**：进程级惰性单例，按解析后的候选链做缓存键（照 DR channel 先例；不引入 10 万次重建阈值——MF 调用量每任务个位数，阈值无意义；UI server 长跑场景由单例天然覆盖）。
+- **D4 · 模型解析四分映射（改写提案决策 #5，收口 KA1，待 diff 门确认）**：
+  - (a) **真值表精确匹配**：内置已验证模型（MiniMax-M3 `minimax-cn`/anthropic-messages；mimo-v2.6-flash `xiaomi-token-plan-cn`/openai-completions，照 DR 真值表逐字段拷贝）。
+  - (b) **`MF_LLM_BASE_URL` 存在** → 自定义网关：protocol 缺省 `openai-completions`（README 对该变量的既有语义即「OpenAI 兼容网关覆盖」），新增可选 `MF_LLM_API=anthropic-messages` 覆盖。解决提案中「api 无来源、(b) 永不触发」的硬伤。
+  - (c) **pi-ai 内置静态目录回退**（`getBuiltinModels`——现行解析路径原样保留）：`openai/gpt-4o`、`anthropic/claude-sonnet-4` 等全部文档配置继续可用；catalog 条目映射为 runtime `ModelConfig`（数据级字段拷贝，contextWindow/maxOutputTokens 取目录值、缺省 128k/8k）。
+  - (d) **其余显式拒绝**，报错文案列出三条可用路径（真值表候选 / 网关变量 / catalog provider）。
+- **D5 · 主备链**：`MF_LLM_MODEL`（主）+ 可选 `MF_LLM_FALLBACK_MODELS`（逗号分隔，追加为 fallbacks，每项同样走 D4 解析）。`transportFor` 无 key 返回 null 跳过（照 DR/RF）；provider→环境变量名映射 = pi-ai 目录约定（`<PROVIDER>`_API_KEY`，连字符转下划线大写）+ 已知名表（minimax-cn→`MINIMAX_CN_API_KEY` 等，照 DR）。全部候选无 key 才抛错，文案列出各候选所需环境变量名。
+- **D6 · limits 五键 builder（收口 KA3）**：`cumulative: unlimited`、`maxOutputTokens: 32_768`、`modelTimeoutMs: 300_000`（可用 `MF_LLM_TIMEOUT_MS` 覆盖）、`toolTimeoutMs: 30_000`、`controlTimeoutMs: 30_000`（照 DR `buildLimits` 逐值拷贝）。`modelRecovery: { extraAttempts: 1 }`。
+- **D7 · 三分映射**：`succeeded` → 返回文本；`failed:INVALID_OUTPUT`（含截断）→ 返回空字符串，落入 `generate.ts` 既有解析失败桶（`{ok:false, stage}`、零写盘，红队已核实该桶存在且行为等价）；其余 `failed/blocked` → 抛错（进入既有异常桶）。`taskId` 命名 `mf:<调用方标识>`（关闭提案 Q5）。
+- **D8 · 引擎级 faux（收口 KA4）**：`src/llm/faux.ts` 弃用 pi-ai compat `registerFauxProvider`，改写为**手写脚本化 `ModelTransport`**（约 10 行，响应队列 + 调用计数），经新引擎装配成 `LlmClient`；测试外部行为（脚本文本、callCount）不变。`MF_LLM_BACKEND=faux` 主路径（`createFakeClient`）本就不碰引擎，零改动。
+- **D9 · guard 升级（收口 KA5，提为验收门槛）**：边界测试断言串扩为三个——`pi-agent-runtime`、`@earendil-works/pi-agent-core`、`@earendil-works/pi-ai`；新增一条负例测试（在临时源码串中注入违规 import，断言 guard 逻辑能检出），guard 主测试保持对 `src/` 全量扫描。
+- **D10 · Node 支持面（收口 KA2，待 diff 门确认）**：`engines` 抬至 `>=22.19.0`（= pi-ai/pi-agent-core 0.86.1 声明地板；tgz 声明的 >=24.21 经红队 dist 静态检查为保守声明，实际仅用 node17+ API）；CI `node-version` 20 → 22；tsup target node20 → node22；本机用 fnm 的 v22.23.3 实测全量验证门作为地板证据；README 安装节披露地板变化与理由。
+- **D11 · 文档同步**：README「模型访问统一走 pi-ai 适配层」改为 pi-agent-runtime 表述；provider 配置表补 `MF_LLM_FALLBACK_MODELS` / `MF_LLM_API` / `MF_LLM_TIMEOUT_MS`；`llm-smoke.sh` 头注释示例补真值表候选（保留 openai 示例——D4(c) 下仍可用）；设置页文案本批不动（M2 才重做）。
+
+### 不变式重申（验收逐条核对）
+
+工人模式（无 runAgent 工具循环）、fail-closed 人审门、faux 主路径、`LlmClient` 接口、`.env.local` 手配 UX、密钥不进页面/日志/导出物——全部不变。
 
 ## Testing Decisions
 
-- 测试缝（沿用批次 1 三缝，零新增）：
-  1. CLI 进程边界 e2e（先例 `test/cli/release.e2e.test.ts`）：F3 序号断言；F6 前置特征测试（坏模板目录）；`receipt add` 成功/重复/schema 违规零写盘/对账双态/`receipt list`
-  2. 纯函数单测（先例 `test/unit/sap-canonical.test.ts`）：receipt schema 逐字段（含未知字段忽略、kind 枚举、空数组合法）
-  3. UI 真实 server + fetch e2e（先例 `test/ui/release.test.ts`）：回执区块列表/徽标、粘贴登记成功与三类失败（schema/重复/index 损坏）、失败值保留
-- 好测试 = 外部行为（命令输出/文件产物/HTTP 响应）；重构前置特征测试先行（F6）
-- 回归门：`npm run lint && npm run typecheck && npm run test && npm run contract-test`
+- **好测试的标准**：只测外部行为（解析结果、映射结果、报错文案、guard 检出），不测 runtime 内部；引擎测试必须走真实 `createRuntime` 管线 + 脚本化 transport（prior art：`test/unit/llm-adapter.test.ts` 的 faux 引擎测试）。
+- **新增/改写单测（`test/unit/`，vitest）**：
+  1. D4 四分映射：真值表命中 / baseUrl 缺省 openai-completions / baseUrl+`MF_LLM_API` 覆盖 / catalog 回退（openai/gpt-4o）/ 显式拒绝报错文案——每条一个用例（红队 KA1 cheapest test 的正式化）。
+  2. D5 链语义：无 key 候选跳过、全无 key 报错文案含环境变量名、fallbacks 顺序保持。
+  3. D7 三分映射：脚本化 transport 分别返回成功 / 触发 INVALID_OUTPUT / 触发其他失败，断言 文本 / 空串 / 抛错。
+  4. D2 no-op audit sink：连续调用不抛错（防 `AUDIT_FAILED` 回归）。
+  5. D9 guard 负例：注入违规 import 字串 → guard 检出。
+  6. 改写：引擎级 faux 测试（D8）走新管线，断言行不变。
+- **端到端**：既有 CLI/UI/MCP e2e（全部走 `MF_LLM_BACKEND=faux` 主路径）零改动通过，即 faux 零回归证据。
+- **真实依赖用例（VERIFY 强制）**：`zsh scripts/llm-smoke.sh` 用本机 `~/.pi/agent/auth.json` 的 minimax-cn / xiaomi-token-plan-cn 密钥注入环境，对真值表两候选各跑一次真实调用，留档输出供人工评估；密钥不可用才允许降级并记录。
+- **node 地板实测**：fnm v22.23.3 下跑完整验证门（D10）。
+- **验证门（VERIFY 候选命令）**：`npm run lint && npm run typecheck && npm run test && npm run contract-test`（沿用上一 flow 实测命令）。
 
 ## Out of Scope
 
-- 消费端（JuanerAI 侧）安装/采用/回执产出实现——批次 2b 等通知
-- receipt 网络回传/自动接收；server.ts 装载拷贝合并；发布历史列表 UI（N5 维持）
-- 假设库/策略库/结构化方法对象/enum 开关/维度字典/谱系 ID/场景 patch 段/executable 状态——维持后置
+- M2 全部：密钥自动发现（`~/.pi/agent/auth.json`）、默认链自动启用、设置页降级为「查看+覆盖」、首页芯片三态化。
+- M3 全部：审计 JSONL 落盘与轮转（M1 只挂 no-op 点）、预算账本、provenance 记录实际出稿模型、设置页调用统计。
+- `runAgent` 工具循环 / 会话化草案（红线否决）。
+- 多用户密钥托管；pi-agent-runtime 上游版本跟踪策略（0.5.x 漂移留待升级决策时处理）。
+- 设置页 UI 改版、新页面（本批无用户可见新表面：设置页保持现状，仅芯片状态语义可能随链解析变化——属既有状态的更准确呈现，非新 UI）。
 
 ## Further Notes
 
-- 验收标准继承 proposal §验收（六条），Testing Decisions 落地为测试后即为完成证据。
-- B2 发布动作本身是数据操作（写 releases/），随本批提交入库；其验证 = 发布命令输出 + 快照对账断言（e2e 覆盖翻转路径，仓库内产物用对账脚本复核）。
+- 爆炸半径刻意收敛：`src/llm/*` 适配层 + `test/unit/llm-adapter.test.ts` + 工程化文件（package.json / CI / tsup / README / smoke 注释）。业务模块（engine/export/sap/ui/mcp/cli）零改动是验收项而非愿望。
+- 提案开放问题处置：Q1 vendor 提交（D1 提交 vendor/）、Q2 guard（D9）、Q3 生命周期（D3）、Q4 报错文案（D4(d)/D5）、Q5 taskId（D7）、Q6 pi-ai 去留（D1 保留）——全部关闭。
 
-## GRILL 决议（2026-10-12，自盘问；proposal/PRD 为约束不重开）
+---
 
-- **G1 `receipt list` 输出**：列 = task_id / package@version / 对账状态 / adopted 数 / issues 数 / received_at，按登记时间倒序；`--package <id>` 过滤。
-- **G2/G3 登记副本含供应侧字段**：收编副本在契约回执格式外追加供应侧字段 `received_at`（登记时间）与 `reconciliation: { status: 对账一致|对账不一致, checked_at }`——对账只在登记时刻计算并落盘；`receipt list` 与 UI 列表读副本，零 index 运行时依赖。
-- **G4 task_id 字符集**：不限制消费端 task_id 字符集（契约只定非空）；收编文件名 = `slugify(task_id) + ".receipt.yaml"`（沿用发布侧 slug 惯例）；重复检测按收编文件名——slug 冲突即重复拒绝，文案含原 task_id 与已登记时间。
-- **G5 登记与实例解耦**：`receipt add` 与 UI 粘贴登记**不**校验回执 package 与当前实例一致（回执按全局收编）；UI 列表按当前实例包 id 过滤展示，表单辅助文案说明「回执按包全局登记，此处仅展示当前包」。
-- **G10 B2 实例终态**：`examples/net-sales-instance.yaml` 保留翻转后状态（`refund_to_payment_period: false`），使发布物与源实例一致；消费指引 §6 补 v1.0.0/v1.0.1 差异说明。
-- **F6 错误策略**（红队 R1 兑现）：共享核收集全部错误不短路；cli 打印全量后退出，release 转 ReleaseError 报首个坏文件。**收敛勘误（REVIEW#1 后）**：①基线 cli 实为「首个坏文件即退出」，红队 R1 所记「收集全部」系目标行为而非基线——cli 终态按 GRILL 目标执行（全量打印），多坏文件特征测试钉住；②共享实现为 result 风格（`TemplatesDirResult`，策略归调用方），非 PRD #2 字面的抛错变体，行为要求（收集全部不短路）不变；③release 坏模板输出保持基线逐字格式（首个坏文件全部 zod 错误、`[schema]` 前缀，基线 f525be6 比对）；装载策略较基线收紧为整目录健康门（基线在坏文件排序位于目标模板之后时会跳过坏文件，REVIEW#2 F-1 实验证实），方向为收紧、无正确性风险。
-- commander 嵌套子命令 `receipt add|list` 已实证可用（v15）。
+## Diff-gate 附录（2026-10-18 用户批准）
+
+- **批准 ①**：提案决策 #5 改写为 D4 四分映射（真值表 → baseUrl 缺省 openai-completions + `MF_LLM_API` 覆盖 → pi-ai catalog 回退 → 显式拒绝）。依据：红队 KA1，原文与「配置面不变」主目标冲突。
+- **批准 ②**：`engines >=22.19.0` + CI node 22 + tsup target node22 + fnm v22.23.3 地板实测 + README 披露。依据：红队 KA2。
+- 自批增量：Q1–Q6 关闭（D1/D3/D5/D7）、no-op audit（D2）、limits 五键（D6）、faux 脚本化 transport（D8）、guard 三串+负例（D9）、`MF_LLM_FALLBACK_MODELS`/`MF_LLM_API`/`MF_LLM_TIMEOUT_MS` 三新可选 env、文档同步（D11）。
+
+---
+
+## GRILL 附录（2026-10-18，2x9 预算，2 轮收敛）
+
+### Round 1（author-blind 子代理，8 包全按推荐裁决；主线：配置错误急切响亮失败，运行时条件才静默跳过）
+
+- **G1（Q1-A）· catalog protocol 映射表**：D4(c) 字段拷贝前加显式映射 `{openai-responses → openai-completions}`（pi-ai 0.87.1 目录实测：openai 41 模型全为 openai-responses）；`google-generative-ai` 及其余未知 api 值落 D4(d) 显式拒绝，报错与 README 披露「gemini 直连暂经网关路径 (b) 接入」。**披露**：google 直连（env-file 有 key 映射但 README 未文档化的路径）在 M1 回归，迁移路径存在。
+- **G2（Q2-A）· 急切度**：D4 解析与 D5 缺 key 错误在 `createLlmClientFromEnv()` 工厂急切抛出（保住 UI `llmStatus` 探针与 US11）；惰性的只有 `createRuntime` 对象（D3 不变）。
+- **G3（Q3-A）· 密钥来源与缓存键**：transport 从注入 env 实参读 key；单例缓存键 = 解析后候选链 + 各 key 指纹哈希（仅内存，永不进日志）；**删除 process.env 桥**——顺带修复现存暗坑（设置页改 key 同进程不生效，与 env-file「保存即生效」承诺相悖），并消除 vitest 进程内环境变量污染。
+- **G4（Q4-A）· taskId**：`mf:<kind>-<seq>`；kind 来自可选工厂参数 `createLlmClientFromEnv(env, caller?)`（缺省 `complete`，四个调用点零改动，US9 不破）；seq 进程内自增保唯一（照 DR 唯一性先例；runtime 以 taskId 键控 idle/budget）。
+- **G5（Q5-A）· fallback 解析失败**：格式错/未知模型条目急切抛错且文案点名坏条目（配置笔误必须暴露）；缺 key 条目跳过（运行时条件）。trim、忽略空项、保序不去重。
+- **G6（Q6-A）· 新 env 校验**：`MF_LLM_API` 必须枚举两协议之一否则工厂抛错；`MF_LLM_TIMEOUT_MS` 必须正有限整数否则抛错（防 NaN 静默即时超时）；真值表命中 + `MF_LLM_BASE_URL` 同设 → 抛「baseUrl 对内置已验证模型不生效」（今日无此配置组合，无存量破坏）。
+- **G7（Q7-A）· llm-smoke 扩展**：脚本 +~15 行——对应 key 环境变量缺失时经 `node -e` 从 `~/.pi/agent/auth.json` 抽取注入（已设优先不覆盖）；循环两真值表候选各跑一次 generate 留档；头注释声明 smoke 专用 dev 便利、与 M2 产品面无关（VERIFY 强制门须一条命令可执行）。
+- **G8（Q8-A）· status 穷尽**：D7 措辞修为「`succeeded` → 文本；`failed:INVALID_OUTPUT` → 空串；**其余全部 status**（含 blocked/cancelled/waiting/suspended）→ 抛错」。不可达分支意外触发必须响亮失败，不污染解析失败桶。
+- R1 已自行查证并入：INVALID_OUTPUT 可经脚本化 transport 返 `stop:'length'` 触发；limits 32k 被 runtime 按 `Math.min(limits, modelCap)` 钳制（照 DR 值即生产持平）；README `anthropic/claude-sonnet-4` 示例 id 在 pi-ai 0.87 目录已不存在（现存 `claude-sonnet-4-5` 等）——现存文档漂移，D11 顺手修。
+
+### Round 2（主代理，2 包 + 3 项探索即答）
+
+- **G9 · llmStatus 链呈现**：`status.model` = 主模型 spec；配置 fallbacks 时设置页/芯片显示 `主 (+N 备)`。纯显示语义，无新表面。
+- **G10 · catalog 回退最佳-effort 披露**：README provider 节注明「真值表两模型为已验证路径；catalog 回退为兼容兜底，推理/特殊模型在 completions 端点行为未勘」。
+- 探索即答（不占包）：①tsup 默认全量打包依赖，tgz dist 无动态 require/fs 读取（grep 实证），单文件 dist 安全，无需 noExternal；②`file:` 依赖需本地 `npm install` 刷新 package-lock 并提交（CI `npm ci` 走 lockfile，DR 同法生产在跑）；③D5 envKeyFor 的公式化回退（连字符→下划线大写）对 minimax-cn/xiaomi-token-plan-cn 结果与 DR 名表一致，google→GEMINI_API_KEY 仅 env-file UX 关切，适配层按 D5 既定即可。
+
+**GRILL converged after 2 rounds（预算 2x9 用完，新增开放问题归零）。全程零升级：无 proposal 冲突、无不可逆/扩范围且无推荐项。**

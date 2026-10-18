@@ -86,9 +86,14 @@ async function llmStatus(envFilePath: string): Promise<LlmStatus> {
     createLlmClientFromEnv(env);
     const provider = spec.split("/")[0]!;
     const key = env[apiKeyEnvName(provider)];
+    // G9：主备链呈现——配置 fallbacks 时显示 主 (+N 备)（纯显示语义，无新表面）
+    const fallbackCount = (env.MF_LLM_FALLBACK_MODELS ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean).length;
     return {
       mode: "configured",
-      model: spec,
+      model: fallbackCount > 0 ? `${spec} (+${fallbackCount} 备)` : spec,
       keyMasked: key ? maskKey(key) : undefined,
       baseUrl: env.MF_LLM_BASE_URL || undefined
     };

@@ -19,6 +19,8 @@ npm run build
 node dist/cli.js --help
 ```
 
+要求 Node.js **>= 22.19**（M1 起：LLM 引擎依赖 pi-agent-runtime / pi-ai 0.86.1 的声明地板；CI 与本机实测 node 22/24）。
+
 ## 30 分钟上手路径
 
 每一步都可复制执行（在仓库根目录）：
@@ -105,7 +107,7 @@ npm run contract-test  # MetricFlow 导出契约测试（JSON Schema）
 
 ## v2 · LLM 设计器
 
-AI 出初稿、人当守门员（工人模式：单次结构化调用 + schema 校验 + fail-closed 门，模型不握方向盘；模型访问统一走 pi-ai 适配层，业务代码零 pi 依赖）。
+AI 出初稿、人当守门员（工人模式：单次结构化调用 + schema 校验 + fail-closed 门，模型不握方向盘；模型访问统一走 pi-agent-runtime 适配层（收敛于 `src/llm`），业务代码零 pi 依赖）。
 
 ### 全链路
 
@@ -139,15 +141,25 @@ node dist/cli.js mcp    # stdio 协议；工具：mf_generate / mf_refine / mf_a
 
 ### Provider 配置
 
+模型解析按四分映射顺序（M1 起，引擎为 pi-agent-runtime `runText` 通道，带主备容灾/超时/截断恢复）：
+
+1. **内置已验证模型（真值表，推荐）**：`minimax-cn/MiniMax-M3`、`xiaomi-token-plan-cn/mimo-v2.6-flash`——探针实测过的候选，配对应 key 即可用；
+2. **自定义网关**：设置 `MF_LLM_BASE_URL` 即走网关路径，协议缺省 `openai-completions`（`MF_LLM_API` 可覆盖）；
+3. **pi-ai 内置目录回退（最佳-effort 兼容路径）**：如 `openai/gpt-4o`、`anthropic/claude-sonnet-4-5`——协议经 `openai-completions` 映射，推理/特殊模型行为未勘；`google/*`（gemini 协议）暂不支持直连，请经路径 2 网关接入；
+4. 其余显式拒绝，报错文案列出三条可用路径。
+
 | 环境变量 | 作用 |
 |---|---|
-| `MF_LLM_MODEL` | `<provider>/<model-id>`，如 `openai/gpt-4o`、`anthropic/claude-sonnet-4` |
-| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` 等 | pi-ai 供应商目录对应凭证 |
-| `MF_LLM_BASE_URL` | OpenAI 兼容内部网关覆盖 |
+| `MF_LLM_MODEL` | `<provider>/<model-id>` 主模型，如 `minimax-cn/MiniMax-M3`、`openai/gpt-4o` |
+| `MF_LLM_FALLBACK_MODELS` | 逗号分隔备模型链（同四分映射；笔误急切报错点名、缺 key 候选跳过、全缺才报错） |
+| `OPENAI_API_KEY` / `MINIMAX_CN_API_KEY` / `XIAOMI_TOKEN_PLAN_CN_API_KEY` 等 | provider 对应凭证（`<PROVIDER>_API_KEY`，连字符转下划线大写） |
+| `MF_LLM_BASE_URL` | OpenAI 兼容内部网关覆盖（对已验证真值表模型不生效，同设会报错提示） |
+| `MF_LLM_API` | 网关协议覆盖：`openai-completions`（缺省）/ `anthropic-messages` |
+| `MF_LLM_TIMEOUT_MS` | 单次模型超时毫秒数（正整数，缺省 300000） |
 | `MF_LLM_BACKEND=faux` + `MF_FAUX_RESPONSE` | 确定性脚本（测试/演示，零网络） |
 | `MF_REVIEWER` | review 默认审核人 |
 
-真实链路发布前冒烟：`zsh scripts/llm-smoke.sh`（留档模型输出供人工评估口径质量）。
+真实链路发布前冒烟：`zsh scripts/llm-smoke.sh`——默认循环两真值表候选并留档输出供人工评估口径质量（密钥缺失时自动从 `~/.pi/agent/auth.json` 抽取注入，smoke 专用 dev 便利；设置 `MF_LLM_MODEL` 则退化为单模型模式）。
 
 ### 行业模板（7 个）
 

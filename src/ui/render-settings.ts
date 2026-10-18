@@ -34,8 +34,8 @@ export function settingsPage(status: LlmStatus, opts: { errors?: string[]; value
     <div class="card">
       <div class="card-h">模型配置</div>
       ${errorsHtml}
-      <div class="fld"><label>模型（provider/model-id，如 openai/gpt-4o、anthropic/claude-sonnet-4）</label>
-        <input type="text" name="model" placeholder="openai/gpt-4o" value="${escapeHtml(opts.values?.model ?? "")}" required></div>
+      <div class="fld"><label>模型（provider/model-id，如 minimax-cn/MiniMax-M3、openai/gpt-4o）</label>
+        <input type="text" name="model" placeholder="minimax-cn/MiniMax-M3" value="${escapeHtml(opts.values?.model ?? "")}" required></div>
       <div class="fld"><label>API Key（${status.keyMasked ? `已保存 ${escapeHtml(status.keyMasked)}，留空则不修改` : "按模型 provider 自动存为对应环境变量；仅存本机 .env.local，页面不回显"}）</label>
         <input type="password" name="api_key" placeholder="${status.keyMasked ? "留空保持不变" : "sk-…"}" autocomplete="off"></div>
       <div class="fld"><label>网关地址（可选，OpenAI 兼容内部网关覆盖）</label>
