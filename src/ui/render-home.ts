@@ -60,12 +60,16 @@ export function homePage(args: {
     }
   </div>`;
 
+  // G7 四分支三态：就绪（绿，来源小字二值）/ 未配置（灰正常态+引导）/ 配置错误（红+摘要）/ 演示模式（accent）
+  const mainModel = args.llm.mainSpec ?? args.llm.model ?? "";
   const llmLine =
     args.llm.mode === "configured"
-      ? `<span>${chip("ok", "AI 模型已连接")} <span class="mono">${escapeHtml(args.llm.model ?? "")}</span></span>`
+      ? `<a href="/settings" class="chip chip-ok" title="去设置查看与覆盖">就绪 · ${escapeHtml(mainModel)}</a> <span style="color:var(--text-2);font-size:0.82rem">来源：${args.llm.modelSource === "default-chain" ? "自动发现" : "手动配置"}</span>`
       : args.llm.mode === "faux"
-        ? `${chip("accent", "AI 演示模式")} <a href="/settings">设置</a>`
-        : `${chip("warn", "AI 未配置")} <a href="/settings">去设置模型</a>（不配置也可用模板微调全流程）`;
+        ? `<a href="/settings" class="chip chip-accent" title="去设置配置真实模型">演示模式</a> <span style="color:var(--text-2);font-size:0.82rem">faux 确定性后端（零网络），供体验与测试；配置真实模型后自动切换 · <a href="/settings">去设置</a></span>`
+        : args.llm.mode === "error"
+          ? `<a href="/settings" class="chip chip-fail" title="去设置修正配置">配置错误</a> <span style="color:var(--text-2);font-size:0.82rem">${escapeHtml((args.llm.error ?? "").slice(0, 160))} · <a href="/settings">去设置</a></span>`
+          : `<a href="/settings" class="chip chip-queue" title="去设置手动配置">未配置</a> <span style="color:var(--text-2);font-size:0.82rem">本机已有 pi CLI 凭据即可零配置直接使用；或去设置手动配置（不配置也可用模板微调全流程）</span>`;
 
   return `${flow}
   ${currentCard}

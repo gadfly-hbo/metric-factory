@@ -8,7 +8,7 @@ import { createUiServer, listenUi } from "../../src/ui/server.js";
 
 // 切片 5：UI 基建（真实 server + fetch 边界）
 async function startUi() {
-  const server = createUiServer({ templatesDir: "templates" });
+  const server = createUiServer({ authJsonPath: join(tmpdir(), "mf-ui-no-auth.json"), templatesDir: "templates"  });
   const port = await listenUi(server, 0);
   return { server, base: `http://127.0.0.1:${port}` };
 }
@@ -98,7 +98,7 @@ test("杜邦树：公式算符、北极星与模块分组（模板页）", async
 });
 
 test("杜邦树：实例页勾稽徽标（已修改/待审核/未入树）", async () => {
-  const server = createUiServer({ templatesDir: "templates", instancePath: "test/fixtures/instance-ecommerce.yaml" });
+  const server = createUiServer({ authJsonPath: join(tmpdir(), "mf-ui-no-auth.json"), templatesDir: "templates", instancePath: "test/fixtures/instance-ecommerce.yaml"  });
   const port = await listenUi(server, 0);
   const base = `http://127.0.0.1:${port}`;
   const html = await (await fetch(`${base}/instance`)).text();

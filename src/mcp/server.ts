@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { defaultTemplatesDir } from "../paths.js";
 import { loadInstance, loadTemplate } from "../engine/loader.js";
 import { materialize } from "../engine/materialize.js";
@@ -8,6 +8,7 @@ import { validateInstance } from "../engine/validate.js";
 import { auditInstance } from "../engine/audit.js";
 import { buildGeneratePrompt, buildRefinePrompt } from "../llm/prompt.js";
 import { createLlmClientFromEnv, estimateTokens } from "../llm/index.js";
+import { resolveLlmEnvAuto } from "../llm/env-auto.js";
 import { generateDraft, generateRefineDraft } from "../engine/generate.js";
 import { metricflowExporter } from "../export/metricflow.js";
 import { excelExporter } from "../export/excel.js";
@@ -24,9 +25,21 @@ const exporters = {
 } as const;
 
 // MCP 语义（GRILL 决议 #6）：工具一律返回草案/结果 JSON，不写盘——人审由 agent 会话呈现给用户，落盘走 CLI apply/review
-export function buildMcpServer(): McpServer {
+// M2（②A/G1）：env 合成与 UI/CLI 共用（process env > cwd/.env.local > 自动发现）；opts 供测试注入密闭
+export interface McpServerOptions {
+  authJsonPath?: string;
+  envFilePath?: string;
+}
+
+export function buildMcpServer(opts: McpServerOptions = {}): McpServer {
   const server = new McpServer({ name: "metric-factory", version: "0.2.0" });
   const templatesDir = defaultTemplatesDir();
+  const resolveEnv = (): Promise<NodeJS.ProcessEnv> =>
+    resolveLlmEnvAuto({
+      processEnv: process.env,
+      envFilePath: opts.envFilePath ?? join(process.cwd(), ".env.local"),
+      authJsonPath: opts.authJsonPath
+    }).then((r) => r.env);
 
   async function loadContext(instancePath: string): Promise<{ instance: Instance; base: Template }> {
     const loaded = await loadInstance(instancePath);
@@ -62,8 +75,9 @@ export function buildMcpServer(): McpServer {
           estimatedTokens: estimateTokens(prompt.system) + estimateTokens(prompt.user)
         });
       }
-      const client = createLlmClientFromEnv();
-      const modelLabel = process.env.MF_LLM_MODEL ?? (process.env.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
+      const llmEnv = await resolveEnv();
+      const client = createLlmClientFromEnv(llmEnv);
+      const modelLabel = llmEnv.MF_LLM_MODEL ?? (llmEnv.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
       const result = await generateDraft(client, prompt, describe, modelLabel, new Date().toISOString());
       if (!result.ok) {
         throw new Error(`生成失败（阶段 ${result.stage}），模型输出整批拒绝；可先 dryRun=true 评估 prompt。原始输出：${result.raw.slice(0, 2000)}`);
@@ -93,8 +107,9 @@ export function buildMcpServer(): McpServer {
           estimatedTokens: estimateTokens(prompt.system) + estimateTokens(prompt.user)
         });
       }
-      const client = createLlmClientFromEnv();
-      const modelLabel = process.env.MF_LLM_MODEL ?? (process.env.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
+      const llmEnv = await resolveEnv();
+      const client = createLlmClientFromEnv(llmEnv);
+      const modelLabel = llmEnv.MF_LLM_MODEL ?? (llmEnv.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
       const result = await generateRefineDraft(client, prompt, instruction, modelLabel, new Date().toISOString());
       if (!result.ok) {
         throw new Error(`微调草案生成失败（阶段 ${result.stage}）；可先 dryRun=true。原始输出：${result.raw.slice(0, 2000)}`);

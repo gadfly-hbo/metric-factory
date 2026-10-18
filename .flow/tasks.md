@@ -1,87 +1,103 @@
-# M1 · 任务切片（tracer-bullet 垂直切片）
+# M2 · 任务切片（tracer-bullet 垂直切片）
 
-> 规格源：`.flow/prd.md`（含 diff-gate 附录 ①② 与 GRILL 附录 G1–G10）。无 tracker，落盘本文件。切片自批记录见 state.json history。
+> 规格源：`.flow/prd.md`（含 diff-gate 附录 ①A②A、GRILL 附录 G1–G9/G4 裁决 B）+ `.flow/ui-contract.md`（S1–S9/H1–H5）。无 tracker，落盘本文件。切片自批记录见 state.json history。
 
-- [x] 1. 依赖与工程面落地（prefactor）
-- [x] 2. runtime 通道贯通（tracer：一条 complete() 走通新引擎）
-- [x] 3. 配置解析与工厂接线（四分映射 + 急切校验 + 主备链）
-- [x] 4. faux 改写、全量回归与文档/冒烟同步
+- [x] 1. 发现层 + 合成 helper 地基（prefactor）
+- [x] 2. 默认链自动启用 + CLI/MCP 接线（零配置 tracer）
+- [x] 3. 设置页写侧：save/clear 降级 + 遮蔽警告
+- [x] 4. 设置页读侧「查看」面 + 首页芯片 + 文案同步
+- [x] 5. 密闭性双环境验证 + 零配置真实用例
 
 ---
 
-## 1. 依赖与工程面落地（prefactor）
+## 1. 发现层 + 合成 helper 地基（prefactor）
 
-**Blocked by**: 无 — 可立即开始
-**User stories**: US8、US12
+**Blocked by**: 无
+**User stories**: US11、US12、US14（+D1/D2/D3/D4/D6/G1/G2）
 
 ### What to build
 
-vendored `pi-agent-runtime@0.4.3` 落地为可安装依赖（tgz 拷自 deep-research vendor，随仓提交），package-lock 同步刷新；Node 支持面抬至声明地板 `>=22.19.0`（CI node 22、tsup target node22、README 披露）；guard 边界测试的断言串扩为 `pi-agent-runtime` / `@earendil-works/pi-agent-core` / `@earendil-works/pi-ai` 三串并补一条负例测试（注入违规 import 字串可检出）。本切片结束时引擎尚未接线，但依赖可安装、guard 对新包名已有执法。
+密钥自动发现与三层 env 合成的纯函数地基：发现模块读 auth.json（扁平 `{provider:{key?}}`），文件不存在/JSON 坏/条目非 object/缺 key（OAuth 形态）/空串 key 一律静默跳过、永不抛错、永不写盘；合成 helper 返回 `{env, sources}`——`process env > .env.local > 发现` 三层合并，空串按未设置，sources 覆盖 `MF_LLM_MODEL`/`MF_LLM_FALLBACK_MODELS`/`MF_LLM_BASE_URL`/被触及的 `*_API_KEY`（取值 `process|env-file|discovery|default-chain`）；provider→环境变量名映射三处合一（已知表并集 + `[^A-Z0-9]→_` 公式，env-file 侧改为引用）；环境变量缝 `MF_LLM_AUTH_JSON_PATH` 作为发现路径唯一覆盖点。工厂 `createLlmClientFromEnv` 一行不动。
 
 ### Acceptance criteria
 
-- [ ] `vendor/pi-agent-runtime-0.4.3.tgz` 在仓内且被 package.json `file:` 引用；`npm install` 后 `npm ci` 绿（lockfile 已提交）
-- [ ] `engines.node >=22.19.0`；CI workflow node-version 22；tsup target node22；`npm run build` 绿
-- [ ] guard 测试断言三串齐全；负例测试注入 `import "pi-agent-runtime"` 字串可检出（红→绿）
-- [ ] `npm run typecheck` 绿（依赖类型面可解析）
+- [ ] 发现容错单测全绿：正常条目、OAuth 条目、JSON 截断、非 object、空串 key、文件不存在——全部静默语义
+- [ ] 合成优先级单测：process > .env.local > 发现；部分配置组合（env 有模型无 key + 发现有 key → 补齐；env key ≠ 发现 key → env 赢）
+- [ ] sources 断言：每被触及键的来源正确；空串按未设置
+- [ ] 映射合一：含 `.` provider 产出合法变量名；已知表存量（MINIMAX_CN_API_KEY 等）不变；env-file 与 llm 模块单一名义源
+- [ ] `MF_LLM_AUTH_JSON_PATH` 覆盖缺省路径（单测证明）；全量验证门绿
 
-## 2. runtime 通道贯通（tracer）
+## 2. 默认链自动启用 + CLI/MCP 接线（零配置 tracer）
 
 **Blocked by**: 1
-**User stories**: US1、US6、US7、US10、US13
+**User stories**: US1、US2、US3、US5、US6、US10（+D5/G3/G4/G8/G1）
 
 ### What to build
 
-`src/llm` 内建起 runtime 通道并让一个 `complete()` 端到端走通：`createRuntime` 装配（authorize 无条件放行、no-op audit sink 永不抛错、limits 五键 builder、`modelRecovery.extraAttempts=1`）、`runText` 三分映射（succeeded→文本；INVALID_OUTPUT→空串；其余全部 status→抛错）、taskId `mf:<kind>-<seq>`（进程内自增）、runtime 进程级惰性单例（缓存键=候选链+key 指纹哈希，仅内存）。测试缝：手写脚本化 `ModelTransport`（响应队列+调用计数，`stop:'length'` 触发 INVALID_OUTPUT）。本切片只要求通道能力被单测证明；工厂接线（env 解析）属切片 3。
+零配置端到端走通：合成 helper 内物化默认链——`MF_LLM_MODEL` 未设且 `MF_LLM_BASE_URL` 未设且默认链（MiniMax-M3 主 / mimo-v2.6-flash 备，G4 裁决 B）至少一个候选 key 可解析时注入 `MF_LLM_MODEL`+`MF_LLM_FALLBACK_MODELS`（sources 标 `default-chain`）；发现到几家启用几家。CLI generate/refine 与 MCP 两工具改走共享合成（processEnv + cwd/.env.local + 发现，②A），draft modelLabel 读合成后 env；`buildMcpServer` 参数化（authJsonPath/envFilePath 可注入）；工厂未配置报错文案升级（保留 `MF_LLM_MODEL`/`faux` token，MCP 测试断言不断）。
 
 ### Acceptance criteria
 
-- [ ] 脚本化 transport 下 `complete()` 返回脚本文本且 callCount 正确
-- [ ] `stop:'length'` 路径映射为空字符串；其他失败/阻断/取消类 status 全部抛错且文案含 reason
-- [ ] no-op audit sink 连续调用不抛错
-- [ ] limits 五键与 modelRecovery 值符合 D6；taskId 含 kind 前缀且同进程唯一
-- [ ] 单例语义：同键复用、key 指纹变更新实例（单测证明）
+- [ ] 默认链单测：双 key → 主+备注入；单 key → 主+备（备缺失跳过）；零 key → 不注入（未配置）；baseUrl 在场 → 不注入；只设 fallbacks → 不注入（M1 急切抛错维持）
+- [ ] CLI/MCP 零配置合成生效（注入 fixture 证明链生效）；`buildMcpServer(opts)` 注入缝可用
+- [ ] 未配置新文案含三条手配路径 + 两 token；既有 MCP 断言不改语义通过
+- [ ] 全量验证门绿（既有 e2e 以 `MF_LLM_AUTH_JSON_PATH` 密闭）
 
-## 3. 配置解析与工厂接线
+## 3. 设置页写侧：save/clear 降级 + 遮蔽警告
 
 **Blocked by**: 2
-**User stories**: US2、US3、US4、US5、US11（+G9）
+**User stories**: US5、US8（+D7/G5/G6/契约 S7/S8/S9/S4）
 
 ### What to build
 
-`createLlmClientFromEnv` 重写为急切校验工厂：四分映射 resolver（真值表两验证模型 → `MF_LLM_BASE_URL` 网关（protocol 缺省 openai-completions、`MF_LLM_API` 覆盖）→ catalog 回退（`openai-responses→openai-completions` 映射表；google 等未知 api 显式拒绝并给网关迁移指引）→ 显式拒绝且报错列出三条路径）；`MF_LLM_FALLBACK_MODELS` 解析（笔误急切抛错点名坏条目、缺 key 跳过、trim/空项/保序）；三个新 env 的非法值急切抛错（G6）；密钥从注入 env 实参读取并删除 process.env 桥（G3，修复设置页改 key 不生效暗坑）；faux 后端分支保持原样；`llmStatus` 呈现 `主 (+N 备)`。
+设置页写侧降级：模型字段不再 required；空模型保存 ≡ `/settings/clear` 语义（`MF_LLM_MODEL`/`MF_LLM_BASE_URL`/前一 provider key 全置 null，忽略 api_key/base_url 输入，页面注明「模型留空保存 = 清除覆盖、回退自动发现」）；模型填+key 空 = 只存模型（「留空则不修改」延续）；422 仅 slash 违例；保存/清除成功 303 + `?saved=1`/`?cleared=1` 一次性横幅；渲染与保存后重渲染均对被 process env 遮蔽的键显示警告行（需先 unset 才生效，只含变量名）。
 
 ### Acceptance criteria
 
-- [ ] 四分映射每路一条单测（含 `openai/gpt-4o` 经映射表可用、`google/*` 拒绝文案含网关指引、乱配置拒绝文案列三路径）
-- [ ] fallbacks：拼错条目抛错点名；无 key 跳过；全候选无 key 报错列出所需环境变量名
-- [ ] `MF_LLM_API`/`MF_LLM_TIMEOUT_MS` 非法值、真值表命中+baseUrl 同设，均工厂急切抛错
-- [ ] 密钥改后同进程生效（注入 env 新 key → 新 transport，单测证明）；process.env 桥已删
-- [ ] UI `llmStatus` 探针：configured/error 分类正确且显示 `主 (+N 备)`；`npm run build` 后设置页 UX 语义不变
+- [ ] 空模型保存 = clear 键集合（单测逐键断言）；模型+空 key 只存模型；slash 违例 422 同页重渲染、查看面不扰动
+- [ ] 横幅 `?saved=1`/`?cleared=1` 一次性呈现；裸 GET 无横幅
+- [ ] 遮蔽警告：process env 覆盖 .env.local 键时渲染出现（含保存后重渲染），文案只含变量名
+- [ ] 既有 settings 测试适配（注入 authJsonPath 空 fixture）+ 全量验证门绿
 
-## 4. faux 改写、全量回归与文档/冒烟同步
+## 4. 设置页读侧「查看」面 + 首页芯片 + 文案同步
 
 **Blocked by**: 3
-**User stories**: US6、US7（回归面）、US12（验证面）
+**User stories**: US4、US7、US9、US15（+D7/D8/D9/D12/G7/G9 + UI 契约全状态）
 
 ### What to build
 
-`src/llm/faux.ts` 弃用 pi-ai compat `registerFauxProvider`，改以切片 2 的脚本化 transport 驱动新引擎（测试外部行为不变）；既有 llm-adapter 测试适配新结构；`scripts/llm-smoke.sh` 扩展——key 环境变量缺失时从 `~/.pi/agent/auth.json` 抽取注入（不覆盖已设值）、循环两真值表候选各跑一次留档、头注释声明 smoke 专用 dev 便利（G7）；README provider 配置表补三个新 env + 真值表两模型 + catalog 最佳-effort 披露 + google 网关迁移指引 + 修正已失效的 `claude-sonnet-4` 示例 id（G10/R1 查证）；设置页 placeholder 与 README 示例对齐真值表候选。
+读侧呈现按 UI 契约落地：llmStatus 消费 `{env, sources}`；设置页状态 chip 四分支、生效链全表格（每候选：角色/模型/来源 chip/打码或 `—`）、链外 pi CLI 凭据提示行（仅 provider 名）、表单 value 永空 + placeholder 生效模型；首页芯片四分支三态（就绪绿+来源小字/未配置灰正常态/配置错误红 `.chip-fail`/演示模式 accent）可点击去设置；术语改词（「配置错误」「演示模式」）；CSS 增量两行（契约 §7.3）；README 零配置叙事（限定 pi CLI 凭据、MiniMax 已知风险注记带留档、`MF_LLM_AUTH_JSON_PATH` 补行、provider 表更新）。
 
 ### Acceptance criteria
 
-- [ ] faux.ts 无 `@earendil-works/pi-ai/compat` import；引擎级 faux 测试断言行不变地通过
-- [ ] `npm run lint && npm run typecheck && npm run test && npm run contract-test` 全绿
-- [ ] smoke 脚本一条命令可对两真值表候选留档输出（本机 auth.json 两候选 key 均存在）
-- [ ] README/设置页/脚本注释三处配置示例一致；`MF_LLM_FALLBACK_MODELS`/`MF_LLM_API`/`MF_LLM_TIMEOUT_MS` 在 provider 表可查
+- [ ] UI 测试覆盖契约关键态：S1/S2/S3/S4/S5 + H1/H3/H4（HTTP 边界，注入临时 envFile + authJsonPath fixture）
+- [ ] 契约负例逐条成立：密钥只打码、faux 恒演示模式、未配置恒灰、发现层错误不显示、表单 value 永不回填
+- [ ] `a.chip`/`.chip-fail` CSS 落地；术语与契约 §4 钉死文案一致
+- [ ] README 四处同步（零配置节/风险注记/新 env 行/provider 表）；全量验证门绿
+
+## 5. 密闭性双环境验证 + 零配置真实用例
+
+**Blocked by**: 4
+**User stories**: US1、US14（+D3 验收/验证门）
+
+### What to build
+
+验收执行切片：双环境一致性——全量验证门在「真实 auth.json 在场」与「发现路径指向不存在文件」两环境各跑一次、结果一致（D3/KA2 验收）；零配置真实用例——清空 MF_LLM_MODEL 与 provider key 环境变量，CLI `generate` 经自动发现 + 默认链真实跑通并留档（本机 auth.json 两候选 key 在手，G4 链序 = MiniMax 主）；faux 全量回归确认。
+
+### Acceptance criteria
+
+- [ ] 双环境全量门 exit code 与测试数一致（留档两份日志）
+- [ ] 零配置 CLI generate 真实 exit=0 + 草案留档（provenance 显示默认链链首）
+- [ ] faux e2e 全量绿；验证门 `npm run lint && npm run typecheck && npm run test && npm run contract-test` 全绿
 
 ---
 
-**VERIFY 备忘**：验证门 `npm run lint && npm run typecheck && npm run test && npm run contract-test`；真实依赖用例=扩展后 smoke 脚本两候选实跑（G7）；node 地板实测=fnm v22.23.3 全量门（D10）。
+**VERIFY 备忘**：验证门同 M1；真实依赖用例 = 零配置 generate（本机 auth.json）；node 地板维持 22.19（engines 已声明，本批不动工程面）。
 
 ---
 
 ## REVIEW cycle 1 工作项（2026-10-18，源自 .flow/review-findings.md）
 
-- [x] R1（F1 blocking）：e2e 5000ms 默认超时过紧——新增 vitest.config.ts 显式 testTimeout=15000（进程边界 e2e 合理阈值，不削弱行为断言）；node 22.23.3 全量门连跑 3 次 exit=0 + node 24 全量门 exit=0
-- [x] R2（F2 blocking）：smoke 循环逐候选容错——`run_smoke_for_model` 失败记入该候选目录 smoke-failure.txt 并继续下一候选；结尾逐候选汇总；任一候选失败脚本 exit=1 但双候选留档齐全；重跑产出真实双候选留档
+- [x] R1（F1 blocking）：S8 422 重渲染——表单 error-list 加 `id="settings-issues"`，模型输入在错误态加 `aria-invalid="true"` + `aria-describedby="settings-issues"`（契约 §3）
+- [x] R2（F2 blocking）：S5 错误态——工厂报错原文改经 `error-list` + `role="alert"` 容器呈现（契约 §1）
+- [x] R3（F3 blocking）：faux 短路改用合成后终值（先合并层叠再判 BACKEND==="faux"），显式非 faux BACKEND 覆盖 .env.local faux 时发现层照常运行（D4 显式赢语义）

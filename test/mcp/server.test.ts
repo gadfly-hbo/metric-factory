@@ -1,10 +1,17 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { test, expect } from "vitest";
-import { buildMcpServer } from "../../src/mcp/server.js";
+import { buildMcpServer, type McpServerOptions } from "../../src/mcp/server.js";
 
-async function connect() {
-  const server = buildMcpServer();
+// 测试密闭（D3/G1）：默认注入不存在的 auth.json 路径——有真实 ~/.pi/agent/auth.json 的开发机上
+// 断言不因默认链自动启用而翻转（验证门不做环境抽签）
+const NO_AUTH = join(tmpdir(), "mf-test-no-auth.json");
+
+async function connect(opts: McpServerOptions = {}) {
+  const server = buildMcpServer({ authJsonPath: NO_AUTH, ...opts });
   const client = new Client({ name: "mf-test", version: "0.0.1" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -40,7 +47,7 @@ test("mf_validate 合法实例通过、坏实例报错", async () => {
   expect(parsedBad.issues.some((i) => i.rule === "dangling-dimension")).toBe(true);
 });
 
-test("mf_generate 无模型配置时返回 isError 结果与可读指引", async () => {
+test("mf_generate 无模型配置时返回 isError 结果与零配置时代指引（G8）", async () => {
   const client = await connect();
   const result = (await client.callTool({
     name: "mf_generate",
@@ -48,7 +55,23 @@ test("mf_generate 无模型配置时返回 isError 结果与可读指引", async
   })) as { isError?: boolean; content: { text: string }[] };
   expect(result.isError).toBe(true);
   const textOut = result.content.map((c) => c.text).join("");
+  expect(textOut).toMatch(/自动发现/);
   expect(textOut).toMatch(/MF_LLM_MODEL|faux/);
+});
+
+test("mf_generate 经 opts.envFilePath 合成生效（faux 写 .env.local，证明 ②A 接线）", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mf-mcp-env-"));
+  const envFile = join(dir, ".env.local");
+  writeFileSync(envFile, "MF_LLM_BACKEND=faux\nMF_FAUX_RESPONSE=[{\"name\":\"x_gmv\",\"display_name\":\"X GMV\",\"type\":\"simple\",\"definition\":\"X 订单金额\",\"dimensions\":[\"channel\"],\"time_grains\":[\"day\"],\"owner_role\":\"电商负责人\"}]\n", "utf8");
+  const client = await connect({ envFilePath: envFile });
+  const result = (await client.callTool({
+    name: "mf_generate",
+    arguments: { instancePath: "examples/ecommerce-instance.yaml", describe: "跨境电商" }
+  })) as { isError?: boolean; content: { text: string }[] };
+  expect(result.isError).toBeFalsy();
+  const textOut = result.content.map((c) => c.text).join("");
+  const parsed = JSON.parse(textOut) as { draft: { added: { name: string }[] } };
+  expect(parsed.draft.added[0]!.name).toBe("x_gmv");
 });
 
 test("mf_diff 返回结构化差异；mf_export 返回内容不写盘", async () => {

@@ -5,6 +5,7 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import type { LlmClient } from "./types.js";
 import { createFakeClient } from "./fake-client.js";
 import { createPiClient, type PiCandidate } from "./pi-client.js";
+import { providerEnvKey } from "./provider-keys.js";
 
 export type { LlmClient, LlmRequest } from "./types.js";
 export { createFakeClient } from "./fake-client.js";
@@ -62,7 +63,10 @@ export function resolveModelChain(env: NodeJS.ProcessEnv): ResolvedCandidate[] {
   const spec = env.MF_LLM_MODEL;
   if (!spec) {
     throw new Error(
-      "未配置模型：请设置 MF_LLM_MODEL=<provider>/<model-id>（或 MF_LLM_BACKEND=faux 用于测试），详见 README provider 配置表"
+      "未配置模型：自动发现未找到可用候选凭据（~/.pi/agent/auth.json 不存在或无真值表候选 key）。" +
+        "手配路径：1) 工作台设置页保存（写 .env.local，CLI/MCP 同读）；" +
+        "2) export MF_LLM_MODEL=<provider>/<model-id> 加对应 *_API_KEY；3) MF_LLM_BACKEND=faux（测试/演示）。" +
+        "详见 README provider 配置表"
     );
   }
   if (env.MF_LLM_API !== undefined && !RUNTIME_PROTOCOLS.includes(env.MF_LLM_API as (typeof RUNTIME_PROTOCOLS)[number])) {
@@ -146,16 +150,9 @@ function toModelConfig(catalog: Model<Api>): ModelConfig {
   };
 }
 
-/** provider → 环境变量名（密钥只从注入 env 读，不经 process.env 桥——G3）。 */
+/** provider → 环境变量名（密钥只从注入 env 读，不经 process.env 桥——G3；D6 合一后委托 provider-keys）。 */
 function envKeyFor(provider: string): string {
-  const known: Record<string, string> = {
-    "minimax-cn": "MINIMAX_CN_API_KEY",
-    minimax: "MINIMAX_API_KEY",
-    "xiaomi-token-plan-cn": "XIAOMI_TOKEN_PLAN_CN_API_KEY",
-    google: "GEMINI_API_KEY",
-    gemini: "GEMINI_API_KEY"
-  };
-  return known[provider] ?? `${provider.replace(/-/g, "_").toUpperCase()}_API_KEY`;
+  return providerEnvKey(provider);
 }
 
 /** G6：MF_LLM_TIMEOUT_MS 必须是正有限整数（防 NaN 静默即时超时）。 */

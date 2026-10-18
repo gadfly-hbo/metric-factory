@@ -49,6 +49,12 @@ body { background: var(--bg); color: var(--text); font: 400 15px/1.55 var(--font
 .chip-warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-line); }
 .chip-queue { background: var(--queue-soft); color: var(--queue-ink); border-color: var(--queue-line); }
 .chip-accent { background: var(--accent-soft); color: var(--accent-strong); border-color: var(--accent-line); }
+/* M2 UI 契约 §7.3 增量：红芯片 fail 语义色；芯片作链接去下划线 */
+.chip-fail { background: var(--fail-soft); color: var(--fail); border-color: var(--fail-line); }
+a.chip { text-decoration: none; }
+/* M2 一次性横幅（G6 反馈机制） */
+.banner { padding: 12px 16px; font-size: 0.88rem; }
+.banner-ok { border-color: var(--ok-line); background: var(--ok-soft); color: var(--ok); }
 .btn { display: inline-block; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); border-radius: var(--rounded-sm); padding: 6px 12px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; }
 .btn-primary { background: var(--accent); border-color: var(--accent-strong); color: #fff; }
 .btn:hover { border-color: var(--text-3); }
@@ -196,7 +202,7 @@ export function layout(active: NavKey, title: string, desc: string, content: str
 </body></html>`;
 }
 
-export function chip(kind: "ok" | "warn" | "queue" | "accent", text: string): string {
+export function chip(kind: "ok" | "warn" | "queue" | "accent" | "fail", text: string): string {
   return `<span class="chip chip-${kind}">${escapeHtml(text)}</span>`;
 }
 

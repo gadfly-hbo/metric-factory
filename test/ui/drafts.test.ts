@@ -20,7 +20,7 @@ function fauxWorkspace(fauxResponse: string): { dir: string; inst: string; envFi
 }
 
 async function startUi(dir: string, inst: string) {
-  const server = createUiServer({ templatesDir: "templates", workspaceDir: dir, envFilePath: join(dir, ".env.local"), instancePath: inst });
+  const server = createUiServer({ authJsonPath: join(tmpdir(), "mf-ui-no-auth.json"), templatesDir: "templates", workspaceDir: dir, envFilePath: join(dir, ".env.local"), instancePath: inst  });
   const port = await listenUi(server, 0);
   return { server, base: `http://127.0.0.1:${port}` };
 }

@@ -19,7 +19,7 @@ function tmpFixture(fixture = "instance-ecommerce.yaml"): { dir: string; inst: s
 }
 
 async function startUi(inst: string, dir: string) {
-  const server = createUiServer({ templatesDir: "templates", workspaceDir: dir, envFilePath: join(dir, ".env.local"), instancePath: inst });
+  const server = createUiServer({ authJsonPath: join(tmpdir(), "mf-ui-no-auth.json"), templatesDir: "templates", workspaceDir: dir, envFilePath: join(dir, ".env.local"), instancePath: inst  });
   const port = await listenUi(server, 0);
   return { server, base: `http://127.0.0.1:${port}` };
 }
@@ -293,7 +293,7 @@ test("N5/N3 撞种子 id + 空决策用途：422 同时给出 E-02 与 E-01（�
 });
 
 test("N8 无实例：/instance 维持既有 empty 态，场景区块不渲染", async () => {
-  const server = createUiServer({ templatesDir: "templates" });
+  const server = createUiServer({ authJsonPath: join(tmpdir(), "mf-ui-no-auth.json"), templatesDir: "templates"  });
   const port = await listenUi(server, 0);
   const base = `http://127.0.0.1:${port}`;
   const html = await (await fetch(`${base}/instance`)).text();

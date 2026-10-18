@@ -1,73 +1,81 @@
-# Red-Team: M1 — 把 metric-factory LLM 层从 pi-ai compat 换成 vendored pi-agent-runtime 0.4.3 的 `runText` 通道，宣称「只换引擎，不换 UX」
+## Red-Team: M2 零配置体验（auth.json 密钥自动发现 + 默认链自动启用 + 设置页降级 + 首页芯片三态化）
 
-已对提案的代码级假设逐条对照实证：本仓 `src/llm/*`、`test/unit/llm-adapter.test.ts`、`package.json`、`tsup.config.ts`、CI workflow、`src/ui/server.ts` + `render-settings.ts` + `env-file.ts`、`scripts/llm-smoke.sh`、README；以及对 `deep-research/vendor/pi-agent-runtime-0.4.3.tgz` 的 `package.json` 与全部 `.d.ts` 的直接解包检查、DR 的 `src/adapters/piRuntime.ts` 实际用法。
+规格源仅 `.flow/proposal.md`。已对以下负载假设做了本地实证：`~/.pi/agent/auth.json` 真实结构（只看结构/键名，未读值）、M1 handoff 与 smoke 留档、`src/llm/*`、UI 四处文件、CLI/MCP 调用点、reports-factory 先例、测试套件。
 
-### Top Kill-Assumptions (ranked by 影响 × 可能性 × 测试成本）
+### Top Kill-Assumptions (ranked)
 
-**KA1 · 「环境变量配置面不变 / 设置页不变」与「真值表三分映射、其余显式拒绝」直接矛盾**
-- **Claim:** 决策 #5/#6 + 目标节：只换引擎，`MF_LLM_MODEL` 等配置面不变、设置页 UX 不动、业务零改动。
-- **Steelman:** 对「已验证两模型」（MiniMax-M3 / mimo-v2.6-flash）的用户，以及 `MF_LLM_BACKEND=faux` 的测试路径，配置面确实逐字节不变；DR 已用同一真值表在生产跑通，照抄风险最低。
-- **Attack:** 真值表只有 2 个条目（DR `piRuntime.ts:98-118`），而本仓**自有文档与脚本全部指向会被显式拒绝的配置**：README:144 示例 `openai/gpt-4o`、`anthropic/claude-sonnet-4`；`render-settings.ts:37-38` 设置页 placeholder 就是 `openai/gpt-4o`；`env-file.ts:16-19` 内置 openai/anthropic/google/gemini 四 provider 的 key 映射；`scripts/llm-smoke.sh:7` 的发布门槛冒烟头注释写的是 `export MF_LLM_MODEL=openai/gpt-4o`——升级后**仓库自己的冒烟脚本按自文档执行即被拒**。更硬的是：DR 三分 (b) 要求 `baseUrl + api` 双输入（`resolveModelConfig` 在 `cfg.baseUrl && cfg.api` 缺一时报错，`piRuntime.ts:121-138`），而 MF 环境变量面**没有 `api` 来源**——`src/ui/server.ts:1130` 只写 `MF_LLM_MODEL` + `MF_LLM_BASE_URL` + key，提案全文未引入 `MF_LLM_API` 之类变量。所以「照抄 DR」时自定义网关路径 (b) **永远无法触发**，今天所有 `MF_LLM_BASE_URL` 网关用户（README:146 记载的核心用法）从「可用」变成「显式拒绝」，且提案内无补救路径。这不是 UX 不变，是配置语义的整体收窄。
-- **Fails if:** 决策 #5 按现状进 PRD——任一现行文档配置（含本仓 smoke 脚本自带示例）在新 resolver 下落到 (c) 显式拒绝，且自定义网关路径因 `api` 无来源而不可达。
-- **Evidence to get this week:** 桌面推演即可：把 README/设置页/smoke 三处记载的 4 类配置逐一代入 `resolveModelConfig` 签名，确认全部落空；同时裁决 `api` 的来源（新增 env 变量？baseUrl 缺省推断 openai-completions？真值表扩种？）。
-- **Kill criterion:** 若裁决结果为「显式拒绝 + 不提供 api 来源 + 不动设置页/文档」三者同时成立，则「不换 UX」目标死亡——必须在 PRD 前改写决策 #5（三选一：引入 `MF_LLM_API`、baseUrl 存在时缺省 `openai-completions`、或把「配置面不变」目标本身降级为「配置迁移」并同步改 README/设置页/smoke）。
-- **Cheapest test:** 30 行 spike：把 DR 的 `resolveModelConfig` 拷进本仓 `src/llm`，用现行 4 类文档配置跑单测，红绿立判。半天内完成，零网络。
+**1. 默认链"开箱即用"的体验质量：refine 对两个真值表候选当前都是红的，且目标与验收自相矛盾**
 
-**KA2 · Node 支持面：新依赖树的声明地板（22.19 / 24.21）高于本仓声明地板（20）与 CI（node 20）**
-- **Claim:** 本仓 `package.json` engines `node>=20`、CI `node-version: 20`、`tsup target node20` 继续成立。
-- **Steelman:** 0.4.3 tgz 的 dist 我只 grep 到 `structuredClone`（node 17+）；传递依赖 pi-ai/pi-agent-core 0.86.1 dist 里只有 `SuppressedError` / `Symbol.dispose`（node 20.10+ 可用）——engines `>=22.19.0` 很可能只是保守声明，node 20 late 实测或许全绿。
-- **Attack:** 声明失配是事实而非推测：tgz `engines: node >=24.21.0`，pi-ai/pi-agent-core 0.86.1 `engines: node >=22.19.0`，本仓 `>=20`。CI 装依赖即出 EBADENGINE；`npm run test` 会先 build 再跑 vitest，而 `llm-adapter.test.ts:21` 的 faux 测试**真实执行** pi-client 新引擎代码——若任何运行路径碰到 node>20.x API，CI 直接红。本机是 v24.21.0，本地开发测不出来，只有 CI（或主动降版本）能暴露。这是「声明的支持面」与「实际能跑的面」之间的未验证裂缝。
-- **Fails if:** pi-agent-runtime 0.4.3 或其锁死的 pi-ai 0.86.1 在 node 20.x 运行期抛 ReferenceError/TypeError/SyntaxError。
-- **Evidence to get this week:** spike 分支引入 tgz 后，用 nvm/Volta 切 node 20 最新版跑 `npm ci && npm run test`（faux 路径即执行新引擎，零网络零 key）。
-- **Kill criterion:** node 20 下任何来自 pi-agent-runtime/pi-ai 0.86.1 的运行期错误 → 要么把本仓 engines + CI + README 一起抬到 >=22.19/24.21（一个提案只字未提的用户面兼容决策），要么 vendored tgz 路线此版本判死。
-- **Cheapest test:** 同上，半日；纯本地，无外部依赖。
+- **Claim:** 零配置用户 clone+build 后"即可用真实模型跑通 generate/refine"（目标节原文），默认链 MiniMax-M3 主 / mimo 备是正确的首跑路径。
+- **Steelman:** generate 双候选在 M1 smoke 留档（`/tmp/mf-llm-smoke-20261018-143600/`）真实成功，MiniMax 产出 14 个结构合格候选指标；modelRecovery `extraAttempts:1` 提供一次自愈；refine 失败属 prompt/schema 契合问题，fail-closed 兜住未产垃圾，且 handoff 将其列为延期项、本批明确不动 prompt/schema。
+- **Attack:** 我读了留档原文：两个候选的 `refine-summary.txt` 均为 0 字节、双双带 `smoke-failure.txt`（exit=1）——**refine 对默认链两个候选当前全灭**，WARN 发布门尚待人工评估。handoff 延期项 2 另记 MiniMax-M3 generate JSON 系统性畸形（留档那次成功了，说明该观察不稳定或靠 recovery 救回——首跑体验赌的是主候选的抖动率）。更锋利的是 proposal 内部矛盾：目标写"跑通 generate/refine"，验收方向却只验证 generate。**若 refine 红态延续，零配置新用户的第二次操作就撞上硬失败，"开箱即用"叙事即破。**
+- **Fails if:** 默认链任一候选 refine 仍被 schema 拒（现状即如此），或 MiniMax-M3 generate 畸形 JSON 在新机首跑复现。
+- **Evidence to get this week:** 已到手（留档实证 refine 双红）；补一次手动 smoke 确认 MiniMax generate 畸形是否复现。
+- **Kill criterion:** PRD 定稿时 refine 双候选红态既未修复（M1 延期项 1 未入批）也未从目标文案降级——目标与验收的矛盾原样带进 PRD 即 kill 该版目标；或 smoke 复跑 MiniMax generate 畸形率 >0/3。
+- **Cheapest test:** `zsh scripts/llm-smoke.sh` 手动复跑一次（已有脚本，两条真调），只盯 refine-summary 与 MiniMax generate JSON。
 
-**KA3 · 「五个决策足以描述装配」不成立：createRuntime 的必填输入提案漏了两项**
-- **Claim:** 决策 #4（limits 两键）+ #7（authorize 缺省放行）+ M3 才做审计，已覆盖 M1 装配所需。
-- **Steelman:** 提案明确说「照抄 DR」，DR 的 `buildLimits` 与 audit sink 是现成代码，补齐只是抄写，无设计风险。
-- **Attack:** 对照 0.4.3 tgz 类型定义：`RuntimeOptions.authorize` 与 `audit` **均非可选**（`types.d.ts` 中 `authorize: (action, signal) => Promise<boolean>; audit: AuditSink;` 无 `?`）；`runText` 的 `limits` 必填且 `UncappedLimits` **恰好五键**（cumulative/maxOutputTokens/modelTimeoutMs/toolTimeoutMs/controlTimeoutMs），提案 #4 只写了两键。即 M1 必须现在就给出一个 AuditSink（哪怕是 no-op），「审计属 M3」不成立——M3 做的是「审计**落盘与轮转**」，M1 至少要裁决 no-op sink 语义；且 sink 若抛错，每次调用以 `AUDIT_FAILED` 失败。typecheck 会立刻抓住，所以这不是潜伏风险，而是规格完整性缺口——但它证明「已定决策」清单并未覆盖装配面，GRILL 前应修文而非留到实现期撞墙。
-- **Fails if:** PRD 照决策 #4/#7 字面落地——typecheck 即失败（limits 缺三键、audit 缺失），或临时补一个会抛错的 sink 导致全调用 AUDIT_FAILED。
-- **Evidence to get this week:** 已在此报告中（tgz `dist/types.d.ts` 原文行）。无需新证据，只需修文。
-- **Kill criterion:** 不适用（非 kill 级，必修项）。验收标准应显式写入：no-op/memory AuditSink 的语义决策 + 五键 limits builder（照 DR：tool/controlTimeoutMs 各 30s）。
-- **Cheapest test:** spike 分支跑一次 `npm run typecheck`，编译器免费给出完整缺项清单。
+**2. 自动发现的接入点会撞碎测试密闭性与 G3 不变式——"天然接在这里"是未做的设计决策，不是事实**
 
-**KA4 · 「faux 零回归」与开放问题 #6（整体移除 pi-ai）不能同时成立**
-- **Claim:** 红线「faux 后端不变、现有 LLM 测试不改语义全过」，同时开放问题 #6 考虑整体移除 `@earendil-works/pi-ai`。
-- **Steelman:** `MF_LLM_BACKEND=faux` 走的是 `createFakeClient`（`fake-client.ts`，零 pi 依赖），该路径确实与引擎无关、天然零回归。
-- **Attack:** 但还存在第二条 faux 路径：`src/llm/faux.ts:1` import `registerFauxProvider, fauxAssistantMessage` 自 `@earendil-works/pi-ai/compat`，`llm-adapter.test.ts:21-28` 用它驱动 `createPiClient` 走「真实 pi 管线」——而 pi-client 正是本次要重写的文件，其构造签名（当前吃 pi-ai 的 `Model<Api>`）必然改变。且 pi-agent-runtime 0.4.3 的 `/testing` 出口只有 record/replay（`createRecorder`/`createReplay`），**没有** faux provider 等价物。更微妙的是：tgz 依赖里钉死 `pi-ai 0.86.1`，本仓现有 `^0.87.1`——「整体移除」只移除顶层声明，0.86.1 仍经传递依赖留在树里，faux.ts 若继续 import 就变成幻影依赖（靠 npm hoisting 运气解析，版本还与类型面 0.87 分叉）。
-- **Fails if:** Q6 裁决为「移除 pi-ai」而 faux.ts/该测试未同步重建（手写一个脚本化 `ModelTransport`——它只是个函数，约 10 行）或未把 pi-ai 降为显式 devDependency。
-- **Evidence to get this week:** 无需新数据，是决策题：Q6 三选一（保留 devDep / 手写 fake ModelTransport / 删除该测试改信 record-replay），并写进验收。
-- **Kill criterion:** spike 分支上若 faux 回归测试在「无顶层 pi-ai」配置下无法转绿，则裁决保留 pi-ai 为 devDependency 并关闭 Q6——不 kill M1，kill 的是「移除」选项。
-- **Cheapest test:** spike 分支删掉 pi-ai 顶层声明 + 把 faux 测试改写为手写 ModelTransport，`npm run test` 一次见分晓。
+- **Claim:** "工厂入参 env 即唯一密钥来源，自动发现天然接在这里"——发现逻辑可以低成本接入而不破坏既有结构。
+- **Steelman:** G3 属实（`resolveOne` 只读注入 env、无 process.env 桥、cacheKey 含 key 指纹）；guard 只锁 pi import，src/llm 读文件不违规；RF 先例证明文件解析可行。若发现做成"产出 env 的前置纯步骤"，工厂保持纯净， claim 成立。
+- **Attack:** 先例的机制恰恰不能抄：RF `loadKeysFromDisk()` 在模块 import 时**直接 mutate process.env**——这是 M1 明确删除的 process.env 桥。而把发现放进 `createLlmClientFromEnv` 或 UI 默认路径的任何天真实现都会立即使测试机器相关：`test/unit/llm-config.test.ts:111` 断言无 key 时抛 `/MINIMAX_CN_API_KEY/`、`test/ui/settings.test.ts:19` 断言"未配置"、`test/ui/drafts.test.ts:138` 断言 422——**本机 auth.json 恰好有两个候选的 key，发现一旦默认生效，这些断言在开发机上全翻绿转红，在无 auth.json 的 CI 上又通过**：验证门变成环境抽签。UI 测试注入了 `envFilePath` 却没有 auth.json 路径的对应缝。这不是"顺手接"，是一个必须显式设计的注入缝（authJsonPath / 关闭开关），proposal 全文未提。
+- **Fails if:** 发现逻辑无注入缝/关闭开关，任何测试的成败取决于真实 `~/.pi/agent/auth.json` 是否存在；或发现以 mutate process.env 方式实现，G3 名存实亡。
+- **Evidence to get this week:** 设计评审一句话即可判定：PRD 是否写明"工厂保持 env-only 纯函数，发现为可注入路径的前置步骤，测试默认不触达真实 auth.json"。
+- **Kill criterion:** PRD 定稿仍无 discovery 注入缝/关闭开关条款；或 spike 实现后 `npm run test` 在有/无 auth.json 两机结果不一致。
+- **Cheapest test:** 半日 spike + 在本机（有 auth.json）跑全量测试门；或更便宜——PRD 评审时检查上述句子是否存在。
 
-**KA5 · guard 测试对新包名即刻失效（已被提案列为开放问题，但严重度被低估）**
-- **Claim:** 红线「pi 依赖收敛在 src/llm，guard 测试锁定」全程有效。
-- **Steelman:** 提案 Q2 已自知需同步 guard 白名单写法，方向正确。
-- **Attack:** 现有断言（`llm-adapter.test.ts:47`）只 grep 字面量 `@earendil-works/pi-ai`；新包名是无 scope 的 `pi-agent-runtime`，**不含该子串**——从合入第一分钟起，任何业务文件直接 `import "pi-agent-runtime"` guard 都绿灯。红线在过渡期处于无执法状态；把它留在「开放问题」而非「验收标准」意味着它可能被推迟到泄露之后。
-- **Fails if:** 合入时 guard 断言未同时覆盖 `pi-agent-runtime`（与 `@earendil-works/pi-agent-core`）。
-- **Evidence to get this week:** 无；一行断言改动 + 一个故意违规的负例测试即可验证。
-- **Kill criterion:** 不适用（必修项）；建议从开放问题提升为验收门槛：guard 红-绿负例各一。
-- **Cheapest test:** 在业务文件临时加一行 `import "pi-agent-runtime"`，guard 应变红——5 分钟。
+**3. ".env.local 手配路径保留、显式永远赢"对 CLI/MCP 当前不成立——覆盖语义是 UI 限定版**
 
-### What's Well-Reasoned（核实为真，不制造怀疑）
+- **Claim:** 决策 3/5：`.env.local` 显式配置覆盖自动发现，手配永远赢；设置页文案"工作台与 CLI 共用"。
+- **Steelman:** UI 侧属实：`resolveLlmEnv` 把 .env.local 叠在 process.env 上，设置页保存同进程生效；决策 5 与 smoke"已设变量优先"语义一致。
+- **Attack:** 实证：`src/cli/index.ts:374,512` 与 `src/mcp/server.ts:65,96` 均 `createLlmClientFromEnv()` 默认吃 process.env，**全仓没有任何 CLI/MCP 代码读 .env.local**——"共用"文案今天就是假的。M2 把设置页降级为"查看+覆盖"后，用户在设置页保存覆盖、CLI `generate` 却走自动发现——**"显式永远赢"对 CLI 静默失效**，而这恰是验收方向第 3 条声称要验的覆盖语义。验收只写了 CLI 的零配置路径，没写 CLI 的覆盖路径。
+- **Fails if:** PRD 不裁决"CLI/MCP 是否接入共享 env 解析（.env.local + 发现）"，覆盖语义在 CLI 侧无人实现也无人验证。
+- **Evidence to get this week:** 已到手（grep 实证四处调用点）。只差一个范围裁决。
+- **Kill criterion:** PRD 验收含"CLI 覆盖语义"但范围不含 CLI 读取 .env.local（或不含改写文案）——即验收了没人打算建的东西。
+- **Cheapest test:** 已完成（grep）。修复本身也便宜：CLI/MCP 改走共享 resolver 约半日，或砍文案五分钟。
 
-- **引擎可行性已实证**：0.4.3 tgz 的 `TextRequest` 有 `taskId/prompt/system/limits/modelRecovery{extraAttempts: 0|1}`，`RunResult` 的 `succeeded / failed:INVALID_OUTPUT / 其他` 与提案三分映射逐点对得上；`system` 参数存在，`LlmClient` 接口不变、`runText` 承载 system+user 在类型层面成立。「不引入 runAgent」红线与 runText 通道天然兼容。
-- **主备链语义有生产先例**：DR `transportFor`（无 key 返回 null）+ `getRuntime`（候选为空才抛错）正是提案 #6 的语义，且已在 DR 生产跑通——照抄的是活代码不是纸面设计。
-- **fail-closed 兜底成立**：`generate.ts:62-77` 对 call 异常与 `JSON.parse` 失败都返回 `{ok:false, stage}` 结构化结果，INVALID_OUTPUT→空文本落到 parse 桶即失败、零写盘。（措辞修正：空文本先到 `JSON.parse` 而非「schema 校验」，结局等价。）
-- **vendor 策略可行**：`.gitignore` 未排除 `vendor/`；DR 用同一 `file:vendor/*.tgz` 声明在生产运行；本机已存在 `deep-research/vendor/pi-agent-runtime-0.4.3.tgz` 源文件。
-- **验收命令真实存在**：`package.json` 中 lint/typecheck/test/contract-test 四脚本齐全；faux 主路径（`createFakeClient`）零 pi 依赖，与引擎解耦，确实天然零回归。
+**4. auth.json 是 pi CLI 的私有未承诺格式，且真实文件已含非 key 形态条目**
+
+- **Claim:** 决策 1：`~/.pi/agent/auth.json` 作为密钥来源"本机实测在手"，是可靠的发现源。
+- **Steelman:** 本机实证为真：文件存在，顶层 7 个 provider 条目，`minimax-cn` 与 `xiaomi-token-plan-cn` 均有 `key` 字段；smoke 脚本与 RF 先例都用扁平 `a[provider].key` 读取且工作正常；容错已列入开放问题。
+- **Attack:** 实测结构同时暴露了漂移的鲜活样本：7 条目里 `openai-codex` 是 OAuth 形态（`access/refresh/expires`，**无 `key` 字段**）——"条目缺 key"不是假想边界，本机就有。且 RF 源码注释把结构写成嵌套 `providers["minimax-cn"].key` 而代码读扁平——**连同一个作者生态内对该文件结构的认知都已经漂移过一次**。该文件是 pi CLI 的私有实现细节，无任何稳定性承诺；发现解析器若不容错（非 object 条目、缺 key、JSON 坏），坏文件会把"零配置"变成"零启动"。失败方向是安全的（静默降级为未配置），所以这一条排第四而非第一。
+- **Fails if:** pi CLI 改结构/换路径/加密，或解析器对 OAuth 形态条目不容错而抛错。
+- **Evidence to get this week:** 已到手（结构实证：扁平 `{provider:{type,key?}}`，6/7 带 key）。PRD 只需把容错规则写成验收：坏文件/坏条目一律静默跳过。
+- **Kill criterion:** 无硬性 kill——降级方向安全；但若 PRD 把 auth.json 写成唯一发现源且无容错验收条款，视为设计缺陷打回。
+- **Cheapest test:** 用构造的畸形 fixture（OAuth 条目、JSON 截断、非 object 条目）跑三个单测——写 PRD 前即可定义。
+
+**5. "新用户零配置"实际只覆盖"装有 pi CLI 且配过这两家 CN provider 的机器"**
+
+- **Claim:** 目标："新用户 clone + build 后无需手配任何环境变量即可用真实模型跑通"。
+- **Steelman:** 工作台定位本地单用户，proposal 明确把系统 keychain/1Password 等其他来源划到批外，"本机已有凭据"措辞本身限定了范围；三态芯片覆盖无发现情形。
+- **Attack:** 对没有 `~/.pi/agent/auth.json` 的一般新用户，M2 交付的发现层**恒发现为空**，零配置承诺不兑现，体验退回今天的"去设置模型"。真值表两家（minimax-cn / xiaomi-token-plan-cn）是操作者自己的 provider 生态，不是市场默认。这不是工程缺陷而是叙事口径问题：README 若按"零配置为主线叙事"（验收方向原文）写，会对非 pi 用户过度承诺。
+- **Fails if:** README/首页文案把零配置写成普遍承诺而非"已有 pi CLI 凭据则零配置"。
+- **Evidence to get this week:** 无需新数据；文案评审一次。
+- **Kill criterion:** 无 kill；PRD 文案口径不收敛则打回文案，不动工程。
+- **Cheapest test:** README diff 评审。
+
+### What's Well-Reasoned
+
+- **接缝判断属实**：G3（工厂 env 唯一密钥来源）代码实证成立——`resolveOne` 只读注入 env、cacheKey 含 key 指纹（改 key 同进程生效，发现到的 key 轮换也天然生效）、guard 只锁 pi import 不挡 fs 读取。发现"产 env、工厂保持纯"的正确形态存在且便宜。
+- **优先级语义有据**：显式>发现 与 smoke 脚本"已设变量优先，不覆盖"及 RF 先例逐字一致；D5 缺 key 跳过语义与默认链自动启用天然复合（发现到几家启用几家）。
+- **auth.json 存在性 claim 实证为真**：本机文件含两个真值表 provider 的 key（结构核验，未读值），proposal 验收"两候选 key 实测在手"成立。
+- **漂移风险自认且属实**：`envKeyFor`（map+fallback 只转 `-`）与 `apiKeyEnvName`（map+fallback 转一切非字母数字）对含 `.` provider 结果确实分叉（`FOO.BAR_API_KEY` vs `FOO_BAR_API_KEY`）；对两个真值表 provider 碰巧一致。M2 将引入第三处映射（provider→auth.json 条目名），handoff F3 的合一建议在本批兑现是对的方向。
+- **红线兼容**：发现仅内存使用与"密钥永不进页面/日志/导出物"兼容；`LlmStatus.keyMasked` 已有打码通道，faux 后端短路在工厂最前，发现逻辑不会泄漏进 faux 路径。
+- **诚实披露到位**：规格稀薄处自标、开放问题清单（容错/合一/缓存时机/来源标示）基本是对的清单——唯一漏掉的是上面的 #2（测试密闭性缝）与 #3（CLI 侧 .env.local）。
 
 ### What I Couldn't Assess
 
-- pi-ai 0.86.1 / pi-agent-core 在 node 20 的**运行期**真实表现（静态 grep 未见致命 API，但 engines 声明失配只能实测收口——见 KA2）。
-- 本机 `pi-agent-runtime` 源码仓已到 0.5.1（新增 openai 依赖、exports 面变化），而提案锁 0.4.3：上游 0.x 漂移速度对「vendored 快照」维护成本的影响，提案未表态跟踪策略。
-- 真实用户中是否存在提案作者之外的 openai/anthropic 存量配置（单机本地工具，KA1 实际爆炸半径可能只有作者自己+本仓文档——但文档与脚本自相矛盾本身就必须修）。
-- MiniMax-M3 / mimo key 在本机的可用性（验收已允许 smoke 降级留档，非阻断）。
+- pi CLI 对 auth.json 的格式承诺与演进方向（外部依赖，无本地证据）。
+- MiniMax-M3 generate JSON 畸形的复现率（留档当次成功，handoff 注记或来自未留档运行；需 smoke 复跑，见 #1）。
+- 默认链自动启用与 `MF_LLM_BASE_URL` 同设时的交互（G6 真值表+网关矛盾抛错在"用户没设 MF_LLM_MODEL 但设了网关"的自动启用路径下行为未定义——留给 GRILL 的正当开放问题）。
+- 三态芯片的确切状态机（proposal 自标 GRILL 补全；"未配置/已自动发现/已手配/错误"是四态还是三态归并，无证据可判）。
 
-### 本周行动顺序
+---
 
-1. KA1 桌面推演 + `api` 来源裁决（决策题，半天）——PRD 前必须改写决策 #5。
-2. KA2 spike 分支：vendor tgz + node 20 跑 `npm ci && npm run test`（半天）。
-3. KA3/KA4/KA5 随 spike 一并收口：typecheck 列缺项、faux 去 pi-ai 改写、guard 双串断言。
+**Verdict: go** — 无已触发的 kill 标准（#1 的 refine 红态是 M1 已挂 WARN 门的延期项，非本批新伤；但它与目标文案的矛盾必须在 PRD 内了断）。以下条件折叠进 PRD：
 
-`VERDICT: go`（附条件：KA1 的决策 #5 改写与 KA2 的 node-20 实测是 PRD 前置项；两者都不是方向性错误——引擎与映射已实证可行——而是规格缺口，补齐成本均在半天级。无任何 kill-assumption 的 kill criterion 在今日已成立。）
+1. **发现缝显式化**（对应 #2）：工厂保持 env-only 纯函数；发现实现为可注入路径（authJsonPath 或等效开关）的前置步骤，测试默认不触达真实 auth.json；验收加一条"测试门在有/无 auth.json 两环境下结果一致"。禁止 mutate process.env（RF 机制不抄）。
+2. **了断 refine 矛盾**（对应 #1）：PRD 二选一——把 M1 延期项 1（refine prompt 枚举加固）纳入本批，或把目标文案降级为 generate 并写明 refine 已知红态与处置计划；默认链排序须参考 handoff 延期项 2 评估 mimo 升主。
+3. **裁决 CLI/MCP 的 .env.local 语义**（对应 #3）：要么 CLI/MCP 改走共享 env resolver（同时获得 .env.local 与发现），要么删掉"工作台与 CLI 共用"文案并把覆盖验收限定在 UI。
+4. **auth.json 容错写入验收**（对应 #4）：文件不存在/JSON 坏/条目非 object/缺 `key`（OAuth 形态）一律静默跳过，降级为未配置；发现到的 key 在设置页/芯片带来源标示且只显示打码。
+5. **文案口径**（对应 #5）：零配置叙事限定为"本机已有 pi CLI 凭据"，一般新用户的三态芯片未配置路径保留为正常态而非异常态。

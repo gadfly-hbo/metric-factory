@@ -13,8 +13,9 @@ import { InstanceSchema } from "../schema/instance.js";
 import type { Instance } from "../schema/instance.js";
 import type { Template } from "../schema/template.js";
 import { createLlmClientFromEnv } from "../llm/index.js";
-import { readEnvFile, writeManagedEnv, resolveLlmEnv, apiKeyEnvName, maskKey } from "./env-file.js";
-import { settingsPage, type LlmStatus } from "./render-settings.js";
+import { readEnvFile, writeManagedEnv, apiKeyEnvName, maskKey } from "./env-file.js";
+import { resolveLlmEnvAuto, DEFAULT_CHAIN } from "../llm/env-auto.js";
+import { settingsPage, type ChainEntry, type LlmStatus } from "./render-settings.js";
 import { wizardStep1Page, wizardStep2Page } from "./render-wizard.js";
 import { homePage } from "./render-home.js";
 import { AnswersSchema, type Answers } from "../schema/answers.js";
@@ -45,6 +46,8 @@ export interface UiOptions {
   templatesDir: string;
   /** LLM 配置文件（.env.local）；默认 <cwd>/.env.local，测试可注入临时路径 */
   envFilePath?: string;
+  /** 密钥自动发现源（pi CLI auth.json）；默认 ~/.pi/agent/auth.json，测试注入临时 fixture 密闭（D3/G1） */
+  authJsonPath?: string;
   /** 工作区目录：向导实例写盘与实例扫描的根；默认 cwd */
   workspaceDir?: string;
 }
@@ -77,29 +80,84 @@ async function loadInstanceContext(instancePath: string | undefined, templates: 
 }
 
 // LLM 连接状态（试构造 client；key 只取打码形式）
-async function llmStatus(envFilePath: string): Promise<LlmStatus> {
-  const env = await resolveLlmEnv(envFilePath);
+// M2：env 经共享合成（process env > .env.local > 自动发现，②A），零配置默认链（G3）在此生效；
+// shadowedKeys = .env.local 有值但被进程环境同名值覆盖的键（G5 遮蔽警告数据面）；
+// chain/modelSource/otherProviders = D9/G9 读侧「查看」面数据（三 UI 面共用同一事实源）
+async function llmStatus(envFilePath: string, authJsonPath?: string): Promise<LlmStatus> {
+  const { env, sources, discoveredProviders } = await resolveLlmEnvAuto({
+    processEnv: process.env,
+    envFilePath,
+    authJsonPath
+  });
   if (env.MF_LLM_BACKEND === "faux") return { mode: "faux" };
   const spec = env.MF_LLM_MODEL;
   if (!spec) return { mode: "unconfigured" };
+
+  // 链构成（与工厂同解析规则：主 + fallbacks 逗号分隔，trim 忽略空项保序）。
+  // 契约 S2/G9a：默认链模式下「查看」面画完整默认链定义——缺 key 候选标「缺失（调用时自动跳过）」
+  // （US3 语义：发现到几家启用几家，缺的被跳过但仍可见），注入的生效链是其子集。
+  const modelSource0 = (sources["MF_LLM_MODEL"] as LlmStatus["modelSource"] | undefined) ?? "process";
+  const specs =
+    modelSource0 === "default-chain"
+      ? [...DEFAULT_CHAIN]
+      : [spec, ...(env.MF_LLM_FALLBACK_MODELS ?? "").split(",").map((s) => s.trim()).filter(Boolean)];
+  const chain = specs.map((s, i) => {
+    const slash = s.indexOf("/");
+    const provider = slash > 0 ? s.slice(0, slash) : s;
+    const varName = apiKeyEnvName(provider);
+    const key = env[varName];
+    const source: ChainEntry["source"] = key ? (sources[varName] as ChainEntry["source"] | undefined) ?? "process" : "missing";
+    return {
+      spec: s,
+      role: i === 0 ? "主" : `备${i}`,
+      source,
+      keyMasked: key ? maskKey(key) : undefined
+    };
+  });
+  const chainProviders = new Set(chain.map((c) => c.spec.slice(0, c.spec.indexOf("/"))));
+  const otherProviders = discoveredProviders.filter((p) => !chainProviders.has(p));
+  const modelSource = modelSource0;
+  const gateway = env.MF_LLM_BASE_URL
+    ? { url: env.MF_LLM_BASE_URL, source: (sources["MF_LLM_BASE_URL"] as "process" | "env-file" | undefined) ?? "process" }
+    : undefined;
+  const envFile = await readEnvFile(envFilePath);
+  const shadowedKeys = Object.keys(envFile).filter(
+    (k) => envFile[k] && envFile[k]!.trim() !== "" && nonEmptyEnv(process.env[k])
+  );
+  const shadow = shadowedKeys.length > 0 ? shadowedKeys : undefined;
+
   try {
     createLlmClientFromEnv(env);
-    const provider = spec.split("/")[0]!;
-    const key = env[apiKeyEnvName(provider)];
-    // G9：主备链呈现——配置 fallbacks 时显示 主 (+N 备)（纯显示语义，无新表面）
-    const fallbackCount = (env.MF_LLM_FALLBACK_MODELS ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean).length;
+    const fallbackCount = chain.length - 1;
     return {
       mode: "configured",
       model: fallbackCount > 0 ? `${spec} (+${fallbackCount} 备)` : spec,
-      keyMasked: key ? maskKey(key) : undefined,
-      baseUrl: env.MF_LLM_BASE_URL || undefined
+      mainSpec: chain[0]?.spec,
+      keyMasked: chain[0]?.keyMasked,
+      baseUrl: env.MF_LLM_BASE_URL || undefined,
+      shadowedKeys: shadow,
+      modelSource,
+      chain,
+      gateway,
+      otherProviders: otherProviders.length > 0 ? otherProviders : undefined
     };
   } catch (e) {
-    return { mode: "error", model: spec, error: (e as Error).message };
+    return {
+      mode: "error",
+      model: spec,
+      mainSpec: chain[0]?.spec,
+      error: (e as Error).message,
+      shadowedKeys: shadow,
+      modelSource,
+      chain,
+      gateway,
+      otherProviders: otherProviders.length > 0 ? otherProviders : undefined
+    };
   }
+}
+
+function nonEmptyEnv(v: string | undefined): boolean {
+  return v !== undefined && v.trim() !== "";
 }
 
 async function readFormBody(req: import("node:http").IncomingMessage): Promise<URLSearchParams> {
@@ -259,6 +317,7 @@ export function createUiServer(opts: UiOptions): Server {
   // 会话内可变状态（本机单用户）：当前实例路径（向导生成/打开实例时切换，重启回退 --instance）
   let currentInstancePath = opts.instancePath;
   const envFilePath = opts.envFilePath ?? join(process.cwd(), ".env.local");
+  const authJsonPath = opts.authJsonPath; // 密闭缝（D3/G1）：测试注入 fixture，生产缺省真实发现
   const workspaceDir = resolve(opts.workspaceDir ?? process.cwd());
   const jobs = new Map<string, DraftJob>();
 
@@ -266,7 +325,7 @@ export function createUiServer(opts: UiOptions): Server {
   const runDraftJob = (job: DraftJob, base: Template, instance: Instance, instancePath: string, text: string): void => {
     void (async () => {
       try {
-        const env = await resolveLlmEnv(envFilePath);
+        const { env } = await resolveLlmEnvAuto({ processEnv: process.env, envFilePath, authJsonPath: opts.authJsonPath });
         const client = createLlmClientFromEnv(env);
         const modelLabel = env.MF_LLM_MODEL ?? (env.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
         const now = new Date().toISOString();
@@ -317,7 +376,7 @@ export function createUiServer(opts: UiOptions): Server {
       if (path === "/") {
         const ctx = await loadInstanceContext(currentInstancePath, templates);
         const discovered = await discoverInstances(workspaceDir);
-        const llm = await llmStatus(envFilePath);
+        const llm = await llmStatus(envFilePath, authJsonPath);
         let hasPendingDraft = false;
         if (currentInstancePath) {
           try {
@@ -983,7 +1042,7 @@ export function createUiServer(opts: UiOptions): Server {
       // ===== AI 草案工坊 =====
       if (path === "/drafts") {
         const ctx = await loadInstanceContext(currentInstancePath, templates);
-        const llm = await llmStatus(envFilePath);
+        const llm = await llmStatus(envFilePath, authJsonPath);
         const pending = ctx ? await loadPendingDraft(draftPendingPath(ctx.instancePath)) : null;
         const html = layout(
           "drafts",
@@ -1008,7 +1067,7 @@ export function createUiServer(opts: UiOptions): Server {
         }
         const form = await readFormBody(req);
         const text = form.get(field)?.trim() ?? "";
-        const llm = await llmStatus(envFilePath);
+        const llm = await llmStatus(envFilePath, authJsonPath);
         const fail = async (errors: string[]) => {
           res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
             layout("drafts", "AI 草案", "提交未通过校验。", draftsPage({ hasInstance: true, llm, pending: await loadPendingDraft(draftPendingPath(ctx.instancePath)), errors, values: { [field]: text } as { describe?: string; instruction?: string } }), statusInfo)
@@ -1108,9 +1167,15 @@ export function createUiServer(opts: UiOptions): Server {
 
       // ===== 设置（LLM 模型配置，存 .env.local）=====
       if (path === "/settings") {
-        const status = await llmStatus(envFilePath);
+        const status = await llmStatus(envFilePath, authJsonPath);
+        const banner =
+          url.searchParams.get("saved") === "1"
+            ? "saved"
+            : url.searchParams.get("cleared") === "1"
+              ? "cleared"
+              : undefined;
         const html = layout("settings", "设置", "AI 模型连接与工作台信息。配置仅存本机 .env.local（git 已忽略），页面不回显密钥。",
-          settingsPage(status), statusInfo);
+          settingsPage(status, { banner }), statusInfo);
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
         return;
       }
@@ -1120,13 +1185,26 @@ export function createUiServer(opts: UiOptions): Server {
         const model = form.get("model")?.trim() ?? "";
         const apiKey = form.get("api_key")?.trim() ?? "";
         const baseUrl = form.get("base_url")?.trim() ?? "";
+        // G6：空模型保存 ≡ 清除覆盖、回退自动发现（忽略 api_key/base_url 输入，键集合同 /settings/clear）
+        if (model === "") {
+          const existing = await readEnvFile(envFilePath);
+          const updates: Record<string, string | null> = { MF_LLM_MODEL: null, MF_LLM_BASE_URL: null };
+          const prevSpec = existing.MF_LLM_MODEL;
+          if (prevSpec) {
+            const prevSlash = prevSpec.indexOf("/");
+            if (prevSlash > 0) updates[apiKeyEnvName(prevSpec.slice(0, prevSlash))] = null;
+          }
+          await writeManagedEnv(envFilePath, updates);
+          res.writeHead(303, { location: "/settings?cleared=1" }).end();
+          return;
+        }
         const slash = model.indexOf("/");
         if (slash <= 0 || slash === model.length - 1) {
-          const status = await llmStatus(envFilePath);
+          const status = await llmStatus(envFilePath, authJsonPath);
           res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
             layout("settings", "保存失败", "模型格式不正确。", settingsPage(status, {
-              errors: [`模型需为 <provider>/<model-id> 形式（收到 "${model}"），如 openai/gpt-4o`],
-              values: { model, baseUrl }
+              errors: [`模型需为 <provider>/<model-id> 形式（收到 "${model}"），如 openai/gpt-4o`]
+              // G9c：表单 value 永不回填（含 422）——查看与覆盖物理分离，违例值只在错误信息引用内
             }), statusInfo)
           );
           return;
@@ -1135,7 +1213,7 @@ export function createUiServer(opts: UiOptions): Server {
         const updates: Record<string, string | null> = { MF_LLM_MODEL: model, MF_LLM_BASE_URL: baseUrl || null };
         if (apiKey) updates[apiKeyEnvName(provider)] = apiKey;
         await writeManagedEnv(envFilePath, updates);
-        res.writeHead(303, { location: "/settings" }).end();
+        res.writeHead(303, { location: "/settings?saved=1" }).end();
         return;
       }
 
@@ -1148,7 +1226,7 @@ export function createUiServer(opts: UiOptions): Server {
           if (slash > 0) updates[apiKeyEnvName(spec.slice(0, slash))] = null;
         }
         await writeManagedEnv(envFilePath, updates);
-        res.writeHead(303, { location: "/settings" }).end();
+        res.writeHead(303, { location: "/settings?cleared=1" }).end();
         return;
       }
 

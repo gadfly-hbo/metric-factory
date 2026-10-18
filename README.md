@@ -141,7 +141,13 @@ node dist/cli.js mcp    # stdio 协议；工具：mf_generate / mf_refine / mf_a
 
 ### Provider 配置
 
-模型解析按四分映射顺序（M1 起，引擎为 pi-agent-runtime `runText` 通道，带主备容灾/超时/截断恢复）：
+**零配置（推荐，本机已有 pi CLI 凭据时）**：什么都不配即可用——`generate`/`refine`/MCP/工作台会自动从 `~/.pi/agent/auth.json`（pi CLI 凭据文件）发现密钥并启用默认链（`minimax-cn/MiniMax-M3` 主 / `xiaomi-token-plan-cn/mimo-v2.6-flash` 备，发现到几家启用几家）。发现的密钥仅内存使用、永不写盘、页面只显示打码。没有 pi CLI 凭据的机器走下方手动配置，体验不变。
+
+密钥与配置的合成优先级（CLI / MCP / 工作台四入口一致）：**进程环境变量 > `.env.local`（工作台设置页写入）> 自动发现**——显式配置永远赢。
+
+> 已知风险注记（默认链主候选）：MiniMax-M3 在部分运行中出现过 generate 输出 JSON 畸形（name 值缺引号，fail-closed 会整批拒绝、零写盘；重试或显式切换备候选可恢复）。备候选 mimo 同 prompt 下输出稳定，偏爱稳定可通过 `MF_LLM_MODEL=xiaomi-token-plan-cn/mimo-v2.6-flash` 显式指定。
+
+手动配置时，模型解析按四分映射顺序（M1 起，引擎为 pi-agent-runtime `runText` 通道，带主备容灾/超时/截断恢复）：
 
 1. **内置已验证模型（真值表，推荐）**：`minimax-cn/MiniMax-M3`、`xiaomi-token-plan-cn/mimo-v2.6-flash`——探针实测过的候选，配对应 key 即可用；
 2. **自定义网关**：设置 `MF_LLM_BASE_URL` 即走网关路径，协议缺省 `openai-completions`（`MF_LLM_API` 可覆盖）；
@@ -150,9 +156,10 @@ node dist/cli.js mcp    # stdio 协议；工具：mf_generate / mf_refine / mf_a
 
 | 环境变量 | 作用 |
 |---|---|
-| `MF_LLM_MODEL` | `<provider>/<model-id>` 主模型，如 `minimax-cn/MiniMax-M3`、`openai/gpt-4o` |
+| `MF_LLM_MODEL` | `<provider>/<model-id>` 主模型，如 `minimax-cn/MiniMax-M3`、`openai/gpt-4o`（未设置且发现到候选 key 时自动启用默认链） |
 | `MF_LLM_FALLBACK_MODELS` | 逗号分隔备模型链（同四分映射；笔误急切报错点名、缺 key 候选跳过、全缺才报错） |
-| `OPENAI_API_KEY` / `MINIMAX_CN_API_KEY` / `XIAOMI_TOKEN_PLAN_CN_API_KEY` 等 | provider 对应凭证（`<PROVIDER>_API_KEY`，连字符转下划线大写） |
+| `OPENAI_API_KEY` / `MINIMAX_CN_API_KEY` / `XIAOMI_TOKEN_PLAN_CN_API_KEY` 等 | provider 对应凭证（`<PROVIDER>_API_KEY`，连字符转下划线大写；未设置的键可由自动发现补齐） |
+| `MF_LLM_AUTH_JSON_PATH` | 密钥自动发现源路径覆盖（缺省 `~/.pi/agent/auth.json`；指向不存在文件即停用发现） |
 | `MF_LLM_BASE_URL` | OpenAI 兼容内部网关覆盖（对已验证真值表模型不生效，同设会报错提示） |
 | `MF_LLM_API` | 网关协议覆盖：`openai-completions`（缺省）/ `anthropic-messages` |
 | `MF_LLM_TIMEOUT_MS` | 单次模型超时毫秒数（正整数，缺省 300000） |

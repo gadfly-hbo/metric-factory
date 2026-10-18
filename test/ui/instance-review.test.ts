@@ -10,7 +10,7 @@ import { createUiServer, listenUi } from "../../src/ui/server.js";
 const bin = fileURLToPath(new URL("../../dist/cli.js", import.meta.url));
 
 async function startUi(instancePath?: string) {
-  const server = createUiServer({ templatesDir: "templates", instancePath });
+  const server = createUiServer({ authJsonPath: join(tmpdir(), "mf-ui-no-auth.json"), templatesDir: "templates", instancePath  });
   const port = await listenUi(server, 0);
   return { server, base: `http://127.0.0.1:${port}` };
 }

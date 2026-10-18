@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { providerEnvKey } from "../llm/provider-keys.js";
 
 // .env.local 增量管理：UI 设置页写入 LLM 配置（MF_LLM_MODEL / provider key / MF_LLM_BASE_URL），
 // 只改本模块管理的键，保留文件内其他行；key 明文只存在于本机文件，永不回显到页面。
@@ -10,15 +11,9 @@ export interface LlmSettings {
   baseUrl?: string;
 }
 
-// provider 前缀 → API key 环境变量名；未知 provider 按大写化约定推导
+// provider 前缀 → API key 环境变量名：D6 映射合一后委托 src/llm/provider-keys（单一名义源）
 export function apiKeyEnvName(provider: string): string {
-  const known: Record<string, string> = {
-    openai: "OPENAI_API_KEY",
-    anthropic: "ANTHROPIC_API_KEY",
-    google: "GEMINI_API_KEY",
-    gemini: "GEMINI_API_KEY"
-  };
-  return known[provider] ?? `${provider.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_API_KEY`;
+  return providerEnvKey(provider);
 }
 
 export function maskKey(key: string): string {

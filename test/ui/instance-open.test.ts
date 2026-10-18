@@ -15,12 +15,11 @@ function workspaceWithInstances(): string {
 }
 
 async function startUi(dir: string) {
-  const server = createUiServer({
-    templatesDir: "templates",
+  const server = createUiServer({ authJsonPath: join(tmpdir(), "mf-ui-no-auth.json"), templatesDir: "templates",
     workspaceDir: dir,
     envFilePath: join(dir, ".env.local"),
     instancePath: join(dir, "shop-a", "instance.yaml")
-  });
+   });
   const port = await listenUi(server, 0);
   return { server, base: `http://127.0.0.1:${port}`, dir };
 }

@@ -12,7 +12,7 @@ const bin = fileURLToPath(new URL("../../dist/cli.js", import.meta.url));
 // 向导：工作区注入 tmpdir，实例写盘不落仓库
 async function startUiWorkspace() {
   const dir = mkdtempSync(join(tmpdir(), "mf-wiz-"));
-  const server = createUiServer({ templatesDir: "templates", workspaceDir: dir, envFilePath: join(dir, ".env.local") });
+  const server = createUiServer({ authJsonPath: join(tmpdir(), "mf-ui-no-auth.json"), templatesDir: "templates", workspaceDir: dir, envFilePath: join(dir, ".env.local")  });
   const port = await listenUi(server, 0);
   return { server, base: `http://127.0.0.1:${port}`, dir };
 }
