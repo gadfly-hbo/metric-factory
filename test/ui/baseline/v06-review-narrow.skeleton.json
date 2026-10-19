@@ -1,0 +1,496 @@
+{
+ "t": "div",
+ "c": "app",
+ "k": [
+  {
+   "t": "aside",
+   "c": "sidebar",
+   "aria-label": "主导航",
+   "k": [
+    {
+     "t": "div",
+     "c": "brand",
+     "k": [
+      {
+       "t": "span"
+      },
+      {
+       "t": "p"
+      }
+     ]
+    },
+    {
+     "t": "button",
+     "c": "btn new-system",
+     "data-action": "home",
+     "k": [
+      {
+       "t": "span",
+       "aria-hidden": "true"
+      }
+     ]
+    },
+    {
+     "t": "nav",
+     "c": "nav-primary",
+     "k": [
+      {
+       "t": "button",
+       "c": "nav-item active",
+       "data-action": "systems",
+       "k": [
+        {
+         "t": "span",
+         "c": "nav-icon",
+         "aria-hidden": "true"
+        },
+        {
+         "t": "span",
+         "c": "count"
+        }
+       ]
+      },
+      {
+       "t": "button",
+       "c": "nav-item",
+       "data-action": "library",
+       "k": [
+        {
+         "t": "span",
+         "c": "nav-icon",
+         "aria-hidden": "true"
+        },
+        {
+         "t": "span",
+         "c": "nav-meta"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "div",
+     "c": "recent-label"
+    },
+    {
+     "t": "nav",
+     "c": "recent",
+     "aria-label": "最近编辑的体系",
+     "k": [
+      {
+       "t": "button",
+       "c": "recent-item active",
+       "data-action": "open-system",
+       "k": [
+        {
+         "t": "span"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "div",
+     "c": "sidebar-bottom",
+     "k": [
+      {
+       "t": "div",
+       "c": "workspace-person",
+       "k": [
+        {
+         "t": "span",
+         "c": "avatar"
+        },
+        {
+         "t": "div",
+         "k": [
+          {
+           "t": "span",
+           "c": "fine"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "t": "button",
+       "c": "nav-item",
+       "data-action": "about",
+       "k": [
+        {
+         "t": "span",
+         "c": "nav-icon",
+         "aria-hidden": "true"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "t": "div",
+   "c": "workspace",
+   "k": [
+    {
+     "t": "header",
+     "c": "topbar",
+     "k": [
+      {
+       "t": "button",
+       "c": "icon-button mobile-menu",
+       "data-action": "menu",
+       "aria-label": "展开导航"
+      },
+      {
+       "t": "div",
+       "c": "breadcrumb",
+       "k": [
+        {
+         "t": "span"
+        }
+       ]
+      },
+      {
+       "t": "div",
+       "c": "topbar-right",
+       "k": [
+        {
+         "t": "span",
+         "c": "prototype-label"
+        },
+        {
+         "t": "button",
+         "c": "btn small quiet",
+         "data-action": "about",
+         "k": [
+          {
+           "t": "span",
+           "aria-hidden": "true"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "main",
+     "k": [
+      {
+       "t": "div",
+       "c": "work-header",
+       "k": [
+        {
+         "t": "div",
+         "c": "page-heading",
+         "k": [
+          {
+           "t": "div",
+           "k": [
+            {
+             "t": "div",
+             "c": "system-title",
+             "k": [
+              {
+               "t": "h1"
+              },
+              {
+               "t": "span",
+               "c": "tag neutral"
+              }
+             ]
+            },
+            {
+             "t": "div",
+             "c": "system-meta",
+             "k": [
+              {
+               "t": "span"
+              },
+              {
+               "t": "span"
+              },
+              {
+               "t": "span"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "t": "div",
+           "c": "actions",
+           "k": [
+            {
+             "t": "button",
+             "c": "btn small quiet",
+             "data-action": "rename"
+            },
+            {
+             "t": "button",
+             "c": "btn ",
+             "data-action": "save-draft"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "t": "nav",
+       "c": "work-tabs",
+       "aria-label": "体系工作视图",
+       "k": [
+        {
+         "t": "button",
+         "c": "tab ",
+         "data-action": "stage",
+         "data-stage": "overview",
+         "k": [
+          {
+           "t": "span",
+           "c": "step-number"
+          }
+         ]
+        },
+        {
+         "t": "button",
+         "c": "tab ",
+         "data-action": "stage",
+         "data-stage": "metrics",
+         "k": [
+          {
+           "t": "span",
+           "c": "step-number"
+          }
+         ]
+        },
+        {
+         "t": "button",
+         "c": "tab ",
+         "data-action": "stage",
+         "data-stage": "scenes",
+         "k": [
+          {
+           "t": "span",
+           "c": "step-number"
+          }
+         ]
+        },
+        {
+         "t": "button",
+         "c": "tab active",
+         "aria-current": "page",
+         "data-action": "stage",
+         "data-stage": "review",
+         "k": [
+          {
+           "t": "span",
+           "c": "step-number"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "t": "div",
+       "c": "work-content",
+       "k": [
+        {
+         "t": "section",
+         "c": "work-main",
+         "aria-label": "设计检查与交付",
+         "k": [
+          {
+           "t": "div",
+           "c": "check-intro",
+           "k": [
+            {
+             "t": "div",
+             "c": "eyebrow"
+            },
+            {
+             "t": "h2"
+            },
+            {
+             "t": "p"
+            }
+           ]
+          },
+          {
+           "t": "div",
+           "c": "checks",
+           "k": [
+            {
+             "t": "div",
+             "c": "check-row",
+             "k": [
+              {
+               "t": "span",
+               "c": "check-icon ",
+               "aria-label": "已检查"
+              },
+              {
+               "t": "div",
+               "k": [
+                {
+                 "t": "strong"
+                },
+                {
+                 "t": "p"
+                }
+               ]
+              },
+              {
+               "t": "button",
+               "c": "btn small quiet",
+               "data-action": "stage",
+               "data-stage": "overview"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "t": "div",
+           "c": "scope-note evidence-boundary",
+           "k": [
+            {
+             "t": "strong"
+            },
+            {
+             "t": "p"
+            }
+           ]
+          },
+          {
+           "t": "div",
+           "c": "delivery-box",
+           "k": [
+            {
+             "t": "h3"
+            },
+            {
+             "t": "p"
+            },
+            {
+             "t": "div",
+             "c": "actions",
+             "k": [
+              {
+               "t": "button",
+               "c": "btn primary",
+               "data-action": "deliver",
+               "aria-describedby": "delivery-reason"
+              },
+              {
+               "t": "button",
+               "c": "btn ",
+               "data-action": "save-draft"
+              }
+             ]
+            },
+            {
+             "t": "p",
+             "c": "fine"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "t": "aside",
+         "c": "assistant",
+         "aria-label": "AI 共创助手",
+         "k": [
+          {
+           "t": "div",
+           "c": "assistant-head",
+           "k": [
+            {
+             "t": "span",
+             "c": "assistant-spark",
+             "aria-hidden": "true"
+            },
+            {
+             "t": "h2"
+            },
+            {
+             "t": "span",
+             "c": "meta-right"
+            }
+           ]
+          },
+          {
+           "t": "div",
+           "c": "assistant-label"
+          },
+          {
+           "t": "div",
+           "c": "assistant-message",
+           "k": [
+            {
+             "t": "p"
+            }
+           ]
+          },
+          {
+           "t": "div",
+           "c": "suggestion-list",
+           "k": [
+            {
+             "t": "button",
+             "c": "suggestion",
+             "data-action": "suggest",
+             "k": [
+              {
+               "t": "span",
+               "aria-hidden": "true"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "t": "div",
+           "c": "assistant-compose",
+           "k": [
+            {
+             "t": "label"
+            },
+            {
+             "t": "textarea"
+            },
+            {
+             "t": "div",
+             "c": "assistant-send",
+             "k": [
+              {
+               "t": "span",
+               "c": "fine"
+              },
+              {
+               "t": "button",
+               "c": "btn primary small",
+               "data-action": "refine"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "t": "p",
+           "c": "note"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

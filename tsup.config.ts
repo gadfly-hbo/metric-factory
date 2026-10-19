@@ -22,6 +22,7 @@ export default defineConfig({
   target: "node22",
   platform: "node",
   clean: true,
+  publicDir: "src/ui/public",
   banner: { js: "#!/usr/bin/env node" },
   sourcemap: true,
   define: gitSha ? { "process.env.MF_GIT_SHA_BUILD": JSON.stringify(gitSha) } : {}

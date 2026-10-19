@@ -1,0 +1,41 @@
+# 分析方法模板：净销售额变化拆解（A2 批次内置，来源评审原型 method id: net-change）
+method:
+  id: net-change
+  name: 净销售额变化拆解
+  version: 0.1.0
+  description: 比较两段期间，把净额变化拆为成交侧与退款侧，再检查退款护栏。
+  references:
+    - "变化拆解与桥接分析（公开经营分析方法）"
+    - "退款与净额口径实践（公开电商分析方法）"
+contexts:
+  - 经营改善
+  - 战略选择
+family: 描述分解
+purpose: 净销售变化主要来自成交规模，还是退款金额？
+roles:
+  - id: result_measure
+    name: 结果指标
+    required: true
+  - id: transaction_side
+    name: 成交侧指标
+    required: true
+  - id: refund_side
+    name: 退款侧指标
+    required: true
+  - id: risk_guardrail
+    name: 风险护栏
+    required: true
+steps:
+  - title: 看净销售整体变化
+    detail: ""
+  - title: 拆成交侧与退款侧
+    detail: ""
+  - title: 按品类、渠道比较
+    detail: ""
+  - title: 检查退款风险与限制
+    detail: ""
+evidence: 同范围的原始记录与核验依据。
+limits: 设计引用成立不代表执行能力已接通。
+provenance:
+  origin: template
+  template_ref: net-change@0.1.0

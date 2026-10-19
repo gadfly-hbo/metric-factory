@@ -1,5 +1,5 @@
 import { createServer, type Server } from "node:http";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadTemplate } from "../engine/loader.js";
 import { layout, templatesPage, templateDetailPage, instancePage, reviewPage, formErrorPage, escapeHtml, emptyScenarioFormValues, scenarioFormPage, scenarioFormValues, scenariosBlock, viewNav, releaseBlock, receiptsBlock, chip, type ScenarioFormValues, type ReleaseUiState, type ReceiptsUiState } from "./render.js";
@@ -14,7 +14,7 @@ import {
   parseQuestionsDsl, parseHypothesesDsl, parseEvidenceDsl, parseOptionsDsl
 } from "./dsl.js";
 import { loadInstance } from "../engine/loader.js";
-import { materialize, resolveBaseTemplate, EMPTY_TEMPLATE } from "../engine/materialize.js";
+import { materialize, resolveBaseTemplate, EMPTY_TEMPLATE, type MaterializedInstance } from "../engine/materialize.js";
 import { findPendingReview, applyApproval, applyRejection } from "../engine/review.js";
 import { writeInstanceFile } from "../engine/io.js";
 import { InstanceSchema } from "../schema/instance.js";
@@ -32,12 +32,16 @@ import { tryParseBudgetCaps } from "../llm/index.js";
 import { createFileBudgetStore } from "../llm/budget-store.js";
 import type { StatsView } from "./render-settings.js";
 import { settingsPage, type ChainEntry, type LlmStatus } from "./render-settings.js";
+import {
+  writeWithGate, patchBlueprintFields, patchHypothesis, patchEvidence, patchMetric, deleteMetric, patchScene, patchSceneBindings, resolveCalibers, methodYamlFromScene, methodIdFromSceneId, methodRoleId,
+  type WriteCtx
+} from "./api-write.js";
 import { wizardStep1Page, wizardStep2Page } from "./render-wizard.js";
 import { homePage } from "./render-home.js";
 import { AnswersSchema, type Answers } from "../schema/answers.js";
 import { matchTemplates } from "../engine/match.js";
 import { buildInstance } from "../engine/instantiate.js";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, access, readdir, readFile, writeFile, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
@@ -101,6 +105,118 @@ interface InstanceContext {
   base: Template;
   instancePath: string;
 }
+
+// A2 LA1：实例 → 评审原型 system 形状 DTO（G1/G2/G3 映射；T4 扩全量派生面）
+const JUDGMENT_RULE = "事实、解释、假设和建议分别表达；证据不足时保留未完成判断。";
+const ROLE_LABELS: Record<string, string> = { outcome: "结果指标", driver: "驱动指标", guardrail: "护栏指标" };
+
+// A2 T4：delivered 派生（G3）——releases/index.yaml 按包取最新版本；比较用快照对读在 T6 交付流接
+function latestRelease(workspaceDir: string, packageId: string): { version: string; created_at: string } | null {
+  try {
+    const doc = parseYaml(readFileSync(join(workspaceDir, "releases", "index.yaml"), "utf8")) as
+      { releases?: Array<{ package: string; version: string; created_at: string }> } | null;
+    const entries = (doc?.releases ?? []).filter(r => r.package === packageId);
+    if (entries.length === 0) return null;
+    return entries[entries.length - 1] ?? null; // 登记序即时间序（追加式）
+  } catch { return null; }
+}
+
+function buildSystemDto(ctx: InstanceContext, templates: Template[], workspaceDir: string, methods: MethodTemplate[] = []): Record<string, unknown> {
+  const mat = materialize(ctx.base, ctx.instance);
+  const bp = ctx.instance.blueprint;
+  const id = relative(workspaceDir, ctx.instancePath) || basename(ctx.instancePath);
+  const groupByMetric = new Map<string, string>();
+  for (const tree of ctx.base.trees) for (const child of tree.children) groupByMetric.set(child, tree.category ?? tree.id);
+  const methodById = new Map(methods.map((m) => [m.method.id, m]));
+  return {
+    id,
+    title: bp?.title ?? basename(dirname(ctx.instancePath)),
+    goal: bp?.purpose ?? "",
+    source: ctx.instance.base ? `模板基座 · ${ctx.base.template.industry}` : "AI 草稿",
+    hasBlueprint: Boolean(bp),
+    blueprint: bp
+      ? {
+          title: bp.title,
+          preset: bp.contexts.includes("战略选择") ? "strategy" : bp.contexts.includes("独立数据专题") ? "data" : "operating",
+          intent: bp.intent, contexts: bp.contexts, organizations: bp.organizations,
+          purpose: bp.purpose, decision: bp.decision, boundary: bp.boundary, deliverable: bp.deliverable,
+          questions: bp.questions.map((q) => ({ title: q.title, detail: q.detail ?? "", metricRefs: q.metric_refs })),
+          hypotheses: bp.hypotheses.map((h) => ({
+            id: h.id, text: h.statement, support: h.support, counter: h.counter,
+            change: h.change_condition, kind: h.judgment, verified: h.verified
+          })),
+          evidence: bp.evidence_plan.map((e) => ({
+            id: e.id, name: e.name, kind: e.kind, source: e.source, check: e.check,
+            failure: e.insufficiency, status: e.status
+          })),
+          options: bp.options.map((o) => ({ name: o.name, tradeoff: o.tradeoff })),
+          judgmentRule: JUDGMENT_RULE, methodId: null
+        }
+      : {
+          title: basename(dirname(ctx.instancePath)), preset: "metrics", intent: "建设可复用体系",
+          contexts: ["经营改善"], organizations: ["假设先行"], purpose: "", decision: "", boundary: "", deliverable: "",
+          questions: [], hypotheses: [], evidence: [], options: [], judgmentRule: JUDGMENT_RULE, methodId: null
+        },
+    metrics: mat.metrics.map((m) => ({
+      id: m.name, name: m.display_name, group: groupByMetric.get(m.name) ?? "未分组",
+      description: m.definition, formula: m.type_params?.expr ?? "计算关系见口径定义", unit: "—",
+      dependencies: []
+    })),
+    scenes: mat.scenarios.map((s) => {
+      const methodRef = s.method_bindings?.[0]?.method_ref ?? s.method_refs?.[0] ?? null;
+      const method = methodRef ? methodById.get(methodRef.split("@")[0] ?? methodRef) : undefined;
+      return {
+        id: s.id, name: s.title ?? s.id, methodId: methodRef?.split("@")[0] ?? null,
+        methodName: method?.method.name ?? methodRef ?? "未引用方法",
+        purpose: s.decision_purpose,
+        family: method?.family ?? "描述分解",
+        contexts: method?.contexts ?? ["经营改善"],
+        limit: method?.limits ?? "描述性拆解不自动提供因果解释；真实执行支持需另行核对。",
+        evidence: method?.evidence ?? "同范围的原始记录、明确口径与独立核验条件。",
+        steps: (method?.steps ?? []).map((st) => ({ title: st.title, detail: st.detail })),
+        bindings: [
+          ...s.metric_usages.map((u) => ({ role: ROLE_LABELS[u.role] ?? u.role, metric: u.metric, required: true })),
+          ...(s.method_bindings ?? []).map((b) => {
+            const role = method?.roles.find((r) => r.id === b.role);
+            return { role: role?.name ?? b.role, metric: b.metric, required: role?.required ?? true };
+          })
+        ]
+      };
+    }),
+    pending: derivePending(mat), // G2：约定键派生（退款归属/复购窗口；确认动作 T5 写 added 指标 caliber_switches）
+    confirmed: blueprintReviewStatus(mat).state === "valid",
+    reviewState: blueprintReviewStatus(mat).state,
+    reviewPending: mat.metrics.filter(m => m.provenance.origin === "llm" && !m.provenance.reviewed_by).map(m => ({ name: m.name, display: m.display_name })),
+    engineReady: designReview(mat, ctx.base, ctx.instance, []).ready, // T6 交付门真值基础（方法面由调用方按需重算覆盖）
+    delivered: latestRelease(workspaceDir, packageIdFromInstancePath(ctx.instancePath)),
+    revision: 1, // G3：丢弃自增号；「有新工作草稿」标签由 release 快照对读派生
+    chat: [], proposal: null,
+    metricOnly: mat.scenarios.length === 0 && !ctx.instance.blueprint
+  };
+}
+
+// G2 判据实现：退款/复购类指标存在 → 口径问题面；已确认 = 物化 caliber_switches 带约定键
+// 键名约定（U1-b/G2）：refund_to_payment_period: boolean；repeat_window_<30|90|180>d: true（选中的窗口）
+const PENDING_RULES: Array<{ key: "refund" | "repeat"; caliberKeys: string[]; match: RegExp }> = [
+  { key: "refund", caliberKeys: ["refund_to_payment_period"], match: /refund|退款/ },
+  { key: "repeat", caliberKeys: ["repeat_window_30d", "repeat_window_90d", "repeat_window_180d"], match: /repeat|复购/ }
+];
+function derivePending(mat: MaterializedInstance): Record<string, boolean | string | null> {
+  const pending: Record<string, boolean | string | null> = {};
+  for (const rule of PENDING_RULES) {
+    const related = mat.metrics.filter(m => rule.match.test(m.name) || rule.match.test(m.display_name));
+    if (related.length === 0) continue;
+    if (rule.key === "refund") {
+      const hit = related.find(m => typeof m.caliber_switches.refund_to_payment_period === "boolean");
+      pending.refund = hit ? (hit.caliber_switches.refund_to_payment_period as boolean) : null;
+    } else {
+      const confirmed = rule.caliberKeys.flatMap(k => related.filter(m => m.caliber_switches[k] === true).map(() => k.slice("repeat_window_".length, -1)))[0];
+      pending.repeat = confirmed ?? null;
+    }
+  }
+  return pending;
+}
+
 
 async function loadInstanceContext(instancePath: string | undefined, templates: Template[]): Promise<InstanceContext | null> {
   if (!instancePath) return null;
@@ -241,12 +357,16 @@ function parseWizardAnswers(map: { get(k: string): string | null }): { ok: true;
 
 // ===== AI 草案 job（内存态；产物落盘 draft.pending.yaml，重启不丢）=====
 interface DraftJob {
+  /** A2：JSON API 轮询用（A1 表单流 id 在 map key，对象内可缺省） */
+  id?: string;
   kind: "generate" | "refine";
   status: "running" | "done" | "error";
   error?: string;
   issues?: string[];
   /** A1：完成后去向——指标草案（drafts）/ 蓝图草案预览（blueprint）/ 首页创建流预览（blueprint-create） */
   returnTo?: "drafts" | "blueprint" | "blueprint-create";
+  /** A2 T3（G1 自动落盘）：创建 job 完成后的实例相对路径 */
+  instanceId?: string;
 }
 
 function draftPendingPath(instancePath: string): string {
@@ -480,6 +600,619 @@ export function createUiServer(opts: UiOptions): Server {
     try {
       const templates = await discoverTemplates(opts.templatesDir);
       const statusInfo = `模板 ${templates.length} 个${currentInstancePath ? ` · 当前实例 ${currentInstancePath}` : ""}`;
+
+      // ===== A2：SPA 静态资产 + JSON API（评审原型严格复刻；T2=读面，写路径切片接引擎）=====
+      const sendJson = (code: number, obj: unknown) => {
+        res.writeHead(code, { "content-type": "application/json; charset=utf-8" }).end(JSON.stringify(obj));
+      };
+      // 静态目录解析：src/ui/public（vitest/源码态）或 dist 根（tsup publicDir 拷贝产物）
+      const moduleDir = dirname(fileURLToPath(import.meta.url));
+      const publicDir = existsSync(join(moduleDir, "public", "index.html")) ? join(moduleDir, "public") : moduleDir;
+      const servePublic = async (file: string, type: string): Promise<boolean> => {
+        try {
+          const data = await readFile(join(publicDir, file));
+          res.writeHead(200, { "content-type": type, "cache-control": "no-cache" }).end(data);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
+      if (req.method === "GET" && path === "/") {
+        if (await servePublic("index.html", "text/html; charset=utf-8")) return;
+      }
+      if (req.method === "GET" && (path === "/style.css" || path === "/app.js" || path === "/api.js")) {
+        const type = path.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8";
+        if (await servePublic(path.slice(1), type)) return;
+        res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("not found");
+        return;
+      }
+      if (req.method === "GET" && path === "/docs/guide") {
+        try {
+          // 仓内文档（src/ui 与 dist chunk 两处模块位置均回仓根；workspaceDir 指向别的目录时仍可读）
+          const md = await readFile(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "docs", "工作台使用指南.md"), "utf8");
+          res.writeHead(200, { "content-type": "text/plain; charset=utf-8" }).end(md);
+        } catch {
+          res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("指南未找到");
+        }
+        return;
+      }
+      if (req.method === "GET" && path === "/api/llm-status") {
+        const status = await llmStatus(envFilePath, authJsonPath);
+        sendJson(200, { mode: status.mode === "faux" ? "faux" : status.mode === "configured" ? "configured" : "none", raw: status.mode });
+        return;
+      }
+      if (req.method === "GET" && path === "/api/workspace") {
+        const systems = [];
+        for (const found of await discoverInstances(workspaceDir)) {
+          const ctx = await loadInstanceContext(found.path, templates);
+          if (!ctx) continue;
+          const mat = materialize(ctx.base, ctx.instance);
+          const bp = ctx.instance.blueprint;
+          const systemsDir = dirname(found.path);
+          systems.push({
+            id: relative(workspaceDir, found.path) || basename(found.path),
+            title: bp?.title ?? basename(systemsDir),
+            source: ctx.instance.base ? `模板基座 · ${ctx.base.template.industry}` : "AI 草稿",
+            metricCount: mat.metrics.length,
+            sceneCount: mat.scenarios.length,
+            delivered: latestRelease(workspaceDir, packageIdFromInstancePath(found.path)), // G3：已交付版本标签派生
+            hasBlueprint: Boolean(bp)
+          });
+        }
+        sendJson(200, { systems });
+        return;
+      }
+      if (req.method === "GET" && path === "/api/templates") {
+        const methods = await discoverMethods(opts.templatesDir);
+        // U1-a：templates/user/ 宽松装载（用户草稿模板，「我的模板」过滤源；不进 lint 门不进匹配池）
+        const userTemplates: Array<Record<string, unknown>> = [];
+        try {
+          for (const f of (await readdir(join(opts.templatesDir, "user"))).filter(n => n.endsWith(".yaml"))) {
+            try {
+              const doc = parseYaml(await readFile(join(opts.templatesDir, "user", f), "utf8")) as {
+                id: string; name: string; purpose?: string; incomplete?: boolean;
+                metrics?: Array<{ name: string; description: string; group?: string }>;
+              };
+              userTemplates.push({
+                id: doc.id, type: "metric", name: doc.name,
+                description: doc.purpose || "从自己的指标资料导入或另存的草稿模板。",
+                source: "我的模板", incomplete: Boolean(doc.incomplete),
+                metricIds: (doc.metrics ?? []).map(m => m.name),
+                customMetrics: (doc.metrics ?? []).map(m => ({ name: m.name }))
+              });
+            } catch { /* 单个用户模板损坏则跳过（宽松装载不阻断库） */ }
+          }
+        } catch { /* 无 templates/user/ 目录 = 空用户库 */ }
+        // 评审原型卡片序（G6：oracle 04 结构对照）：三个内置方法在前，分析三方法随后
+        const DEMO_METHOD_ORDER = ["net-change", "repeat-review", "weekly-review", "profit-change-diagnosis", "strategic-options-comparison", "association-vs-increment"];
+        const orderedMethods = [
+          ...DEMO_METHOD_ORDER.flatMap((id) => methods.filter((m) => m.method.id === id)),
+          ...methods.filter((m) => !DEMO_METHOD_ORDER.includes(m.method.id))
+        ];
+        sendJson(200, {
+          templates: [
+            ...userTemplates,
+            ...templates.map((t) => ({
+              id: t.template.id, type: "metric" as const, name: t.template.industry,
+              description: `${t.template.industry} · ${t.template.business_models.join("／")}`,
+              source: "内置行业模板",
+              metricIds: t.metrics.map((m) => m.name),
+              customMetrics: t.metrics.map((m) => ({ name: m.display_name })),
+              scenes: t.scenarios.map((s) => s.id)
+            }))
+          ],
+          methodTemplates: orderedMethods.map((m) => ({
+            id: m.method.id, type: "method" as const, name: m.method.name, description: m.method.description,
+            source: "内置方法模板", contexts: m.contexts, family: m.family, roles: m.roles.map((r) => r.name),
+            purpose: m.purpose, steps: m.steps, evidence: m.evidence, limit: m.limits
+          }))
+        });
+        return;
+      }
+      const apiInstanceMatch = req.method === "GET" ? path.match(/^\/api\/instances\/([^/]+)$/) : null;
+      if (apiInstanceMatch) {
+        const id = decodeURIComponent(apiInstanceMatch[1] ?? "");
+        const instancePath = resolve(workspaceDir, id);
+        const ctx = await loadInstanceContext(instancePath, templates);
+        if (!ctx) { sendJson(404, { error: `实例不可读：${id}` }); return; }
+        const methods = await discoverMethods(opts.templatesDir);
+        sendJson(200, buildSystemDto(ctx, templates, workspaceDir, methods));
+        return;
+      }
+      // A2 T3（G1/G4）：NL 创建 job——生成完成即自动落盘 system-<时间戳>，前端轮询进 work
+      if (req.method === "POST" && path === "/api/instances/create-job") {
+        const chunks: Buffer[] = [];
+        for await (const c of req) chunks.push(c as Buffer);
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { need?: string };
+        const need = String(body.need ?? "").trim();
+        if (!need) { sendJson(422, { error: "先写一点业务需求，几个字也可以。" }); return; }
+        const jobId = randomUUID();
+        const job: DraftJob = { id: jobId, kind: "generate", status: "running", returnTo: "blueprint-create" };
+        jobs.set(jobId, job);
+        const methods = await discoverMethods(opts.templatesDir);
+        void (async () => {
+          try {
+            const { env } = await resolveLlmEnvAuto({ processEnv: process.env, envFilePath, authJsonPath: opts.authJsonPath });
+            const client = createLlmClientFromEnv(env, job.kind);
+            const modelLabel = env.MF_LLM_MODEL ?? (env.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
+            const result = await generateBlueprintDraft(client, buildBlueprintGeneratePrompt(EMPTY_TEMPLATE, methods, need), need, modelLabel, new Date().toISOString());
+            if (!result.ok) {
+              job.status = "error";
+              job.error = `模型输出未通过校验（阶段 ${result.stage}）`;
+              job.issues = result.issues ?? [result.stage === "call" ? result.raw : `原始返回前 300 字：${result.raw.slice(0, 300)}`];
+              return;
+            }
+            // G1：自动落盘（目录名系统生成；改名走 blueprint.title，不动目录）。同秒并发创建追加序号保证唯一。
+            const ts = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "").replace(/(^\d{8})(\d{6})$/, "$1-$2");
+            let dirName = `system-${ts}`;
+            let outPath = join(workspaceDir, dirName, "instance.yaml");
+            for (let suffix = 2; ; suffix++) {
+              try { await access(outPath); dirName = `system-${ts}-${suffix}`; outPath = join(workspaceDir, dirName, "instance.yaml"); } catch { break; }
+            }
+            const instance = InstanceSchema.safeParse({
+              instance: { created_at: new Date().toISOString() },
+              added: result.draft.added,
+              added_scenarios: result.draft.added_scenarios,
+              blueprint: result.draft.blueprint
+            });
+            if (!instance.success) {
+              job.status = "error";
+              job.error = "生成内容未通过实例校验";
+              job.issues = instance.error.issues.map((i) => `[instance] ${i.path.join(".")}: ${i.message}`);
+              return;
+            }
+            const issues = validateDesign(materialize(EMPTY_TEMPLATE, instance.data), EMPTY_TEMPLATE, instance.data, methods, { skipReviewGate: true, writeMode: true });
+            if (issues.length > 0) {
+              job.status = "error";
+              job.error = "生成内容未通过引擎写入门（零写盘）";
+              job.issues = issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`);
+              return;
+            }
+            await mkdir(dirname(outPath), { recursive: true });
+            await writeInstanceFile(outPath, instance.data);
+            job.status = "done";
+            job.instanceId = relative(workspaceDir, outPath);
+          } catch (e) {
+            job.status = "error";
+            job.error = (e as Error).message;
+          }
+        })();
+        sendJson(202, { jobId: job.id });
+        return;
+      }
+      const apiJobMatch = req.method === "GET" ? path.match(/^\/api\/jobs\/([a-f0-9-]+)$/) : null;
+      if (apiJobMatch) {
+        const job = jobs.get(apiJobMatch[1] ?? "");
+        if (!job) { sendJson(404, { error: "任务不存在（服务可能已重启）" }); return; }
+        sendJson(200, { status: job.status, error: job.error, issues: job.issues, instanceId: job.instanceId ?? null });
+        return;
+      }
+
+      const readJsonBody = async (): Promise<Record<string, unknown>> => {
+        const chunks: Buffer[] = [];
+        for await (const c of req) chunks.push(c as Buffer);
+        return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as Record<string, unknown>;
+      };
+      // ===== A2 T6：审核行（G7）/ 复核确认 / 交付（G3 自动版本）/ 导出直链 =====
+      const t6Match = path.match(/^\/api\/instances\/([^/]+)\/(approve-metric|reject-metric|confirm-review|deliver|export)$/);
+      if (t6Match && req.method !== "GET") {
+        const id = decodeURIComponent(t6Match[1] ?? "");
+        const ctx = await loadInstanceContext(resolve(workspaceDir, id), templates);
+        if (!ctx) { sendJson(404, { error: `实例不可读：${id}` }); return; }
+        const methods = await discoverMethods(opts.templatesDir);
+        const action = t6Match[2]!;
+        if (action === "approve-metric" || action === "reject-metric") {
+          const body = await readJsonBody() as { name?: string; reviewer?: string };
+          const name = String(body.name ?? "");
+          const mat = materialize(ctx.base, ctx.instance);
+          if (!mat.metrics.some(m => m.name === name)) { sendJson(404, { errors: [`指标 ${name} 不存在。`] }); return; }
+          const next = action === "approve-metric"
+            ? applyApproval(ctx.instance, name, String(body.reviewer ?? process.env.MF_REVIEWER ?? process.env.USER ?? "unknown"))
+            : applyRejection(ctx.instance, name);
+          const result = await writeWithGate(ctx, methods, () => ({ instance: next }));
+          if (!result.ok) { sendJson(result.status, { errors: result.errors }); return; }
+          const fresh = await loadInstanceContext(ctx.instancePath, templates);
+          sendJson(200, buildSystemDto(fresh ?? ctx, templates, workspaceDir, methods));
+          return;
+        }
+        if (action === "confirm-review") {
+          const body = await readJsonBody() as { confirmed_by?: string };
+          const confirmedBy = String(body.confirmed_by ?? process.env.MF_REVIEWER ?? process.env.USER ?? "").trim();
+          const mat = materialize(ctx.base, ctx.instance);
+          if (!ctx.instance.blueprint) { sendJson(422, { errors: ["当前实例无分析体系（仅指标体系模式无需业务复核）。"] }); return; }
+          if (!confirmedBy) { sendJson(422, { errors: ["复核人不能为空（复核动作必须归属到具体责任人）。"] }); return; }
+          const review = designReview(mat, ctx.base, ctx.instance, methods);
+          if (review.designIssues.length > 0) { sendJson(422, { errors: [`存在 ${review.designIssues.length} 项设计缺口，处理完成后才能复核：`, ...review.designIssues.map(i => `[${i.rule}] ${i.path}: ${i.message}`)] }); return; }
+          const confirmed: Instance = {
+            ...ctx.instance,
+            blueprint: {
+              ...ctx.instance.blueprint,
+              review: { confirmed_by: confirmedBy, confirmed_at: new Date().toISOString(), design_fingerprint: designFingerprint(mat) }
+            }
+          };
+          const result = await writeWithGate(ctx, methods, () => ({ instance: confirmed }));
+          if (!result.ok) { sendJson(result.status, { errors: result.errors }); return; }
+          const fresh = await loadInstanceContext(ctx.instancePath, templates);
+          sendJson(200, buildSystemDto(fresh ?? ctx, templates, workspaceDir, methods));
+          return;
+        }
+        if (action === "deliver") {
+          // G3：自动建议 next patch（无既有发布 → 1.0.0）；same-content 阻断由引擎透出
+          const packageId = packageIdFromInstancePath(ctx.instancePath);
+          const latest = latestRelease(workspaceDir, packageId);
+          const [maj, min, pat] = (latest?.version ?? "1.0.0").split(".").map(Number) as [number, number, number];
+          const nextVersion = latest ? `${maj}.${min}.${pat + 1}` : "1.0.0";
+          try {
+            const result = await releaseInstance({
+              instancePath: ctx.instancePath,
+              version: nextVersion,
+              templatesDir: opts.templatesDir,
+              releasesDir: join(workspaceDir, "releases"),
+              releasedBy: process.env.MF_REVIEWER ?? process.env.USER ?? "unknown",
+              note: "工作台交付（A2 SPA）",
+              now: new Date().toISOString()
+            });
+            const fresh = await loadInstanceContext(ctx.instancePath, templates);
+            const dto = buildSystemDto(fresh ?? ctx, templates, workspaceDir, methods);
+            sendJson(201, { version: result.version, packageId: result.packageId, contentFingerprint: result.contentFingerprint, system: dto });
+          } catch (e) {
+            if (e instanceof ReleaseError) {
+              sendJson(422, { errors: [e.rule === "same-content" ? "当前草稿与已交付版本相同，无需重复生成。" : `[${e.rule}] ${e.message}`] });
+              return;
+            }
+            if (e instanceof ExportBlockedError) { sendJson(422, { errors: [`以下 LLM 生成指标未经人工审核：${e.blockedMetrics.join("、")}`] }); return; }
+            throw e;
+          }
+          return;
+        }
+      }
+      const t6ExportMatch = path.match(/^\/api\/instances\/([^/]+)\/export\/([a-z]+)$/);
+      if (t6ExportMatch && (req.method === "GET" || req.method === "HEAD")) {
+        const id = decodeURIComponent(t6ExportMatch[1] ?? "");
+        const format = t6ExportMatch[2]!;
+        const ctx = await loadInstanceContext(resolve(workspaceDir, id), templates);
+        if (!ctx) { sendJson(404, { error: `实例不可读：${id}` }); return; }
+        const exporters: Record<string, Exporter> = { metricflow: metricflowExporter, excel: excelExporter, mermaid: mermaidExporter };
+        if (format !== "sap" && !exporters[format]) { sendJson(422, { errors: [`未知导出格式：${format}`] }); return; }
+        const mat = materialize(ctx.base, ctx.instance);
+        const methods = await discoverMethods(opts.templatesDir);
+        // 与表单导出同一全量门（含 LLM 审核阻断与设计缺口；交付物语义一致）
+        const issues = validateDesign(mat, ctx.base, ctx.instance, methods);
+        if (issues.length > 0) { sendJson(422, { errors: issues.map(i => `[${i.rule}] ${i.path}: ${i.message}`) }); return; }
+        try {
+          const exporter: Exporter = format === "sap"
+            ? createSapExporter({ template: ctx.base, packageId: packageIdFromInstancePath(ctx.instancePath), instanceConceptRefs: ctx.instance.concept_refs })
+            : exporters[format]!;
+          const result = await exporter.export(mat);
+          const mime = format === "excel"
+            ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            : format === "metricflow" || format === "sap" ? "text/yaml; charset=utf-8" : "text/plain; charset=utf-8";
+          res.writeHead(200, { "content-type": mime, "content-disposition": `attachment; filename="${result.filename}"` });
+          res.end(result.content);
+        } catch (e) {
+          if (e instanceof ExportBlockedError) { sendJson(422, { errors: [`以下 LLM 生成指标未经人工审核：${e.blockedMetrics.join("、")}`] }); return; }
+          if (e instanceof SapAssemblyError || e instanceof SapExportValidationError) {
+            const errors = e instanceof SapAssemblyError
+              ? [`[${e.rule}] ${e.message}`]
+              : e.issues.map(i => `[${i.rule}] ${i.path}: ${i.message}`);
+            sendJson(422, { errors });
+            return;
+          }
+          throw e;
+        }
+        return;
+      }
+
+      // ===== A2 T7：助手 refine job（提案先看建议再采纳）/ 应用与放弃 / 用户模板（U1-a）/ 从模板创建 =====
+      const refineMatch = path.match(/^\/api\/instances\/([^/]+)\/(refine-job|apply-refine|discard-refine)$/);
+      const fromTemplateMatch = path === "/api/templates/use" ? ["", "", "from-template"] : null;
+      if ((refineMatch || fromTemplateMatch) && req.method !== "GET") {
+        const id = refineMatch ? decodeURIComponent(refineMatch[1] ?? "") : "";
+        const action = (refineMatch ?? fromTemplateMatch)![2]!;
+        if (action === "from-template") {
+          const body = await readJsonBody() as { templateId?: string };
+          const tpl = templates.find(t => t.template.id === body.templateId);
+          if (!tpl) { sendJson(404, { errors: [`模板 ${body.templateId} 不存在。`] }); return; }
+          const answers = {
+            revenue_model: (tpl.matching.revenue_models[0] ?? "交易抽佣") as Answers["revenue_model"],
+            user_structure: (tpl.matching.user_structure[0] ?? "2C") as Answers["user_structure"],
+            core_loop: (tpl.matching.core_loops[0] ?? "交易") as Answers["core_loop"],
+            caliber: {}
+          };
+          const instance = buildInstance(tpl, answers, new Date().toISOString());
+          const ts = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "").replace(/(^\d{8})(\d{6})$/, "$1-$2");
+          let dirName = `system-${ts}`;
+          let outPath = join(workspaceDir, dirName, "instance.yaml");
+          for (let suffix = 2; ; suffix++) {
+            try { await access(outPath); dirName = `system-${ts}-${suffix}`; outPath = join(workspaceDir, dirName, "instance.yaml"); } catch { break; }
+          }
+          await mkdir(dirname(outPath), { recursive: true });
+          await writeInstanceFile(outPath, instance);
+          const ctx = await loadInstanceContext(outPath, templates);
+          sendJson(201, { instanceId: relative(workspaceDir, outPath), system: ctx ? buildSystemDto(ctx, templates, workspaceDir, await discoverMethods(opts.templatesDir)) : null });
+          return;
+        }
+        const ctx = await loadInstanceContext(resolve(workspaceDir, id), templates);
+        if (!ctx) { sendJson(404, { error: `实例不可读：${id}` }); return; }
+        const methods = await discoverMethods(opts.templatesDir);
+        if (action === "refine-job") {
+          const body = await readJsonBody() as { instruction?: string };
+          const instruction = String(body.instruction ?? "").trim();
+          if (!instruction) { sendJson(422, { errors: ["先说说希望怎样修改。"] }); return; }
+          const jobId = randomUUID();
+          const job: DraftJob = { id: jobId, kind: "refine", status: "running", returnTo: "blueprint" };
+          jobs.set(jobId, job);
+          const draftPath = join(dirname(ctx.instancePath), "draft.pending.yaml");
+          runBlueprintJob(job, ctx.base, ctx.instance, methods, instruction, draftPath);
+          // 提案摘要由 done 轮询端从草案 diff 提炼（G：先看建议再采纳）
+          sendJson(202, { jobId, draftPath: relative(workspaceDir, draftPath) });
+          return;
+        }
+        if (action === "apply-refine") {
+          const pending = await loadPendingDraft(join(dirname(ctx.instancePath), "draft.pending.yaml"));
+          if (!pending || !pending.ok || !pending.draft.blueprint) {
+            sendJson(422, { errors: ["没有可采纳的建议（草案不存在或已被处理），请重新发起。"] });
+            return;
+          }
+          const merged: Instance = {
+            ...ctx.instance,
+            blueprint: pending.draft.blueprint,
+            added: pending.draft.added,
+            added_scenarios: pending.draft.added_scenarios
+          };
+          const result = await writeWithGate(ctx, methods, () => ({ instance: merged }));
+          if (!result.ok) { sendJson(result.status, { errors: result.errors }); return; }
+          await rm(join(dirname(ctx.instancePath), "draft.pending.yaml"), { force: true });
+          const fresh = await loadInstanceContext(ctx.instancePath, templates);
+          sendJson(200, buildSystemDto(fresh ?? ctx, templates, workspaceDir, methods));
+          return;
+        }
+        if (action === "discard-refine") {
+          await rm(join(dirname(ctx.instancePath), "draft.pending.yaml"), { force: true });
+          sendJson(200, { discarded: true });
+          return;
+        }
+      }
+      const refineProposalMatch = path.match(/^\/api\/instances\/([^/]+)\/refine-proposal$/);
+      if (refineProposalMatch && req.method === "GET") {
+        // 提案预览：读待采纳草案 → demo 提案卡形状（title/description/before/after/impact 概览）
+        const id = decodeURIComponent(refineProposalMatch[1] ?? "");
+        const ctx = await loadInstanceContext(resolve(workspaceDir, id), templates);
+        if (!ctx) { sendJson(404, { error: `实例不可读：${id}` }); return; }
+        const pending = await loadPendingDraft(join(dirname(ctx.instancePath), "draft.pending.yaml"));
+        if (!pending || !pending.ok || !pending.draft.blueprint) { sendJson(404, { error: "没有待采纳的建议。" }); return; }
+        const oldBp = ctx.instance.blueprint;
+        const newBp = pending.draft.blueprint;
+        const changed: string[] = [];
+        if (oldBp?.purpose !== newBp.purpose) changed.push("业务目的");
+        if (oldBp?.decision !== newBp.decision) changed.push("研究问题");
+        if ((oldBp?.contexts ?? []).join() !== newBp.contexts.join()) changed.push(`语境（${newBp.contexts.join("、")}）`);
+        if (oldBp?.questions.length !== newBp.questions.length) changed.push(`问题（${newBp.questions.length} 个）`);
+        if (oldBp?.hypotheses.length !== newBp.hypotheses.length) changed.push(`假设（${newBp.hypotheses.length} 条）`);
+        if (pending.draft.added.length > 0) changed.push(`新增指标 ${pending.draft.added.length} 个`);
+        if (pending.draft.added_scenarios.length > 0) changed.push(`新增场景 ${pending.draft.added_scenarios.length} 个`);
+        sendJson(200, {
+          title: "AI 修改建议",
+          description: newBp.purpose || "按你的指令更新分析设计。",
+          before: oldBp ? `${oldBp.questions.length} 个问题 · ${oldBp.hypotheses.length} 条假设` : "（无蓝图）",
+          after: changed.length ? changed.join("、") : "内容与当前草稿一致",
+          impact: "采纳后写入同一工作稿；相关业务复核将失效（需重新确认）。放弃则零改动。",
+          addedMetricNames: pending.draft.added.map(m => m.display_name)
+        });
+        return;
+      }
+      // ===== U1-a：用户指标模板（templates/user/ 宽松装载；不进 lint 门不进匹配池）=====
+      const userDir = join(opts.templatesDir, "user");
+      if (req.method === "POST" && path === "/api/templates/user") {
+        const body = await readJsonBody() as { name?: string; rows?: Array<{ name?: string; description?: string; group?: string; formula?: string; unit?: string }>; purpose?: string };
+        const name = String(body.name ?? "").trim();
+        const rows = Array.isArray(body.rows) ? body.rows : [];
+        if (!name) { sendJson(422, { errors: ["模板名称必填。"] }); return; }
+        if (rows.length === 0 || rows.some(r => !String(r.name ?? "").trim())) { sendJson(422, { errors: ["至少一行指标且每行需有名称。"] }); return; }
+        const id = `user-${Date.now().toString(36)}`;
+        const incomplete = rows.some(r => !String(r.description ?? "").trim());
+        const lines = [
+          "# 用户指标模板（工作台导入/另存，A2 U1-a：宽松装载，不进 lint 门与匹配池）",
+          `id: ${id}`,
+          `name: ${JSON.stringify(name)}`,
+          `purpose: ${JSON.stringify(String(body.purpose ?? ""))}`,
+          `incomplete: ${incomplete}`,
+          "metrics:",
+          ...rows.map(r => `  - name: ${JSON.stringify(String(r.name ?? "").trim())}\n    description: ${JSON.stringify(String(r.description ?? "").trim())}\n    group: ${JSON.stringify(String(r.group ?? "导入指标").trim())}\n    formula: ${JSON.stringify(String(r.formula ?? "计算关系待检查").trim())}\n    unit: ${JSON.stringify(String(r.unit ?? "待确认").trim())}`)
+        ];
+        await mkdir(userDir, { recursive: true });
+        await writeFile(join(userDir, `${id}.yaml`), lines.join("\n") + "\n", "utf8");
+        sendJson(201, { id, name, incomplete });
+        return;
+      }
+      const userTplMatch = path.match(/^\/api\/templates\/user\/preview$/);
+      if (userTplMatch && req.method === "POST") {
+        // SPA use-template 指标类（用户草稿模板）：创建 blank 基座 + added 指标（manual 来源）
+        const body = await readJsonBody() as { id?: string };
+        const file = join(userDir, `${body.id}.yaml`);
+        if (!existsSync(file)) { sendJson(404, { errors: [`用户模板 ${body.id} 不存在。`] }); return; }
+        const doc = parseYaml(await readFile(file, "utf8")) as { name?: string; metrics?: Array<{ name: string; description: string; group?: string; formula?: string }> };
+        const methods = await discoverMethods(opts.templatesDir);
+        const slug = (s: string, i: number) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || `metric_${i + 1}`;
+        const seen = new Set<string>();
+        const added = (doc.metrics ?? []).map((m, i) => {
+          let name = slug(m.name, i);
+          while (seen.has(name)) name = `${name}_${i}`;
+          seen.add(name);
+          return {
+            name, display_name: m.name, type: "simple" as const, definition: m.description || "（待补充统计说明）",
+            dimensions: [], time_grains: ["month" as const], owner_role: "业务",
+            caliber_switches: {}, provenance: { origin: "manual" as const }
+          };
+        });
+        const ts = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "").replace(/(^\d{8})(\d{6})$/, "$1-$2");
+        let dirName = `system-${ts}`;
+        let outPath = join(workspaceDir, dirName, "instance.yaml");
+        for (let suffix = 2; ; suffix++) {
+          try { await access(outPath); dirName = `system-${ts}-${suffix}`; outPath = join(workspaceDir, dirName, "instance.yaml"); } catch { break; }
+        }
+        const instanceParsed = InstanceSchema.safeParse({ instance: { created_at: new Date().toISOString() }, added });
+        if (!instanceParsed.success) { sendJson(422, { errors: instanceParsed.error.issues.map(i => `[instance] ${i.path.join(".")}: ${i.message}`) }); return; }
+        // F5（评审）：与全部写路径一致——构造的 added 指标同样过引擎 writeMode 门（引用完整性 fail-closed）
+        const gateIssues = validateDesign(materialize(EMPTY_TEMPLATE, instanceParsed.data), EMPTY_TEMPLATE, instanceParsed.data, methods, { skipReviewGate: true, writeMode: true });
+        if (gateIssues.length > 0) { sendJson(422, { errors: gateIssues.map(i => `[${i.rule}] ${i.path}: ${i.message}`) }); return; }
+        await mkdir(dirname(outPath), { recursive: true });
+        await writeInstanceFile(outPath, instanceParsed.data);
+        const ctx = await loadInstanceContext(outPath, templates);
+        sendJson(201, { instanceId: relative(workspaceDir, outPath), system: ctx ? buildSystemDto(ctx, templates, workspaceDir, await discoverMethods(opts.templatesDir)) : null });
+        return;
+      }
+
+      const loadCtxById = async (id: string): Promise<WriteCtx | null> => {
+        const instancePath = resolve(workspaceDir, id);
+        return await loadInstanceContext(instancePath, templates);
+      };
+      const dtoAfter = async (ctx: WriteCtx) => buildSystemDto(ctx, templates, workspaceDir, await discoverMethods(opts.templatesDir));
+
+      const writeMatch = path.match(/^\/api\/instances\/([^/]+)(?:\/(blueprint|metrics|scenes|resolve)(.*))?$/);
+      if (writeMatch && req.method !== "GET") {
+        const id = decodeURIComponent(writeMatch[1] ?? "");
+        const ctx = await loadCtxById(id);
+        if (!ctx) { sendJson(404, { error: `实例不可读：${id}` }); return; }
+        const methods = await discoverMethods(opts.templatesDir);
+        const rest = writeMatch[3] ?? "";
+        const gate = async (mutate: () => { instance: unknown } | { errors: string[] } | { blocked: true; references: string[] }) => {
+          const next = mutate();
+          if ("blocked" in next && next.blocked) { sendJson(409, next as { blocked: true; references: string[] }); return; }
+          if ("errors" in next) { sendJson(422, { errors: next.errors }); return; }
+          const result = await writeWithGate(ctx, methods, () => next as { instance: unknown });
+          if (!result.ok) { sendJson(result.status, { errors: result.errors }); return; }
+          const fresh = await loadInstanceContext(ctx.instancePath, templates);
+          sendJson(200, await dtoAfter(fresh ?? ctx));
+        };
+        // PATCH /api/instances/:id/blueprint（基础字段合并）
+        if (writeMatch[2] === "blueprint" && rest === "" && req.method === "PATCH") {
+          const body = await readJsonBody();
+          await gate(() => patchBlueprintFields(ctx, body));
+          return;
+        }
+        // PATCH /api/instances/:id/blueprint/hypotheses/:hid（文本三要素 + 判断状态分轴）
+        const hypMatch = rest.match(/^\/hypotheses\/([a-z][a-z0-9_]*)$/);
+        if (writeMatch[2] === "blueprint" && hypMatch && req.method === "PATCH") {
+          const body = await readJsonBody();
+          await gate(() => patchHypothesis(ctx, hypMatch[1]!, body));
+          return;
+        }
+        // PATCH /api/instances/:id/blueprint/evidence/:eid
+        const evMatch = rest.match(/^\/evidence\/([a-z][a-z0-9_-]+)$/);
+        if (writeMatch[2] === "blueprint" && evMatch && req.method === "PATCH") {
+          const body = await readJsonBody();
+          await gate(() => patchEvidence(ctx, evMatch[1]!, body));
+          return;
+        }
+        // DELETE /api/instances/:id/metrics/:name（无 confirm=只查影响不执行；confirm=1 执行删除）
+        const metricMatch = rest.match(/^\/([a-z][a-z0-9_]*)$/);
+        if (writeMatch[2] === "metrics" && metricMatch && req.method === "DELETE") {
+          const confirm = url.searchParams.get("confirm") === "1";
+          const pre = deleteMetric(ctx, metricMatch[1]!, false);
+          if ("blocked" in pre && pre.blocked) { sendJson(409, pre); return; }
+          if (!confirm) { sendJson(200, { blocked: false }); return; } // 影响查询模式：无引用也不删（显式确认才动）
+          await gate(() => deleteMetric(ctx, metricMatch[1]!, true) as { instance: unknown } | { errors: string[] });
+          return;
+        }
+        // PATCH /api/instances/:id/metrics/:name（名称/统计说明）
+        if (writeMatch[2] === "metrics" && metricMatch && req.method === "PATCH") {
+          const body = await readJsonBody();
+          await gate(() => patchMetric(ctx, metricMatch[1]!, body));
+          return;
+        }
+        // PATCH /api/instances/:id/scenes/:sid（用途；步骤另存方法 G8 走 POST save-as-method）
+        const sceneMatch = rest.match(/^\/([a-z][a-z0-9_]*)$/);
+        if (writeMatch[2] === "scenes" && sceneMatch && req.method === "PATCH") {
+          const body = await readJsonBody();
+          await gate(() => patchScene(ctx, sceneMatch[1]!, body));
+          return;
+        }
+        // POST /api/instances/:id/scenes（方法模板 → 新场景：T7 use-template method / generate-scene）
+        if (writeMatch[2] === "scenes" && rest === "" && req.method === "POST") {
+          const body = await readJsonBody() as { methodId?: string; purpose?: string };
+          const methods = await discoverMethods(opts.templatesDir);
+          const method = methods.find(m => m.method.id === body.methodId);
+          if (!method) { sendJson(404, { errors: [`方法 ${body.methodId} 不存在。`] }); return; }
+          const mat = materialize(ctx.base, ctx.instance);
+          let sid = `${method.method.id.replace(/-/g, "_")}`;
+          while (mat.scenarios.some(s => s.id === sid)) sid = `${sid}_2`;
+          const known = new Set(mat.metrics.map(m => m.name));
+          const scenario = {
+            id: sid,
+            version: "0.1.0",
+            title: method.method.name,
+            decision_purpose: String(body.purpose ?? method.purpose),
+            question_tree: method.steps.map((st, i) => ({ id: `n${i + 1}`, label: st.title })),
+            metric_usages: [],
+            method_refs: [`${method.method.id}@${method.method.version}`],
+            evidence_requirements: method.evidence,
+            output_spec: "",
+            review_rules: ""
+          };
+          await gate(() => ({ instance: { ...ctx.instance, added_scenarios: [...ctx.instance.added_scenarios, scenario] } }));
+          return;
+        }
+        // PATCH /api/instances/:id/scenes/:sid/bindings（指标角色绑定 ↔ metric_usages）
+        const bindingsMatch = rest.match(/^\/([a-z][a-z0-9_]*)\/bindings$/);
+        if (writeMatch[2] === "scenes" && bindingsMatch && req.method === "PATCH") {
+          const body = await readJsonBody() as { bindings?: Array<{ role?: string; metric?: string }> };
+          if (!Array.isArray(body.bindings)) { sendJson(422, { errors: ["bindings 数组必填。"] }); return; }
+          await gate(() => patchSceneBindings(ctx, bindingsMatch[1]!, body.bindings ?? []));
+          return;
+        }
+        // POST /api/instances/:id/scenes/:sid/save-as-method（G8 另存新方法 → templates/methods/；场景指向新方法）
+        // id 规则与 A1 一致：场景 id（snake_case 机器契约）；名称走 method.name（中文可）
+        const saveMethodMatch = rest.match(/^\/([a-z][a-z0-9_]*)\/save-as-method$/);
+        if (writeMatch[2] === "scenes" && saveMethodMatch && req.method === "POST") {
+          const body = await readJsonBody() as { name?: string; purpose?: string; steps?: string[] };
+          const mat = materialize(ctx.base, ctx.instance);
+          const scene = mat.scenarios.find((x) => x.id === saveMethodMatch[1]);
+          if (!scene) { sendJson(404, { errors: [`场景 ${saveMethodMatch[1]} 不存在。`] }); return; }
+          const name = String(body.name ?? "").trim();
+          if (!name) { sendJson(422, { errors: ["方法名称必填。"] }); return; }
+          const id = methodIdFromSceneId(scene.id);
+          const methodsDir = join(opts.templatesDir, "methods");
+          const outFile = join(methodsDir, `${id}.yaml`);
+          if (existsSync(outFile)) { sendJson(409, { errors: [`方法 ${id}@0.1.0 已存在（templates/methods/${id}.yaml）；不覆盖，请换名或直接编辑该方法。`] }); return; }
+          // 角色/语境/家族从场景与方法库派生（A1 另存方法同构：outcome/driver 必需、guardrail 可选）
+          const prevMethod = scene.method_bindings?.[0]?.method_ref ?? scene.method_refs?.[0];
+          const prev = prevMethod ? methods.find((m) => m.method.id === prevMethod.split("@")[0]) : undefined;
+          const usages = scene.metric_usages;
+          const yaml = methodYamlFromScene({
+            name,
+            purpose: String(body.purpose ?? scene.decision_purpose),
+            steps: (body.steps ?? prev?.steps.map((s) => s.title) ?? ["明确对象、范围和比较依据"]).map((title) => ({ title })),
+            contexts: prev?.contexts ?? (ctx.instance.blueprint?.contexts.length ? ctx.instance.blueprint.contexts : ["经营改善"]),
+            family: prev?.family ?? "描述分解",
+            roles: usages.map((u, i) => ({
+              id: methodRoleId(u.role, i),
+              name: ({ outcome: "结果指标", driver: "驱动指标", guardrail: "护栏指标" })[u.role] ?? u.role,
+              required: u.role !== "guardrail"
+            }))
+          }, id);
+          await mkdir(methodsDir, { recursive: true });
+          await writeFile(outFile, yaml, "utf8");
+          // 场景指向新方法（G8：引用不复制；步骤改由新方法承载）——重载方法库后过门（新方法须可解析）
+          const ref = `${id}@0.1.0`;
+          const freshCtx = await loadInstanceContext(ctx.instancePath, templates);
+          const gateResult = await writeWithGate(freshCtx ?? ctx, await discoverMethods(opts.templatesDir), (inst) => patchScene({ ...ctx, instance: inst }, scene.id, { method_refs: [ref] }));
+          if (!gateResult.ok) {
+            await rm(outFile, { force: true }); // 场景更新失败 → 回滚新方法文件（不留孤儿资产）
+            sendJson(gateResult.status, { errors: gateResult.errors });
+            return;
+          }
+          sendJson(201, { id, version: "0.1.0", ref });
+          return;
+        }
+        // POST /api/instances/:id/resolve（口径确认 U1-b/G2）
+        if (writeMatch[2] === "resolve" && rest === "" && req.method === "POST") {
+          const body = await readJsonBody() as { refund?: boolean; repeat?: string; descriptions?: Record<string, string> };
+          await gate(() => resolveCalibers(ctx, body));
+          return;
+        }
+      }
 
       if (path === "/") {
         const ctx = await loadInstanceContext(currentInstancePath, templates);

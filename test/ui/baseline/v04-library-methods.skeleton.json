@@ -1,0 +1,350 @@
+{
+ "t": "div",
+ "c": "app",
+ "k": [
+  {
+   "t": "aside",
+   "c": "sidebar",
+   "aria-label": "主导航",
+   "k": [
+    {
+     "t": "div",
+     "c": "brand",
+     "k": [
+      {
+       "t": "span"
+      },
+      {
+       "t": "p"
+      }
+     ]
+    },
+    {
+     "t": "button",
+     "c": "btn new-system",
+     "data-action": "home",
+     "k": [
+      {
+       "t": "span",
+       "aria-hidden": "true"
+      }
+     ]
+    },
+    {
+     "t": "nav",
+     "c": "nav-primary",
+     "k": [
+      {
+       "t": "button",
+       "c": "nav-item",
+       "data-action": "systems",
+       "k": [
+        {
+         "t": "span",
+         "c": "nav-icon",
+         "aria-hidden": "true"
+        },
+        {
+         "t": "span",
+         "c": "count"
+        }
+       ]
+      },
+      {
+       "t": "button",
+       "c": "nav-item active",
+       "data-action": "library",
+       "k": [
+        {
+         "t": "span",
+         "c": "nav-icon",
+         "aria-hidden": "true"
+        },
+        {
+         "t": "span",
+         "c": "nav-meta"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "div",
+     "c": "recent-label"
+    },
+    {
+     "t": "nav",
+     "c": "recent",
+     "aria-label": "最近编辑的体系",
+     "k": [
+      {
+       "t": "p",
+       "c": "fine nav-empty"
+      }
+     ]
+    },
+    {
+     "t": "div",
+     "c": "sidebar-bottom",
+     "k": [
+      {
+       "t": "div",
+       "c": "workspace-person",
+       "k": [
+        {
+         "t": "span",
+         "c": "avatar"
+        },
+        {
+         "t": "div",
+         "k": [
+          {
+           "t": "span",
+           "c": "fine"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "t": "button",
+       "c": "nav-item",
+       "data-action": "about",
+       "k": [
+        {
+         "t": "span",
+         "c": "nav-icon",
+         "aria-hidden": "true"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "t": "div",
+   "c": "workspace",
+   "k": [
+    {
+     "t": "header",
+     "c": "topbar",
+     "k": [
+      {
+       "t": "button",
+       "c": "icon-button mobile-menu",
+       "data-action": "menu",
+       "aria-label": "展开导航"
+      },
+      {
+       "t": "div",
+       "c": "breadcrumb",
+       "k": [
+        {
+         "t": "span"
+        }
+       ]
+      },
+      {
+       "t": "div",
+       "c": "topbar-right",
+       "k": [
+        {
+         "t": "span",
+         "c": "prototype-label"
+        },
+        {
+         "t": "button",
+         "c": "btn small quiet",
+         "data-action": "about",
+         "k": [
+          {
+           "t": "span",
+           "aria-hidden": "true"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "main",
+     "k": [
+      {
+       "t": "section",
+       "c": "page",
+       "k": [
+        {
+         "t": "div",
+         "c": "page-heading",
+         "k": [
+          {
+           "t": "div",
+           "k": [
+            {
+             "t": "h1"
+            },
+            {
+             "t": "p"
+            }
+           ]
+          },
+          {
+           "t": "button",
+           "c": "btn ",
+           "data-action": "import"
+          }
+         ]
+        },
+        {
+         "t": "nav",
+         "c": "library-tabs",
+         "aria-label": "模板类别",
+         "k": [
+          {
+           "t": "button",
+           "c": "tab ",
+           "data-action": "library-tab",
+           "data-type": "metric",
+           "aria-current": "false"
+          },
+          {
+           "t": "button",
+           "c": "tab active",
+           "data-action": "library-tab",
+           "data-type": "method",
+           "aria-current": "page"
+          }
+         ]
+        },
+        {
+         "t": "div",
+         "c": "library-toolbar",
+         "k": [
+          {
+           "t": "label",
+           "c": "search",
+           "k": [
+            {
+             "t": "span",
+             "aria-hidden": "true"
+            },
+            {
+             "t": "span",
+             "c": "sr-only"
+            },
+            {
+             "t": "input"
+            }
+           ]
+          },
+          {
+           "t": "div",
+           "c": "filter-chips",
+           "aria-label": "模板来源",
+           "k": [
+            {
+             "t": "button",
+             "c": "active",
+             "aria-pressed": "true",
+             "data-action": "library-filter",
+             "data-filter": "all"
+            },
+            {
+             "t": "button",
+             "aria-pressed": "false",
+             "data-action": "library-filter",
+             "data-filter": "mine"
+            }
+           ]
+          },
+          {
+           "t": "span",
+           "c": "fine"
+          }
+         ]
+        },
+        {
+         "t": "div",
+         "c": "template-grid",
+         "k": [
+          {
+           "t": "article",
+           "c": "template-card",
+           "k": [
+            {
+             "t": "div",
+             "c": "template-icon",
+             "aria-hidden": "true"
+            },
+            {
+             "t": "h2"
+            },
+            {
+             "t": "p"
+            },
+            {
+             "t": "div",
+             "c": "method-contexts",
+             "k": [
+              {
+               "t": "span",
+               "c": "tag neutral"
+              },
+              {
+               "t": "span",
+               "c": "tag neutral"
+              }
+             ]
+            },
+            {
+             "t": "p",
+             "c": "fine"
+            },
+            {
+             "t": "div",
+             "c": "template-meta",
+             "k": [
+              {
+               "t": "span"
+              }
+             ]
+            },
+            {
+             "t": "div",
+             "c": "actions",
+             "k": [
+              {
+               "t": "span",
+               "c": "template-origin"
+              },
+              {
+               "t": "button",
+               "c": "btn small quiet",
+               "data-action": "preview-template",
+               "data-type": "method"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "t": "p",
+         "c": "library-foot",
+         "k": [
+          {
+           "t": "br"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

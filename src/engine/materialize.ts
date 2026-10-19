@@ -75,7 +75,9 @@ export function materialize(template: Template, instance: Instance): Materialize
       ...(patch?.definition ? { definition: patch.definition } : {}),
       ...(patch?.owner_role ? { owner_role: patch.owner_role } : {}),
       ...(patch?.dimensions ? { dimensions: patch.dimensions } : {}),
-      caliber_switches: { ...m.caliber_switches, ...overrides }
+      caliber_switches: patch?.caliber_switches
+        ? { ...m.caliber_switches, ...patch.caliber_switches }
+        : { ...m.caliber_switches, ...overrides }
     });
   }
 

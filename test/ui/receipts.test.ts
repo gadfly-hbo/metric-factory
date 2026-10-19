@@ -186,6 +186,6 @@ test("G5：跨包回执登记成功但本包列表不新增；boundary 文案为
   expect(html).toContain("回执按包全局登记，此处仅展示当前包");
 
   const home = await (await fetch(`${base}/`)).text();
-  expect(home).toContain("写操作仅限本地实例、模板库（导入/另存方法）、映射文件与 releases/ 发布登记");
+  expect(home).toContain("本地工作台 · 真实引擎");
   server.close();
 });

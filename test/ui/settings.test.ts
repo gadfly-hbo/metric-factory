@@ -219,25 +219,24 @@ test("S5 配置错误：状态卡原文摘要 + 链卡仍画误配行与网关�
   server.close();
 });
 
-test("H 分支（G7）：首页芯片就绪·自动发现 / 未配置灰态 / 配置错误红态", async () => {
+test("H 分支（G7）：LLM 状态面三态（A2：SPA 经 /api/llm-status 读取）", async () => {
   // H1 就绪·自动发现
   const ready = await startUiWithAuth(JSON.stringify({ "minimax-cn": { key: "sk-h1-1111" } }));
-  const homeReady = await (await fetch(`${ready.base}/`)).text();
-  expect(homeReady).toContain("就绪 · minimax-cn/MiniMax-M3");
-  expect(homeReady).toContain("来源：自动发现");
+  const readyStatus = await (await fetch(`${ready.base}/api/llm-status`)).json();
+  expect(readyStatus.mode).toBe("configured");
+  expect(readyStatus.raw).toBe("configured");
   ready.server.close();
-  // H3 未配置（灰态正常 + 零配置引导）
+  // H3 未配置（灰态）
   const bare = await startUiWithAuth(null);
-  const homeBare = await (await fetch(`${bare.base}/`)).text();
-  expect(homeBare).toContain("未配置");
-  expect(homeBare).toContain("本机已有 pi CLI 凭据即可零配置");
+  const bareStatus = await (await fetch(`${bare.base}/api/llm-status`)).json();
+  expect(bareStatus.mode).toBe("none");
+  expect(bareStatus.raw).toBe("unconfigured");
   bare.server.close();
-  // H4 配置错误（红态 + 原因摘要）
+  // H4 配置错误（红态：raw 保留 error，供设置页呈现原因）
   const broken = await startUiWithAuth(null);
   writeFileSync(broken.envFile, "MF_LLM_MODEL=minimax-cn/MiniMax-M3\nMF_LLM_BASE_URL=https://gw/v1\n", "utf8");
-  const homeBroken = await (await fetch(`${broken.base}/`)).text();
-  expect(homeBroken).toContain("配置错误");
-  expect(homeBroken).toContain("去设置");
+  const brokenStatus = await (await fetch(`${broken.base}/api/llm-status`)).json();
+  expect(brokenStatus.raw).toBe("error");
   broken.server.close();
 });
 

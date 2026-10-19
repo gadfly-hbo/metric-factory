@@ -12,7 +12,10 @@ export const ModifiedMetricSchema = z.object({
   display_name: z.string().min(1).optional(),
   definition: z.string().min(1).optional(),
   owner_role: z.string().min(1).optional(),
-  dimensions: z.array(z.string().min(1)).optional()
+  dimensions: z.array(z.string().min(1)).optional(),
+  // A2 U1-b（用户裁决）：口径确认写路径——对模板基座指标经 modified 段覆盖 caliber_switches 布尔键
+  //（与实例级 caliber_switches 同语义：键级合并，加法式扩展，既有实例无此字段行为不变）
+  caliber_switches: z.record(z.string(), z.boolean()).optional()
 });
 
 export const InstanceSchema = z.object({

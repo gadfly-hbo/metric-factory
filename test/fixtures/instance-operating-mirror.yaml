@@ -1,0 +1,154 @@
+# A2 T4 镜像 fixture：与评审原型 operating 预设逐区块同构（oracle v01/v03 对照用）
+# 同构约定：questions 3（metric_refs 3/2/0）· hypotheses 1 · evidence 3 · options []（经营预设无候选道路）
+# · added 6 指标 · 1 场景绑定三角色（profit-change-diagnosis）。数据值不限，区块结构必须一致。
+instance:
+  created_at: "2026-10-18T00:00:00.000Z"
+added:
+  - name: revenue
+    display_name: 收入
+    type: simple
+    definition: 在声明期间与业务范围内，按已确认收入规则计入的金额。
+    dimensions: []
+    time_grains: [month]
+    owner_role: 财务
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: mirror-operating
+  - name: cost
+    display_name: 营业成本
+    type: simple
+    definition: 与本期已确认收入匹配的商品成本。
+    dimensions: []
+    time_grains: [month]
+    owner_role: 财务
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: mirror-operating
+  - name: gross_profit
+    display_name: 毛利额
+    type: derived
+    definition: 收入扣除匹配的营业成本。
+    dimensions: []
+    time_grains: [month]
+    owner_role: 财务
+    caliber_switches: {}
+    type_params:
+      expr: 收入 − 营业成本
+    provenance:
+      origin: template
+      template_ref: mirror-operating
+  - name: gross_margin
+    display_name: 毛利率
+    type: ratio
+    definition: 同一期间与范围内，毛利额占收入的比例。
+    dimensions: []
+    time_grains: [month]
+    owner_role: 财务
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: mirror-operating
+  - name: operating_expenses
+    display_name: 经营费用
+    type: simple
+    definition: 本分析边界内的人力、租金、履约与营销等费用。
+    dimensions: []
+    time_grains: [month]
+    owner_role: 财务
+    caliber_switches: {}
+    provenance:
+      origin: template
+      template_ref: mirror-operating
+  - name: operating_profit
+    display_name: 经营利润
+    type: derived
+    definition: 毛利额扣除经营费用（简化口径）。
+    dimensions: []
+    time_grains: [month]
+    owner_role: 财务
+    caliber_switches: {}
+    type_params:
+      expr: 毛利额 − 经营费用
+    provenance:
+      origin: template
+      template_ref: mirror-operating
+added_scenarios:
+  - id: profit_review
+    version: 0.1.0
+    title: 利润变化与改善方案分析
+    decision_purpose: 销售增长为何未带来利润改善，当前周期应如何调整？
+    question_tree:
+      - id: n1
+        label: 核对收入、成本与费用口径
+      - id: n2
+        label: 拆解毛利与费用变化
+      - id: n3
+        label: 比较调整方案的收益和代价
+    metric_usages:
+      - metric: operating_profit
+        role: outcome
+      - metric: gross_profit
+        role: driver
+      - metric: operating_expenses
+        role: guardrail
+    method_refs:
+      - profit-change-diagnosis@0.1.0
+blueprint:
+  title: 销售增长与利润改善分析体系
+  intent: 设计具体分析方案
+  purpose: 把销售增长、毛利变化和费用放回经营目标与约束中，比较当前周期的改善方案。
+  decision: 当前经营周期应调整什么，收益、代价与风险是什么？
+  boundary: 在既定业务方向下设计诊断与调整；资源批准和行动执行由获授权负责人承担。
+  deliverable: 差距诊断、候选方案、资源约束、试点及复盘安排。
+  contexts:
+    - 经营改善
+  organizations:
+    - 假设先行
+  questions:
+    - id: q1
+      title: 利润差距由哪些部分组成？
+      detail: 先复核口径，按毛利与经营费用分解。
+      metric_refs: [operating_profit, gross_profit, operating_expenses]
+    - id: q2
+      title: 这些变化是否符合原计划？
+      detail: 关联预算、客户投入、库存与现金约束。
+      metric_refs: [revenue, gross_margin]
+    - id: q3
+      title: 不同调整方案的收益与代价是什么？
+      detail: 设计方案比较、负责人、观察窗口、护栏和停止条件。
+      metric_refs: []
+  hypotheses:
+    - id: h1
+      statement: 折扣、商品结构或费用增加可能使收入增长未转化为利润改善。
+      judgment: 待验证假设
+      support: 口径一致的组成项与业务过程证据。
+      counter: 一次性投入、季节性或预算安排能够解释变化。
+      change_condition: 组成项核验或反证不支持时，保留其他解释并调整调查。
+      verified: false
+  evidence_plan:
+    - id: e1
+      name: 收入、成本与费用明细
+      kind: 内部数据
+      source: 同一业务范围与期间的收入、成本及费用记录
+      check: 复核范围、期间、币种、去重和计算关系；只证明相应数值事实。
+      insufficiency: 缺失、冲突或不可核对时，不输出仿成功结论。
+      status: 待获取
+    - id: e2
+      name: 目标、计划与业务约束
+      kind: 计划与业务判断
+      source: 阶段目标、预算、约束和业务负责人说明
+      check: 区分事前计划、事后解释与待验证假设。
+      insufficiency: 没有目标或约束时，先披露比较范围，不自动替用户批准方案。
+      status: 待获取
+    - id: e3
+      name: 调整方案与后续验证
+      kind: 试点设计
+      source: 候选方案、负责人、资源边界和观察安排
+      check: 写清预期、护栏、观察周期及继续／调整／停止条件。
+      insufficiency: 分析建议不等于已决策或已执行，缺效果证据不声称改善成立。
+      status: 待获取
+  options: []
+  provenance:
+    origin: manual

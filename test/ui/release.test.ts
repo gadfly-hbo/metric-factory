@@ -34,7 +34,8 @@ test("R1（A1 迁移）：发布区块居「04 检查与交付」视图（表单
   const { server, base } = await startUi(inst, dir);
 
   const home = await (await fetch(`${base}/`)).text();
-  expect(home).toContain("写操作仅限本地实例、模板库（导入/另存方法）、映射文件与 releases/ 发布登记");
+  // A2：根路由=SPA 壳（边界声明换「本地工作台 · 真实引擎」；写范围说明进 about 弹层）
+  expect(home).toContain("本地工作台 · 真实引擎");
 
   const html = await (await fetch(`${base}/instance/delivery`)).text();
   expect(html).toContain("发布");

@@ -14,10 +14,11 @@
     "build": "tsup",
     "test": "npm run build && vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "node dist/cli.js lint templates/ecommerce-marketplace.yaml templates/saas-subscription.yaml templates/content-community.yaml templates/digital-marketing.yaml templates/supply-chain-logistics.yaml templates/cloud-cost.yaml templates/apparel-brand-retail.yaml templates/methods/profit-change-diagnosis.yaml templates/methods/strategic-options-comparison.yaml templates/methods/association-vs-increment.yaml",
+    "lint": "node dist/cli.js lint templates/ecommerce-marketplace.yaml templates/saas-subscription.yaml templates/content-community.yaml templates/digital-marketing.yaml templates/supply-chain-logistics.yaml templates/cloud-cost.yaml templates/apparel-brand-retail.yaml templates/methods/profit-change-diagnosis.yaml templates/methods/strategic-options-comparison.yaml templates/methods/association-vs-increment.yaml templates/methods/net-change.yaml templates/methods/repeat-review.yaml templates/methods/weekly-review.yaml",
     "prelint": "npm run build",
     "contract-test": "vitest run test/contracts",
-    "precontract-test": "npm run build"
+    "precontract-test": "npm run build",
+    "test:oracle": "node test/ui/oracle/capture.mjs --base \"${MF_DEMO_DIR:-/Users/huangbo/Documents/Codex/2026-10-18/task/metric-factory-product-prototype}\""
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.87.1",
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@types/node": "^26.6.3",
     "ajv": "^8.20.0",
+    "playwright": "^1.64.1",
     "tsup": "^8.5.1",
     "typescript": "^7.0.2",
     "vitest": "^5.0.2"

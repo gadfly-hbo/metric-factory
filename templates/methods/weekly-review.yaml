@@ -1,0 +1,38 @@
+# 分析方法模板：经营周报分析（A2 批次内置，来源评审原型 method id: weekly-review）
+method:
+  id: weekly-review
+  name: 经营周报分析
+  version: 0.1.0
+  description: 按规模、客户和风险三个方面整理经营变化，形成可复查的周报结构。
+  references:
+    - "经营周报结构化复盘（公开经营分析方法）"
+    - "规模-质量-风险三分框架（公开分析方法）"
+contexts:
+  - 经营改善
+  - 战略选择
+family: 描述分解
+purpose: 本周经营有哪些值得关注的变化？
+roles:
+  - id: business_result
+    name: 经营结果
+    required: true
+  - id: customer_quality
+    name: 客户质量
+    required: true
+  - id: risk_guardrail
+    name: 风险护栏
+    required: true
+steps:
+  - title: 看整体经营
+    detail: ""
+  - title: 比较客户质量
+    detail: ""
+  - title: 检查经营风险
+    detail: ""
+  - title: 整理关注点
+    detail: ""
+evidence: 同范围同期间的原始记录与核验依据。
+limits: 设计引用成立不代表执行能力已接通。
+provenance:
+  origin: template
+  template_ref: weekly-review@0.1.0

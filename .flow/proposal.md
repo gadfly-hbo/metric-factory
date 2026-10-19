@@ -1,34 +1,66 @@
-# A1 · 分析体系核心批次 — 提案
+# A2 · UI 重构：严格复刻评审原型（demo 前端移植 + 服务端 JSON API）
 
-2026-10-18 · 依据用户已接受的《分析体系工作台产品方案 v0.2》（`/Users/huangbo/Documents/Codex/2026-10-18/task/metric-factory-product-prototype/方案.md`）落地真实产品迭代。原型为合成演示，其 JSON/脚本不充当生产 schema；本批按方案语义在仓内合同上重新设计。
+> dev-flow ASSESS 固化的规格源。本提案钉住用户 2026-10-18 晚的口头裁决（贴近原话，不改内容）。
 
-## 目标（方案 §8「必须先做」闭环）
+## 1. 背景：为什么有这个批次
 
-1. 自然语言需求 → pi-agent-runtime → 可维护分析设计草稿（支持「可复用指标体系」与「具体分析」两种起点；模板/导入为次要入口）。
-2. 一个工作台、两个联动编辑器，四视图：体系总览／指标体系／场景与方法／检查与交付。
-3. 共享指标定义（一个权威来源），问题／假设／证据计划结构化，方法适用性检查，集中业务复核，设计版本快照闭环。
-4. 保留指标创建、模板导入、两类模板、独立指标交付；复用既有校验与导出。
-5. 三条业务任务验收（经营诊断／零指标战略／独立数据专题）。
+A1 批次（commit `56ce721`）交付的工作台是**零客户端 JS 的服务端渲染表单**——弹层改成了独立页面导航，视觉沿用 M3 基线而非评审原型。用户看到最终产物后质询：
 
-## 设计裁决（D 系列；持久结构与公共合同变更登记处）
+> 「这个是最终产物吗？怎么和UI demo不一样」
+> 「为什么做这样的设计决定，**重做，严格执行UI demo要求来做**」
 
-- **D1 单一工作稿**：`blueprint` 作为 InstanceSchema 可选顶层段（instance.yaml）。缺省 = 仅指标体系模式，现有行为零变化；零指标 + blueprint = 定性战略设计。release 快照自动覆盖完整设计。
-- **D2 内嵌子实体**：问题（questions）／假设（hypotheses）／证据计划（evidence_plan）／候选道路（options）内嵌于 blueprint，不另立文件。判断性质（事实/解释/待验证假设/建议）与证据状态（待获取/取得待核/已核验/支持不足/存在冲突）分轴表达。
-- **D3 方法模板**：新增第二类模板 `MethodTemplateSchema`（id/name/version/contexts/family/purpose/roles[required]/steps/evidence/limits/provenance），存放 `templates/methods/*.yaml`；库保持「指标体系／分析方法」两类，不设第三套。
-- **D4 ScenarioSpec v0.2 可选扩展**：场景新增可选 `method_bindings: [{method_ref, role, metric}]`。可选字段向后兼容 v0.1 包；SAP 合同以变更记录登记为供应侧扩展，消费侧镜像留 v6 窗口。**不改动** v0.1 已冻结字段。
-- **D5 业务复核与失效**：复核确认 = `{confirmed_by, confirmed_at, design_fingerprint}`；指纹 = canonical(blueprint ＋ scenarios ＋指标身份面) 的内容哈希。任何相关写入后失配 → 确认失效（严格方向：宁可多失效）；查看/切视图不写盘不失效。
-- **D6 假设升级门**：`verified=true` 需 ≥1 条证据状态为「已核验」且无「存在冲突」；judgment ∈ {事实, 解释} 而未 verified → 设计缺口，阻断交付。复核/检查不自动提升证据状态或确认假设。
-- **D7 设计交付门**：blueprint 完整（目的/决策/边界/交付/语境/组织/问题结构/假设三要素/证据三要素）∧ 指标缺口零 ∧ 场景必需角色绑定齐 ∧ 方法语境适配 ∧ 复核有效 → 允许交付；草稿允许缺口。证据计划完整 ≠ 证据已取得（证据状态独立呈现于交付视图）。
-- **D8 引用保护**：引擎 `findMetricReferences(materialized)` 汇总 type_params/expr、trees、north_star、questions.metric_refs、scenarios.metric_usages、method_bindings 六路引用；删除被引用指标必须先展示影响并解除引用，禁止悬空引用后假通过。
-- **D9 LLM 草稿**：PROMPT_VERSION → v3.0.0；新增 blueprint 生成/修正 prompt（中文业务语言输出、硬约束 JSON 合同、负例禁令）。Draft 扩展 `blueprint?` 与 `added_scenarios?` 段；apply 沿用零写入门；provenance 强制注入（模型不可自报）。
-- **D10 UI 壳**：JuanerAI 已接受视觉 token（#f6f7f4/#fcfcfa/#f0f2ed、#27664f 主绿、230px 侧栏、64px 顶栏、320px 助手栏、系统中文字体）。保持仓内「零客户端脚本、纯服务端渲染」纪律：原型弹层 → 独立页面/区块；键盘可达与 :focus-visible 保留；四视图 = 实例下四条路由。
-- **D11 未修改不重复发版**：release 同内容从「警告放行」升级为「阻断 + 提示无需重复发版」（行为变更，本批 PRD 登记；CLI/UI 一致）。
-- **D12 消费边界诚实标注**：blueprint 段与零指标包进入 SAP 供应侧；JuanerAI 指标资产已有真实消费者（Change006），blueprint/方法绑定/零指标包的消费侧支持**未验证**，本批不宣称消费通过，不修改 JuanerAI，不启动插件化/Semantica＋Protégé。
+A1 把「demo 自我声明非工程候选」误读为「交互形态可降级」，把工程便利放在了产品体验前面。本批纠正：**UI demo（产品评审原型 v0.2）即 UI 规格权威，严格执行**。
 
-## 非目标（本批）
+## 2. 权威 UI 规格源（跨仓，只读引用，不修改）
 
-证据与假设的细粒度交叉引用、专业方法扩充（先 3 个内置）、模板差异升级、多人治理、实际证据/采用回执回流、JuanerAI 插件呈现、Excel 直读 UI（离线脚本保留）、完整本体。
+**所有者：huangbo 本人文档仓**（非本仓库）：
 
-## 验证门
+- 目录：`/Users/huangbo/Documents/Codex/2026-10-18/task/metric-factory-product-prototype/`
+- 关键文件：`index.html`（SPA 壳：侧栏/顶栏/breadcrumb/`<dialog>` 弹层/toast/skip-link）、`style.css`（32KB 完整视觉系统）、`app.js`（92KB 交互层：路由状态机/渲染函数/事件代理）、`analysis-model.js`（**合成模型层——本批替换对象**）、`screenshots-v0.2/`（7 张评审截图）
+- 配套：`方案.md`（产品方案 v0.2，能力面权威，§9 A01–A15 可观察验收）、`验证记录.md`（**v0.2，交互行为权威**——红队勘误：初稿误引 `验证记录-v0.1.md`，v0.1 降级历史参考；已验证行为含 Esc 关弹层焦点回归、1440/390 无横溢、依赖保护、导入缺口预览、战略交付、方法库多语境）
 
-`npm run lint && npm run typecheck && npm test && npm run contract-test` 全绿；新规则配负例测试；三条业务任务 e2e；UI 路由级测试沿用 fetch 边界。
+## 3. 用户裁决（本批约束，GRILL 不得翻案）
+
+经明确确认的两个分岔：
+
+1. **复刻范围 = 视觉 + 交互全复刻**：布局、组件、弹层（原生 `<dialog>`）、键盘/Esc、右侧助手栏、即时反馈、toast、窄屏行为逐面对齐 demo；**仅把合成数据换成真实引擎**（真校验、真落盘、真 LLM、真发布）。
+2. **技术形态 = 移植 demo 前端 + 服务端 JSON API**：demo 的 vanilla JS 前端原样移植进工作台；数据全部走真实服务端接口。
+
+## 4. 不照搬的部分（合成行为 ≠ 交互形态）
+
+demo README/验证记录自我声明的合成性质，属于演示实现而非交互规格：
+
+- 预设内容（`sampleNeed`/`baseMetrics`/内置 10 指标草稿）→ 换真实 LLM 生成（faux 后端保留为演示模式）
+- 内存态、刷新重置 → 换实例 YAML 真实落盘 + 服务端状态
+- 合成校验/版本/下载（`prototype: true`）→ 换引擎校验、fail-closed 门、releases/ 发布
+- 顶栏「交互原型 · 合成示例」标签 → 换真实边界声明（文案随 GRILL 定）
+
+**判别标准**：一个行为属于「交互形态」（键盘、弹层、布局、反馈方式——复刻）还是「合成实现」（数据从哪来、状态存哪——换真实），看验证记录描述的是用户可感知的交互还是演示数据管道；拿不准的进 GRILL。
+
+## 5. 推翻的 A1 决策（显式登记）
+
+| A1 决策 | A2 处置 |
+|---|---|
+| 零客户端 JS | **推翻**——前端为 demo 同源 vanilla JS |
+| 弹层→独立页面导航（删除影响/导入预览/方法详情） | **推翻**——恢复 demo 弹层与交互流 |
+| 助手=表单 POST+预览页 | **推翻**——demo 右侧助手栏形态 |
+| 边界文案「页面无脚本 · 纯服务端表单」 | **改写**（文案 GRILL 定，测试同步） |
+| 四视图=服务端四路由页面 | **重构**——demo 的 work 视图内 stage 切换形态 |
+
+## 6. 保留不动（回归必须全绿）
+
+- 引擎层：blueprint/methods/validate/materialize/apply/designFingerprint、写时/交付双门语义
+- SAP 层：装配/指纹/校验/release/same-content 阻断
+- LLM 层：pi-agent-runtime 链路、BLUEPRINT_PROMPT_VERSION、审计/预算/provenance
+- CLI 与 MCP 命令面
+- 实例 YAML 格式与既有数据兼容
+
+## 7. 连带改动
+
+- **UI 测试重构**：既有 12 个服务端 HTML 断言测试文件（约 98 个断言——红队勘误：初稿误记 19 个）→ JSON API 测试 + 浏览器端测试（工具 GRILL 定）；三条验收流 e2e 必须在新形态下重新通过
+- **文档**：README UI 节、`docs/工作台使用指南.md` 按新交互重写；A14 从「形态等价」改为字面达成（demo 行为已自带键盘/Esc/响应式）
+- **契约/合同文档**：仅在 UI 边界文案受影响时同步（SAP 合同 v0.4 预期零改动）
+
+## 8. 开放问题（留给 PRD/GRILL）
+
+前端资源服务方式（CLI ui 内嵌静态 vs 新增 public 目录）、路由（hash vs History API + 服务端兜底）、JSON API 面积与既有表单路由去留、job 轮询在 SPA 的形态、无 JS 降级是否放弃（demo 需 JS）、浏览器测试工具选型（playwright?）、既有 UI 测试文件逐个去向、多实例切换在 demo 单体系内存模型 vs 真实多实例文件的映射、模板库两类在 demo 形态下的导入/另存流。

@@ -6,12 +6,15 @@ import { defaultTemplatesDir } from "../../src/paths.js";
 
 // A1 D3：方法模板库装载与 lint（第二类模板）
 
-test("内置方法库：三个内置方法全部可装载且 lint 零问题", async () => {
+test("内置方法库：六个内置方法全部可装载且 lint 零问题（A2 增补 demo 独有三方法）", async () => {
   const result = await loadMethodsFromDir(defaultMethodsDir(defaultTemplatesDir()));
   expect(result.ok).toBe(true);
   if (!result.ok) return;
   const ids = result.methods.map((m) => m.method.id).sort();
-  expect(ids).toEqual(["association-vs-increment", "profit-change-diagnosis", "strategic-options-comparison"]);
+  expect(ids).toEqual([
+    "association-vs-increment", "net-change", "profit-change-diagnosis",
+    "repeat-review", "strategic-options-comparison", "weekly-review"
+  ]);
   for (const m of result.methods) {
     expect(lintMethodTemplate(m)).toEqual([]);
     expect(m.method.references.length).toBeGreaterThan(0);

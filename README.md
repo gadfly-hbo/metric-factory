@@ -76,17 +76,18 @@ node dist/cli.js validate my-instance/instance.yaml   # 场景校验含其中
 node dist/cli.js diff my-instance/instance.yaml       # 含场景计数
 ```
 
-## 分析体系：蓝图与工作台四视图（A1）
+## 分析体系：蓝图与工作台（A1→A2，评审原型严格复刻）
 
-指标体系回答「用什么衡量」，分析体系回答「这个业务问题应该怎样分析」。A1 批次把分析体系落成实例的可选顶层段 `blueprint`（AnalysisBlueprint v0.1）与工作台四视图：
+指标体系回答「用什么衡量」，分析体系回答「这个业务问题应该怎样分析」。工作台 UI 为**评审原型（demo）的严格复刻**：同一视觉系统（style.css 逐字节）、同一交互形态（弹层/键盘 Esc/右侧助手栏/即时反馈）、同一信息架构，数据层换真实引擎。
 
-- **主入口是自然语言**：首页「描述你的业务问题」→ AI 生成分析体系草稿（蓝图 + 建议指标 + 建议场景）→ 预览影响 → 采纳进工作稿 → 修正微调 → 业务复核 → 固定设计版本。模板问卷与粘贴导入是次要起点，三种起点汇入同一工作台。
-- **蓝图结构**：`purpose`（业务目的）/ `decision`（研究问题或选择）/ `boundary` / `deliverable` + `contexts`（经营改善/战略选择/独立数据专题，可组合不分级）+ `questions[]`（问题结构，`metric_refs` 只引用包内指标）+ `hypotheses[]`（判断性质与证据状态分轴，必带支持/反对/改变条件）+ `evidence_plan[]`（证据计划完整 ≠ 证据已取得）+ `options[]`（候选道路与取舍）。战略选择类允许零指标定性设计。
-- **四视图**：`体系总览`（蓝图卡片 + AI 助手 + 复核状态）/ `指标体系`（指标字典 + fork diff + 指标树）/ `场景与方法`（场景列表 + 方法模板库 + 场景绑定方法角色）/ `检查与交付`（设计缺口清单 + 业务复核确认 + 导出 + 发布）。
-- **写时宽、交付严**：工作稿允许缺口（边想边写）；导出/发布走全量设计门——目的缺失、假设缺三要素、证据缺三要素、方法语境不适配或必需角色未绑定、事实/解释未核验，都会成为交付阻断项。
-- **业务复核绑定设计快照**：复核确认记录完整设计内容指纹（`design_fingerprint`），任何相关修改使确认失效需重新确认；查看与切换视图不影响确认。
-- **方法模板库**：`templates/methods/`（内置三方法：利润变动诊断/战略选项评估/关联与增量分析，角色声明 outcome/driver/guardrail）；场景可「另存方法」沉淀可复用模板；首页「导入」支持指标体系与方法两类 YAML 模板（预览后保存，拒绝覆盖）。
-- **删除影响先知**：删除被引用指标前先展示影响页（哪些问题/场景/方法绑定引用了它），确认才执行。
+- **主入口是自然语言**：首页「用一句话开始」→ AI 生成分析体系草稿 → 生成中视图（job 轮询）→ **自动落盘**进 work 视图。模板库 use-template 与粘贴导入（CSV/JSON 浏览器解析预览）为次要起点。
+- **蓝图结构（AnalysisBlueprint v0.1）**：`purpose`/`decision`/`boundary`/`deliverable` + `contexts`（三类语境可组合不分级）+ `questions[]`（`metric_refs` 只引用）+ `hypotheses[]`（判断性质与证据状态分轴，三要素）+ `evidence_plan[]`（计划完整≠已取得）+ `options[]`。战略选择允许零指标定性设计。
+- **work 四 stage**：`体系总览`（蓝图卡+右侧 AI 助手）/`指标体系`（树表切换+口径待确认）/`场景与方法`（场景列表+方法库内嵌+绑定）/`检查与交付`（检查行全集+业务复核+发布）。hash 深链 `#work/<实例>/<stage>`，刷新恢复。
+- **写时宽、交付严**：工作稿允许缺口；检查视图逐行列出（含第 6 行「待人工审核的 AI 指标」行内批准/拒绝）；**业务复核绑定设计快照指纹**，修改即失效；交付=自动 next patch 一键确认，**same-content 拒绝重复发版**（releases/ 登记）。
+- **AI 助手**：右侧栏指令 → refine job → **提案卡先看建议再采纳**（放弃零改动，字节级保证）；新增指标同走提案流。
+- **方法模板库**：`templates/methods/` 六内置 + 场景「另存为新方法」（G8：改步骤=沉淀方法，场景引用之）+ 用户指标模板 `templates/user/`（U1-a 宽松装载，「我的模板」过滤）。
+- **删除影响先知**：删被引用指标先展示引擎六路引用，确认才执行。
+- 复刻保真由机器 oracle 钉死：demo 7 视图骨架/几何基线 + 行为断言（Esc 焦点回归/390px 无横溢）持续对照（`test/ui/oracle/`）。
 
 ```bash
 node dist/cli.js ui    # 启动工作台，浏览器打开 http://127.0.0.1:4173
@@ -124,7 +125,7 @@ npm run lint           # 模板 lint（内置两模板）
 npm run contract-test  # MetricFlow 导出契约测试（JSON Schema）
 ```
 
-架构：`src/schema`（Zod 元模型：指标/模板/实例/场景/蓝图/方法）· `src/engine`（loader / lint / match / instantiate / materialize / validate / blueprint 设计规则 / methods 方法库）· `src/export`（metricflow / excel / mermaid / sap 四导出器 + fail-closed 门）· `src/sap`（SAP 0.1 装配 / 规范化指纹 / 双面校验器 / release 登记）· `src/cli`（commander 命令）· `src/ui`（零客户端 JS 工作台：四视图 + NL 入口 + 助手预览采纳）· `templates/`（行业模板 + 方法模板数据资产）。
+架构：`src/schema`（Zod 元模型：指标/模板/实例/场景/蓝图/方法）· `src/engine`（loader / lint / match / instantiate / materialize / validate / blueprint 设计规则 / methods 方法库）· `src/export`（metricflow / excel / mermaid / sap 四导出器 + fail-closed 门）· `src/sap`（SAP 0.1 装配 / 规范化指纹 / 双面校验器 / release 登记）· `src/cli`（commander 命令）· `src/ui`（SPA 工作台：评审原型严格复刻 + JSON API + 助手提案流；`public/` 前端资产）· `templates/`（行业模板 + 方法模板数据资产）。
 
 ## v2 · LLM 设计器
 
@@ -234,19 +235,18 @@ node dist/cli.js track my-instance/instance.yaml --out out
 
 ### Web 工作台
 
-> 使用者操作手册见 [docs/工作台使用指南.md](./docs/工作台使用指南.md)（面向业务人员：创建实例/微调/场景/AI 草案/审核导出全流程）。
+> A2 起，工作台为评审原型严格复刻的 SPA（自然语言主入口 → AI 起草 → 修正微调 → 复核交付；四 stage 视图 + 右侧 AI 助手 + 弹层交互）。使用者操作手册见 [docs/工作台使用指南.md](./docs/工作台使用指南.md)。
 
 ```bash
-node dist/cli.js ui --instance my-instance/instance.yaml --port 4173
+node dist/cli.js ui --port 4173
 # 或双击仓库根目录「启动工作台.command」/ zsh scripts/start-ui.sh（自动装依赖、构建、开浏览器）
 ```
 
 打开 http://127.0.0.1:4173 —— **业务人员全程浏览器闭环，无需终端**：
 
-1. **创建实例**：首页「创建实例」问卷向导（三问 → 匹配行业模板 → 命名生成），或打开工作区已有实例
-2. **微调**：实例页改口径开关 / 增删改指标（写回前全量校验，失败零写盘），内嵌「相对模板的变更」fork diff 对比
-3. **AI 草案**（可选）：设置页配置模型（存仓库根 `.env.local`，已 gitignore，页面打码不回显）；草案工坊填业务描述或自然语言微调指令 → 进度页自动刷新 → 待采纳草案卡预览 → 采纳合入（引擎校验）/ 丢弃
-4. **审核与导出**：审核中心批准 LLM 指标（fail-closed：未批准导出被硬阻断）；实例页一键下载 MetricFlow YAML / Excel 字典 / Mermaid 指标树 / SAP 语义包（与 CLI export 同语义：mapping 自动发现 + 导出前全量校验）
-5. **场景编辑**（v5）：实例页「场景」区块——浏览决策场景（来源：模板种子/实例新增/实例覆盖）、新建与编辑（表单 + 逐行 DSL），保存走引擎校验，失败逐行回显零写盘
+1. **创建体系**：首页一句话生成（AI 草稿，自动落盘进 work 视图）；模板库 use-template fork；CSV/JSON 粘贴导入（浏览器解析预览，缺口如实标注）
+2. **work 四 stage**：体系总览（蓝图 + 右侧 AI 助手「先看建议再采纳」）/ 指标体系（树表切换 + 口径集中确认 + 删除影响保护）/ 场景与方法（方法库 + 绑定 + 改步骤另存新方法）/ 检查与交付（六行检查 + 业务复核 + 自动版本发布）
+3. **模型配置**：`/settings` 工具页（存仓库根 `.env.local`，已 gitignore，页面打码不回显）；未配置时 faux 确定性演示模式
+4. **fail-closed**：所有写操作过引擎校验（不过零写盘）；未审核 AI 指标、设计缺口、未复核均阻断交付
 
-本地单用户：仅监听 127.0.0.1；写操作仅限工作区实例、`draft.pending.yaml` 草案与 `.env.local`（均过引擎校验）；实例打开限工作区扫描白名单。界面对齐全局 UI 基线（`~/.agents/ui-design/DESIGN.md`「中文专业工作台 UI 基线」：浅色中性表面 + 克制绿主动作 + 紧凑布局 + 语义状态色，品牌栏 + 待采纳草案卡 + 场景区块），零客户端脚本、纯服务端表单。
+本地单用户：仅监听 127.0.0.1；写操作仅限工作区实例、用户模板（导入/另存）、草案文件与 `.env.local`（均过引擎校验）；实例打开限工作区扫描白名单。复刻保真由机器 oracle 钉死（demo 7 视图骨架/几何基线 + 行为断言，`test/ui/oracle/`）。

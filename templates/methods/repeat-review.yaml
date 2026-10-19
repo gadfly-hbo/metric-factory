@@ -1,0 +1,38 @@
+# 分析方法模板：客户复购表现复盘（A2 批次内置，来源评审原型 method id: repeat-review）
+method:
+  id: repeat-review
+  name: 客户复购表现复盘
+  version: 0.1.0
+  description: 观察同一客户队列的复购表现，分清客户规模与复购质量的变化。
+  references:
+    - "队列分析与复购窗口（公开产品分析方法）"
+    - "客户去重口径实践（公开电商分析方法）"
+contexts:
+  - 经营改善
+  - 战略选择
+family: 描述分解
+purpose: 客户增长是否带来了持续购买？
+roles:
+  - id: result_measure
+    name: 结果指标
+    required: true
+  - id: cohort_base
+    name: 客户规模
+    required: true
+  - id: outcome_group
+    name: 复购客户
+    required: true
+steps:
+  - title: 确定客户队列与观察窗口
+    detail: ""
+  - title: 比较复购表现
+    detail: ""
+  - title: 按渠道检查差异
+    detail: ""
+  - title: 披露证据与限制
+    detail: ""
+evidence: 同一客户队列与观察窗口的原始记录。
+limits: 设计引用成立不代表执行能力已接通。
+provenance:
+  origin: template
+  template_ref: repeat-review@0.1.0

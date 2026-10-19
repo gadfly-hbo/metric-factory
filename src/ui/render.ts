@@ -143,7 +143,7 @@ a { color: var(--accent-strong); }
 .ns-badge { background: var(--accent-soft); color: var(--accent-strong); border: 1px solid var(--accent-line); border-radius: var(--rounded-sm); padding: 6px 10px; font-size: 12px; }
 .loose-nodes { display: flex; flex-wrap: wrap; gap: 6px; }
 
-/* Web 闭环增量：向导 / 工作流引导 / 草案进度（零脚本，纯服务端表单） */
+/* Web 闭环增量：向导 / 工作流引导 / 草案进度（旧表单页，T9 退役） */
 .fld input[type=password] { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rounded-sm); padding: 6px 8px; font: 400 13px var(--font); width: 100%; }
 .radio-line { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 4px 0; }
 .radio-line label { font-weight: 400; font-size: 13px; color: var(--text); display: inline-flex; gap: 5px; align-items: center; }
@@ -247,7 +247,7 @@ export function layout(active: NavKey, title: string, desc: string, content: str
 <div class="app">
   <aside class="sidebar">
     <nav class="nav">${nav}</nav>
-    <div class="boundary">写操作仅限本地实例、模板库（导入/另存方法）、映射文件与 releases/ 发布登记<br>页面无脚本 · 纯服务端表单</div>
+    <div class="boundary">写操作仅限本地实例、模板库（导入/另存方法）、映射文件与 releases/ 发布登记<br>旧表单页（逐步退役）</div>
   </aside>
   <main class="main">
     <h1 class="page-title">${escapeHtml(title)}</h1>

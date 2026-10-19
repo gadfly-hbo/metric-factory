@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
 import { mkdtempSync, copyFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
 import { test, expect } from "vitest";
 import { createUiServer, listenUi } from "../../src/ui/server.js";
 
@@ -13,18 +14,17 @@ async function startUi() {
   return { server, base: `http://127.0.0.1:${port}` };
 }
 
-test("GET /：工作台首页含 NL 主入口与边界声明", async () => {
+test("GET /：A2 SPA 接管根路由（评审原型壳 + 真实边界标签）", async () => {
   const { server, base } = await startUi();
   const res = await fetch(`${base}/`);
   expect(res.status).toBe(200);
   const html = await res.text();
-  expect(html).toContain("模板库");
-  expect(html).toContain("本机运行");
-  expect(html).toContain("凭据仅存本机");
-  // A1：自然语言主入口（一句话 → AI 起草分析体系）+ 次要起点引导
-  expect(html).toContain('action="/blueprint/generate"');
-  expect(html).toContain("用一句话开始");
-  expect(html).toContain("或从模板与导入开始");
+  // A2：根路由 = 移植壳（demo index.html 同构），旧表单首页退役
+  expect(html).toContain("Metric Factory · 分析体系工作台");
+  expect(html).toContain("本地工作台 · 真实引擎");
+  expect(html).toContain('src="api.js"');
+  expect(html).toContain('src="app.js"');
+  expect(html).not.toContain('action="/blueprint/generate"');
   server.close();
 });
 
@@ -58,22 +58,21 @@ test("GET /templates/:id：指标字典表格与口径列", async () => {
 
 test("设计 token 落地：JuanerAI 已接受视觉系统进入 CSS 变量（A1 D10）", async () => {
   const { server, base } = await startUi();
-  const res = await fetch(`${base}/`);
-  const html = await res.text();
-  // A1 视觉迁移（visual-system.md）：暖白/灰绿表面 + 绿主动作 #27664f + 语义状态色
-  for (const token of ["--accent: #27664f", "--accent-strong: #1e5240", "--accent-soft: #eaf2eb",
-    "--ok: #1a7f4b", "--warn: #80541c", "--fail: #c0392b",
-    "--bg: #f6f7f4", "--surface: #fcfcfa", "--border: #dce2d9", "--text: #22332d"]) {
-    expect(html).toContain(token);
+  const res = await fetch(`${base}/style.css`);
+  const css = await res.text();
+  // A2 视觉系统 = 评审原型 style.css 逐字节（同色系：暖白/灰绿表面 + 绿主动作 #27664f + 语义状态色；demo 为压缩格式无空格）
+  for (const token of ["--green:#27664f", "--soft:#eaf2eb", "--warn:#80541c", "--error:#9b332b",
+    "--canvas:#f6f7f4", "--surface:#fcfcfa", "--line:#dce2d9", "--ink:#22332d"]) {
+    expect(css).toContain(token);
   }
-  // 旧基线（#28674e 冷绿 / #f5f6f8 冷灰）与 09-28 橘色契约均退场
-  expect(html).not.toContain("#e8643a");
-  expect(html).not.toContain("--accent: #28674e");
-  // 230px 侧栏 + 64px 顶栏（JuanerAI 骨架）
-  expect(html).toContain("width: 230px");
-  expect(html).toContain("height: 64px");
-  // 语义状态色仍色+文字双通道（chip 类保留）
-  expect(html).toContain("chip-ok");
+  // 旧基线（#28674e 冷绿）与 09-28 橘色契约均退场
+  expect(css).not.toContain("#e8643a");
+  // 230px 侧栏 + 64px 顶栏（JuanerAI 骨架，demo 同值）
+  expect(css).toContain("width:230px");
+  expect(css).toContain("height:64px");
+  // 与评审原型逐字节一致（字节级复刻保证）
+  const demoCss = await readFile(join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures", "demo-anchor", "style.css"), "utf8");
+  expect(css).toBe(demoCss);
   server.close();
 });
 

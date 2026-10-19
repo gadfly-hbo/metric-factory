@@ -1,0 +1,329 @@
+{
+ "t": "div",
+ "c": "app",
+ "k": [
+  {
+   "t": "aside",
+   "c": "sidebar",
+   "aria-label": "主导航",
+   "k": [
+    {
+     "t": "div",
+     "c": "brand",
+     "k": [
+      {
+       "t": "span"
+      },
+      {
+       "t": "p"
+      }
+     ]
+    },
+    {
+     "t": "button",
+     "c": "btn new-system",
+     "data-action": "home",
+     "k": [
+      {
+       "t": "span",
+       "aria-hidden": "true"
+      }
+     ]
+    },
+    {
+     "t": "nav",
+     "c": "nav-primary",
+     "k": [
+      {
+       "t": "button",
+       "c": "nav-item",
+       "data-action": "systems",
+       "k": [
+        {
+         "t": "span",
+         "c": "nav-icon",
+         "aria-hidden": "true"
+        },
+        {
+         "t": "span",
+         "c": "count"
+        }
+       ]
+      },
+      {
+       "t": "button",
+       "c": "nav-item",
+       "data-action": "library",
+       "k": [
+        {
+         "t": "span",
+         "c": "nav-icon",
+         "aria-hidden": "true"
+        },
+        {
+         "t": "span",
+         "c": "nav-meta"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "div",
+     "c": "recent-label"
+    },
+    {
+     "t": "nav",
+     "c": "recent",
+     "aria-label": "最近编辑的体系",
+     "k": [
+      {
+       "t": "p",
+       "c": "fine nav-empty"
+      }
+     ]
+    },
+    {
+     "t": "div",
+     "c": "sidebar-bottom",
+     "k": [
+      {
+       "t": "div",
+       "c": "workspace-person",
+       "k": [
+        {
+         "t": "span",
+         "c": "avatar"
+        },
+        {
+         "t": "div",
+         "k": [
+          {
+           "t": "span",
+           "c": "fine"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "t": "button",
+       "c": "nav-item",
+       "data-action": "about",
+       "k": [
+        {
+         "t": "span",
+         "c": "nav-icon",
+         "aria-hidden": "true"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "t": "div",
+   "c": "workspace",
+   "k": [
+    {
+     "t": "header",
+     "c": "topbar",
+     "k": [
+      {
+       "t": "button",
+       "c": "icon-button mobile-menu",
+       "data-action": "menu",
+       "aria-label": "展开导航"
+      },
+      {
+       "t": "div",
+       "c": "breadcrumb",
+       "k": [
+        {
+         "t": "span"
+        }
+       ]
+      },
+      {
+       "t": "div",
+       "c": "topbar-right",
+       "k": [
+        {
+         "t": "span",
+         "c": "prototype-label"
+        },
+        {
+         "t": "button",
+         "c": "btn small quiet",
+         "data-action": "about",
+         "k": [
+          {
+           "t": "span",
+           "aria-hidden": "true"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "main",
+     "k": [
+      {
+       "t": "section",
+       "c": "home",
+       "k": [
+        {
+         "t": "div",
+         "c": "eyebrow"
+        },
+        {
+         "t": "h1"
+        },
+        {
+         "t": "p",
+         "c": "home-intro"
+        },
+        {
+         "t": "div",
+         "c": "composer",
+         "k": [
+          {
+           "t": "label"
+          },
+          {
+           "t": "textarea"
+          },
+          {
+           "t": "div",
+           "c": "composer-bottom",
+           "k": [
+            {
+             "t": "span",
+             "c": "fine",
+             "k": [
+              {
+               "t": "br"
+              }
+             ]
+            },
+            {
+             "t": "button",
+             "c": "btn primary",
+             "data-action": "generate",
+             "k": [
+              {
+               "t": "span",
+               "aria-hidden": "true"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "t": "p",
+           "c": "inline-error",
+           "role": "alert"
+          }
+         ]
+        },
+        {
+         "t": "div",
+         "c": "home-paths",
+         "k": [
+          {
+           "t": "span"
+          },
+          {
+           "t": "button",
+           "c": "btn small quiet",
+           "data-action": "library",
+           "k": [
+            {
+             "t": "span",
+             "aria-hidden": "true"
+            }
+           ]
+          },
+          {
+           "t": "span",
+           "c": "divider"
+          },
+          {
+           "t": "button",
+           "c": "btn small quiet",
+           "data-action": "import"
+          }
+         ]
+        },
+        {
+         "t": "div",
+         "c": "section-label",
+         "k": [
+          {
+           "t": "h2"
+          },
+          {
+           "t": "span",
+           "c": "fine"
+          }
+         ]
+        },
+        {
+         "t": "div",
+         "c": "starter-list",
+         "k": [
+          {
+           "t": "button",
+           "c": "starter-row",
+           "data-action": "example",
+           "k": [
+            {
+             "t": "span",
+             "c": "starter-number"
+            },
+            {
+             "t": "div",
+             "k": [
+              {
+               "t": "strong"
+              },
+              {
+               "t": "p"
+              }
+             ]
+            },
+            {
+             "t": "span",
+             "c": "arrow",
+             "aria-hidden": "true"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "t": "div",
+         "c": "home-bottom",
+         "k": [
+          {
+           "t": "span",
+           "c": "green",
+           "aria-hidden": "true"
+          },
+          {
+           "t": "p",
+           "c": "fine"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

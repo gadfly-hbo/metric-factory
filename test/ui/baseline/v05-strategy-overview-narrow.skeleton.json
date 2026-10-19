@@ -1,0 +1,787 @@
+{
+ "t": "div",
+ "c": "app",
+ "k": [
+  {
+   "t": "aside",
+   "c": "sidebar",
+   "aria-label": "主导航",
+   "k": [
+    {
+     "t": "div",
+     "c": "brand",
+     "k": [
+      {
+       "t": "span"
+      },
+      {
+       "t": "p"
+      }
+     ]
+    },
+    {
+     "t": "button",
+     "c": "btn new-system",
+     "data-action": "home",
+     "k": [
+      {
+       "t": "span",
+       "aria-hidden": "true"
+      }
+     ]
+    },
+    {
+     "t": "nav",
+     "c": "nav-primary",
+     "k": [
+      {
+       "t": "button",
+       "c": "nav-item active",
+       "data-action": "systems",
+       "k": [
+        {
+         "t": "span",
+         "c": "nav-icon",
+         "aria-hidden": "true"
+        },
+        {
+         "t": "span",
+         "c": "count"
+        }
+       ]
+      },
+      {
+       "t": "button",
+       "c": "nav-item",
+       "data-action": "library",
+       "k": [
+        {
+         "t": "span",
+         "c": "nav-icon",
+         "aria-hidden": "true"
+        },
+        {
+         "t": "span",
+         "c": "nav-meta"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "div",
+     "c": "recent-label"
+    },
+    {
+     "t": "nav",
+     "c": "recent",
+     "aria-label": "最近编辑的体系",
+     "k": [
+      {
+       "t": "button",
+       "c": "recent-item active",
+       "data-action": "open-system",
+       "k": [
+        {
+         "t": "span"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "div",
+     "c": "sidebar-bottom",
+     "k": [
+      {
+       "t": "div",
+       "c": "workspace-person",
+       "k": [
+        {
+         "t": "span",
+         "c": "avatar"
+        },
+        {
+         "t": "div",
+         "k": [
+          {
+           "t": "span",
+           "c": "fine"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "t": "button",
+       "c": "nav-item",
+       "data-action": "about",
+       "k": [
+        {
+         "t": "span",
+         "c": "nav-icon",
+         "aria-hidden": "true"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "t": "div",
+   "c": "workspace",
+   "k": [
+    {
+     "t": "header",
+     "c": "topbar",
+     "k": [
+      {
+       "t": "button",
+       "c": "icon-button mobile-menu",
+       "data-action": "menu",
+       "aria-label": "展开导航"
+      },
+      {
+       "t": "div",
+       "c": "breadcrumb",
+       "k": [
+        {
+         "t": "span"
+        }
+       ]
+      },
+      {
+       "t": "div",
+       "c": "topbar-right",
+       "k": [
+        {
+         "t": "span",
+         "c": "prototype-label"
+        },
+        {
+         "t": "button",
+         "c": "btn small quiet",
+         "data-action": "about",
+         "k": [
+          {
+           "t": "span",
+           "aria-hidden": "true"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "main",
+     "k": [
+      {
+       "t": "div",
+       "c": "work-header",
+       "k": [
+        {
+         "t": "div",
+         "c": "page-heading",
+         "k": [
+          {
+           "t": "div",
+           "k": [
+            {
+             "t": "div",
+             "c": "system-title",
+             "k": [
+              {
+               "t": "h1"
+              },
+              {
+               "t": "span",
+               "c": "tag neutral"
+              }
+             ]
+            },
+            {
+             "t": "div",
+             "c": "system-meta",
+             "k": [
+              {
+               "t": "span"
+              },
+              {
+               "t": "span"
+              },
+              {
+               "t": "span"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "t": "div",
+           "c": "actions",
+           "k": [
+            {
+             "t": "button",
+             "c": "btn small quiet",
+             "data-action": "rename"
+            },
+            {
+             "t": "button",
+             "c": "btn ",
+             "data-action": "save-draft"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "t": "nav",
+       "c": "work-tabs",
+       "aria-label": "体系工作视图",
+       "k": [
+        {
+         "t": "button",
+         "c": "tab active",
+         "aria-current": "page",
+         "data-action": "stage",
+         "data-stage": "overview",
+         "k": [
+          {
+           "t": "span",
+           "c": "step-number"
+          }
+         ]
+        },
+        {
+         "t": "button",
+         "c": "tab ",
+         "data-action": "stage",
+         "data-stage": "metrics",
+         "k": [
+          {
+           "t": "span",
+           "c": "step-number"
+          }
+         ]
+        },
+        {
+         "t": "button",
+         "c": "tab ",
+         "data-action": "stage",
+         "data-stage": "scenes",
+         "k": [
+          {
+           "t": "span",
+           "c": "step-number"
+          }
+         ]
+        },
+        {
+         "t": "button",
+         "c": "tab ",
+         "data-action": "stage",
+         "data-stage": "review",
+         "k": [
+          {
+           "t": "span",
+           "c": "step-number"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "t": "div",
+       "c": "work-content",
+       "k": [
+        {
+         "t": "section",
+         "c": "work-main",
+         "aria-label": "分析体系总览",
+         "k": [
+          {
+           "t": "div",
+           "c": "understanding",
+           "k": [
+            {
+             "t": "div",
+             "c": "subsection-title",
+             "k": [
+              {
+               "t": "div",
+               "c": "eyebrow"
+              },
+              {
+               "t": "button",
+               "c": "btn small quiet",
+               "data-action": "edit-understanding"
+              }
+             ]
+            },
+            {
+             "t": "h2"
+            },
+            {
+             "t": "p"
+            },
+            {
+             "t": "div",
+             "c": "context-row",
+             "k": [
+              {
+               "t": "span",
+               "c": "tag "
+              }
+             ]
+            },
+            {
+             "t": "p",
+             "c": "fine"
+            }
+           ]
+          },
+          {
+           "t": "div",
+           "c": "scope-note",
+           "k": [
+            {
+             "t": "strong"
+            },
+            {
+             "t": "p"
+            }
+           ]
+          },
+          {
+           "t": "section",
+           "c": "subsection",
+           "k": [
+            {
+             "t": "div",
+             "c": "subsection-title",
+             "k": [
+              {
+               "t": "h3"
+              },
+              {
+               "t": "span",
+               "c": "fine"
+              }
+             ]
+            },
+            {
+             "t": "ol",
+             "c": "question-outline",
+             "k": [
+              {
+               "t": "li",
+               "k": [
+                {
+                 "t": "span",
+                 "c": "number"
+                },
+                {
+                 "t": "div",
+                 "k": [
+                  {
+                   "t": "strong"
+                  },
+                  {
+                   "t": "p"
+                  },
+                  {
+                   "t": "span",
+                   "c": "fine"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "t": "section",
+           "c": "subsection",
+           "k": [
+            {
+             "t": "div",
+             "c": "subsection-title",
+             "k": [
+              {
+               "t": "h3"
+              },
+              {
+               "t": "button",
+               "c": "btn small quiet",
+               "data-action": "claim-boundaries"
+              }
+             ]
+            },
+            {
+             "t": "div",
+             "c": "hypothesis-list",
+             "k": [
+              {
+               "t": "article",
+               "c": "hypothesis",
+               "k": [
+                {
+                 "t": "div",
+                 "c": "hypothesis-head",
+                 "k": [
+                  {
+                   "t": "span",
+                   "c": "fine"
+                  },
+                  {
+                   "t": "span",
+                   "c": "tag warn"
+                  }
+                 ]
+                },
+                {
+                 "t": "h4"
+                },
+                {
+                 "t": "div",
+                 "c": "hypothesis-evidence",
+                 "k": [
+                  {
+                   "t": "div",
+                   "k": [
+                    {
+                     "t": "span"
+                    },
+                    {
+                     "t": "p"
+                    }
+                   ]
+                  },
+                  {
+                   "t": "div",
+                   "k": [
+                    {
+                     "t": "span"
+                    },
+                    {
+                     "t": "p"
+                    }
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "t": "p",
+                 "c": "change-condition",
+                 "k": [
+                  {
+                   "t": "strong"
+                  }
+                 ]
+                },
+                {
+                 "t": "div",
+                 "c": "actions",
+                 "k": [
+                  {
+                   "t": "button",
+                   "c": "btn small quiet",
+                   "data-action": "edit-hypothesis"
+                  },
+                  {
+                   "t": "button",
+                   "c": "btn small quiet",
+                   "data-action": "verify-claim"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "t": "section",
+           "c": "subsection",
+           "k": [
+            {
+             "t": "div",
+             "c": "subsection-title",
+             "k": [
+              {
+               "t": "h3"
+              },
+              {
+               "t": "span",
+               "c": "fine"
+              }
+             ]
+            },
+            {
+             "t": "div",
+             "c": "option-list",
+             "k": [
+              {
+               "t": "div",
+               "k": [
+                {
+                 "t": "strong"
+                },
+                {
+                 "t": "p"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "t": "section",
+           "c": "subsection",
+           "k": [
+            {
+             "t": "div",
+             "c": "subsection-title",
+             "k": [
+              {
+               "t": "h3"
+              },
+              {
+               "t": "button",
+               "c": "btn small quiet",
+               "data-action": "edit-organization"
+              }
+             ]
+            },
+            {
+             "t": "div",
+             "c": "context-row",
+             "k": [
+              {
+               "t": "span",
+               "c": "tag neutral"
+              }
+             ]
+            },
+            {
+             "t": "p",
+             "c": "note"
+            },
+            {
+             "t": "div",
+             "c": "capability-strip",
+             "k": [
+              {
+               "t": "span"
+              },
+              {
+               "t": "p"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "t": "section",
+           "c": "subsection",
+           "k": [
+            {
+             "t": "div",
+             "c": "subsection-title",
+             "k": [
+              {
+               "t": "h3"
+              },
+              {
+               "t": "span",
+               "c": "fine"
+              }
+             ]
+            },
+            {
+             "t": "div",
+             "c": "evidence-plan",
+             "k": [
+              {
+               "t": "article",
+               "c": "evidence-row",
+               "k": [
+                {
+                 "t": "div",
+                 "c": "evidence-title",
+                 "k": [
+                  {
+                   "t": "strong"
+                  },
+                  {
+                   "t": "span",
+                   "c": "tag neutral"
+                  }
+                 ]
+                },
+                {
+                 "t": "p",
+                 "c": "evidence-type"
+                },
+                {
+                 "t": "dl",
+                 "k": [
+                  {
+                   "t": "dt"
+                  }
+                 ]
+                },
+                {
+                 "t": "button",
+                 "c": "btn small quiet",
+                 "data-action": "edit-evidence"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "t": "section",
+           "c": "subsection",
+           "k": [
+            {
+             "t": "div",
+             "c": "subsection-title",
+             "k": [
+              {
+               "t": "h3"
+              }
+             ]
+            },
+            {
+             "t": "p",
+             "c": "output-description"
+            },
+            {
+             "t": "p",
+             "c": "note"
+            }
+           ]
+          },
+          {
+           "t": "div",
+           "c": "section-end",
+           "k": [
+            {
+             "t": "span",
+             "c": "fine"
+            },
+            {
+             "t": "button",
+             "c": "btn primary",
+             "data-action": "stage",
+             "data-stage": "scenes"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "t": "aside",
+         "c": "assistant",
+         "aria-label": "AI 共创助手",
+         "k": [
+          {
+           "t": "div",
+           "c": "assistant-head",
+           "k": [
+            {
+             "t": "span",
+             "c": "assistant-spark",
+             "aria-hidden": "true"
+            },
+            {
+             "t": "h2"
+            },
+            {
+             "t": "span",
+             "c": "meta-right"
+            }
+           ]
+          },
+          {
+           "t": "div",
+           "c": "assistant-label"
+          },
+          {
+           "t": "div",
+           "c": "assistant-message",
+           "k": [
+            {
+             "t": "p"
+            }
+           ]
+          },
+          {
+           "t": "div",
+           "c": "suggestion-list",
+           "k": [
+            {
+             "t": "button",
+             "c": "suggestion",
+             "data-action": "suggest",
+             "k": [
+              {
+               "t": "span",
+               "aria-hidden": "true"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "t": "div",
+           "c": "assistant-compose",
+           "k": [
+            {
+             "t": "label"
+            },
+            {
+             "t": "textarea"
+            },
+            {
+             "t": "div",
+             "c": "assistant-send",
+             "k": [
+              {
+               "t": "span",
+               "c": "fine"
+              },
+              {
+               "t": "button",
+               "c": "btn primary small",
+               "data-action": "refine"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "t": "p",
+           "c": "note"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
