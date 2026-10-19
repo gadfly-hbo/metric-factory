@@ -17,7 +17,7 @@ function buildGitSha(): string | undefined {
 const gitSha = buildGitSha();
 
 export default defineConfig({
-  entry: { cli: "src/cli/index.ts" },
+  entry: { cli: "src/cli/index.ts", integration: "src/integration/entry.ts" },
   format: ["esm"],
   target: "node22",
   platform: "node",

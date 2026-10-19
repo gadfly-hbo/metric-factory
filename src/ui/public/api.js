@@ -50,6 +50,9 @@ const Api = {
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `生成未能启动（${res.status}）`);
     return res.json();
   },
+  async cancelJob(jobId) {
+    return Api.write(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, "POST", {});
+  },
   async job(jobId) {
     const res = await fetch(`/api/jobs/${jobId}`);
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `任务查询失败（${res.status}）`);

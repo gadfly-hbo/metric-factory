@@ -1,10 +1,10 @@
 // A2 T5：设计编辑写路径——引擎 writeMode 门、依赖保护、U1-b 口径确认、G8 另存方法。
 import { test, expect, beforeAll, afterAll } from "vitest";
 import { createUiServer } from "../../src/ui/server.js";
-import { mkdtemp, mkdir, cp, readFile, readdir } from "node:fs/promises";
+import { mkdtemp, mkdir, cp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { parse as parseYaml } from "yaml";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 const repoRoot = path.resolve(__dirname, "../..");
 const FIXTURE = "instance-blueprint.yaml";
@@ -168,4 +168,87 @@ test("Playwright：编辑流（修正理解→保存 toast→数据刷新；弹�
   } finally {
     await browser.close();
   }
+});
+
+// F-MF-07: submit the exact bindings that the existing production dialog renders.
+test("method binding dialog round-trip changes references only and rejects ambiguous roles without writes", async () => {
+  const file = path.join(workspace, "examples", "method-bindings.yaml");
+  const instance = parseYaml(await readFile(path.join(repoRoot, "test/fixtures", FIXTURE), "utf8"));
+  instance.added_scenarios = [{
+    id: "profit_binding_edit", version: "0.1.0", title: "绑定编辑合成夹具", decision_purpose: "核对指标角色引用",
+    question_tree: [], metric_usages: [{metric:"gmv",role:"outcome"}],
+    method_refs:["profit-change-diagnosis@0.1.0"],
+    method_bindings:[
+      {method_ref:"profit-change-diagnosis@0.1.0",role:"profit_result",metric:"gmv"},
+      {method_ref:"profit-change-diagnosis@0.1.0",role:"gross_profit_comp",metric:"commission_revenue"},
+      {method_ref:"profit-change-diagnosis@0.1.0",role:"expense_constraint",metric:"uv"}
+    ], evidence_requirements:"合成材料", output_spec:"设计", review_rules:"人工复核"
+  }];
+  await writeFile(file,stringifyYaml(instance));
+  const url = "/api/instances/examples%2Fmethod-bindings.yaml";
+  const dto = await (await fetch(origin+url)).json();
+  const bindings = dto.scenes.find((s: {id:string}) => s.id === "profit_binding_edit").bindings;
+  expect(bindings.map((b:{role:string}) => b.role)).toContain("利润结果");
+  const methodFile = path.join(templatesDir,"methods/profit-change-diagnosis.yaml");
+  const methodBefore = await readFile(methodFile,"utf8");
+  const saved = await api(url+"/scenes/profit_binding_edit/bindings","PATCH",{bindings:bindings.map((b:{role:string;metric:string}) => ({...b,metric:b.role==="利润结果"?"commission_revenue":b.metric}))});
+  expect(saved.status).toBe(200);
+  const after = parseYaml(await readFile(file,"utf8"));
+  const scene = after.added_scenarios[0];
+  expect(scene.method_bindings).toEqual(instance.added_scenarios[0].method_bindings.map((b:{role:string;metric:string})=>({...b,metric:b.role==="profit_result"?"commission_revenue":b.metric})));
+  expect(scene.metric_usages).toEqual(instance.added_scenarios[0].metric_usages);
+  expect(scene.method_refs).toEqual(instance.added_scenarios[0].method_refs);
+  expect(after.added).toEqual(instance.added);
+  expect(await readFile(methodFile,"utf8")).toBe(methodBefore);
+  const beforeInvalid=await readFile(file,"utf8");
+  for(const invalid of [
+    [...bindings,{role:"未知方法角色",metric:"gmv"}],
+    bindings.map((b:{role:string;metric:string})=>({...b,metric:b.role==="利润结果"?"missing_metric":b.metric})),
+    [...bindings,bindings.find((b:{role:string})=>b.role==="利润结果")]
+  ]) {
+    expect((await api(url+"/scenes/profit_binding_edit/bindings","PATCH",{bindings:invalid})).status).toBe(422);
+    expect(await readFile(file,"utf8")).toBe(beforeInvalid);
+  }
+  // A display label shared with a generic role cannot safely identify a target.
+  await writeFile(methodFile,methodBefore.replace("name: 利润结果","name: 结果指标"));
+  const ambiguousDto=await (await fetch(origin+url)).json();
+  const ambiguous=ambiguousDto.scenes.find((s:{id:string})=>s.id==="profit_binding_edit").bindings;
+  expect((await api(url+"/scenes/profit_binding_edit/bindings","PATCH",{bindings:ambiguous.map((b:{role:string;metric:string})=>({role:b.role,metric:b.metric}))})).status).toBe(422);
+  expect(await readFile(file,"utf8")).toBe(beforeInvalid);
+  expect((await api(url+"/scenes/profit_binding_edit/bindings","PATCH",{bindings:ambiguous})).status).toBe(200);
+  await writeFile(methodFile,methodBefore);
+  const endpoint=url+"/scenes/profit_binding_edit/bindings";
+  const cleared=bindings.filter((b:{role:string})=>b.role!=="费用约束");
+  expect((await api(endpoint,"PATCH",{bindings:cleared})).status).toBe(200);
+  // Reopening must show the same required role as unbound, not delete the editor target.
+  const reopened=await (await fetch(origin+url)).json();
+  const reopenedBindings=reopened.scenes.find((s:{id:string})=>s.id==="profit_binding_edit").bindings;
+  const missing=reopenedBindings.find((b:{role:string})=>b.role==="费用约束");
+  expect(missing).toMatchObject({metric:"",required:true});
+  expect((await api(url+"/confirm-review","POST",{})).status).toBe(422);
+  expect((await api(endpoint,"PATCH",{bindings:reopenedBindings.map((b:{role:string})=>({...b,...(b.role==="费用约束"?{metric:"uv"}:{})}))})).status).toBe(200);
+  const restored=parseYaml(await readFile(file,"utf8"));
+  expect(restored.added_scenarios[0].method_bindings.find((b:{role:string})=>b.role==="expense_constraint")).toEqual({method_ref:"profit-change-diagnosis@0.1.0",role:"expense_constraint",metric:"uv"});
+  expect(await readFile(methodFile,"utf8")).toBe(methodBefore);
+
+});
+
+test("MF-05/06 complete method bindings enable normal delivery and semantic edits invalidate review",async()=>{
+ const instance=parseYaml(await readFile(path.join(repoRoot,"test/fixtures",FIXTURE),"utf8"));
+ instance.added_scenarios=[{id:"ready_method",version:"0.1.0",title:"合法方法引用合成夹具",decision_purpose:"合成引用验证",question_tree:[],metric_usages:[],method_refs:["profit-change-diagnosis@0.1.0"],method_bindings:[
+  {method_ref:"profit-change-diagnosis@0.1.0",role:"profit_result",metric:"gmv"},
+  {method_ref:"profit-change-diagnosis@0.1.0",role:"gross_profit_comp",metric:"commission_revenue"},
+  {method_ref:"profit-change-diagnosis@0.1.0",role:"expense_constraint",metric:"uv"}
+ ],evidence_requirements:"合成测试不证明指标语义",output_spec:"设计",review_rules:"测试"}];
+ const file=path.join(workspace,"examples","ready-method.yaml");await writeFile(file,stringifyYaml(instance));
+ const url="/api/instances/examples%2Fready-method.yaml";
+  // F-MF-10: the normal DTO must use the same method library as review/delivery.
+  expect((await api(url+"/confirm-review","POST",{})).status).toBe(200);
+  const ready=await (await fetch(origin+url)).json();
+  expect(ready.engineReady).toBe(true);
+  const delivered=await api(url+"/deliver","POST",{});
+  expect(delivered.status,JSON.stringify(await delivered.json())).toBe(201);
+  expect((await api(url+"/deliver","POST",{})).status).toBe(422);
+  expect((await api(url+"/blueprint","PATCH",{purpose:"语义修改应使复核失效"})).status).toBe(200);
+  expect((await (await fetch(origin+url)).json()).engineReady).toBe(false);
 });

@@ -1,8 +1,8 @@
 // release：SAP 资产包版本发布（快照 + index 登记；PRD 决策 #1-#6 + GRILL G1/G3/G5/G10）
 // 管线复用既有导出全链（loadInstance → 基模板 → materialize → 全量校验 → export gate → assembleSap →
 // validateSapPackage），零第二套规则；发布动作 = 登记侧写盘（快照 + append-only index），SAP 包结构与契约冻结面零改动。
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { join, dirname } from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { z } from "zod";
 import { loadInstance, loadTemplatesFromDir, type LoadError } from "../engine/loader.js";
@@ -12,6 +12,7 @@ import { validateDesign, designReview } from "../engine/blueprint.js";
 import { loadMethodsFromDir, defaultMethodsDir } from "../engine/methods.js";
 import type { Mapping } from "../schema/mapping.js";
 import type { Template } from "../schema/template.js";
+import { MethodTemplateSchema, type MethodTemplate } from "../schema/method.js";
 import { assertExportable } from "../export/gate.js";
 import { buildGenerator, packageIdFromInstancePath } from "../export/sap.js";
 import { assembleSap } from "./assemble.js";
@@ -77,6 +78,8 @@ export interface ReleaseResult {
 
 export interface ReleaseOptions {
   instancePath: string;
+  /** Explicit stable embedding identity; standalone default remains path basename. */
+  packageId?: string;
   /** 包版本（semver；位置参数，G1） */
   version: string;
   templatesDir: string;
@@ -88,6 +91,8 @@ export interface ReleaseOptions {
   mappingPath?: string;
   /** 方法模板目录（A1 D3；缺省 <templatesDir>/methods，目录不存在视为空方法库） */
   methodsDir?: string;
+  /** Explicit composed builtin/user library; same schema and release gates apply. */
+  methods?: readonly MethodTemplate[];
   /** ISO-8601；测试可冻结 */
   now: string;
   /** 覆盖 generator（测试可冻结；缺省 buildGenerator()） */
@@ -141,8 +146,15 @@ async function loadMappingForRelease(mappingPath: string, required: boolean): Pr
   return result.mapping;
 }
 
-function readReleaseIndex(indexPath: string): ReleaseIndex {
-  if (!existsSync(indexPath)) return { releases: [] };
+export function readReleaseIndex(indexPath: string): ReleaseIndex {
+  if (!existsSync(indexPath)) {
+    // An interrupted/lost index is not a new publication history.
+    const directory = dirname(indexPath);
+    if (existsSync(directory) && readdirSync(directory).length > 0) {
+      throw new ReleaseError("index-corrupt", "发布登记缺失且已有发布物料，拒绝重建历史；请恢复原登记后重试");
+    }
+    return { releases: [] };
+  }
   let doc: unknown;
   try {
     doc = parseYaml(readFileSync(indexPath, "utf8"));
@@ -162,6 +174,26 @@ function readReleaseIndex(indexPath: string): ReleaseIndex {
       { detail }
     );
   }
+  // A structurally valid but incomplete register is not publication authority.
+  // Compare both directions before any writer can append to damaged history.
+  const expected = new Set<string>();
+  const corrupt = () => new ReleaseError("index-corrupt", "发布登记与已有快照不一致，拒绝继续发布；请恢复完整原登记和快照后重试");
+  for (const entry of parsed.data.releases) {
+    const file = `${entry.package}/${entry.version}.sap.yaml`;
+    if (!/^[a-z][a-z0-9-]*$/.test(entry.package) || entry.file !== file || expected.has(file)) throw corrupt();
+    expected.add(file);
+  }
+  const directory = dirname(indexPath);
+  for (const item of readdirSync(directory, { withFileTypes: true })) {
+    if (item.name === RELEASE_INDEX_FILENAME && item.isFile()) continue;
+    if (!item.isDirectory()) throw corrupt();
+    for (const snapshot of readdirSync(join(directory, item.name), { withFileTypes: true })) {
+      // Existing receipt records are separate from SAP snapshots, even when a package is named receipts.
+      if (item.name === "receipts" && snapshot.isFile() && snapshot.name.endsWith(".receipt.yaml")) continue;
+      if (!snapshot.isFile() || !expected.delete(`${item.name}/${snapshot.name}`)) throw corrupt();
+    }
+  }
+  if (expected.size > 0) throw corrupt();
   return parsed.data;
 }
 
@@ -175,7 +207,8 @@ export async function releaseInstance(opts: ReleaseOptions): Promise<ReleaseResu
     );
   }
 
-  const packageId = packageIdFromInstancePath(opts.instancePath);
+  const packageId = opts.packageId ?? packageIdFromInstancePath(opts.instancePath);
+  if (!/^[a-z][a-z0-9-]*$/.test(packageId)) throw new ReleaseError("invalid-package-id", "发布身份非法，拒绝写盘");
   const indexPath = join(opts.releasesDir, RELEASE_INDEX_FILENAME);
 
   // G3：登记先读后写；损坏 → 拒绝，不静默重建
@@ -211,7 +244,7 @@ export async function releaseInstance(opts: ReleaseOptions): Promise<ReleaseResu
   }
 
   // A1：统一设计校验（指标/场景 + 蓝图规则 + 方法绑定）；方法库装载失败按错误透出（fail-closed）
-  const methodsResult = await loadMethodsFromDir(opts.methodsDir ?? defaultMethodsDir(opts.templatesDir));
+  const methodsResult = opts.methods ? { ok: true as const, methods: opts.methods.map(m => MethodTemplateSchema.parse(m)) } : await loadMethodsFromDir(opts.methodsDir ?? defaultMethodsDir(opts.templatesDir));
   if (!methodsResult.ok) {
     const detail =
       methodsResult.kind === "read"
@@ -279,7 +312,12 @@ export async function releaseInstance(opts: ReleaseOptions): Promise<ReleaseResu
   const snapshotDir = join(opts.releasesDir, packageId);
   mkdirSync(snapshotDir, { recursive: true });
   const snapshotPath = join(snapshotDir, `${opts.version}.sap.yaml`);
-  writeFileSync(snapshotPath, canonicalize(pkg), "utf8");
+  // The index may be stale/empty after interruption; the file itself is immutable.
+  try { writeFileSync(snapshotPath, canonicalize(pkg), { encoding: "utf8", flag: "wx" }); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    throw new ReleaseError("duplicate-release", "该版本快照已经存在，拒绝覆盖；请核对原发布登记", { packageId, publishedVersion: opts.version });
+  }
 
   index.releases.push({
     package: packageId,

@@ -5,7 +5,7 @@ import type { MethodTemplate } from "../schema/method.js";
 
 export const PROMPT_VERSION = "v2.1.0";
 // A1 D9：blueprint prompt 独立版本族（指标 prompt 维持 v2.1.0 不动，避免无内容变更的 provenance 扰动）
-export const BLUEPRINT_PROMPT_VERSION = "v1.0.0";
+export const BLUEPRINT_PROMPT_VERSION = "v1.0.1";
 
 export interface Prompt {
   system: string;
@@ -127,7 +127,8 @@ const BLUEPRINT_OUTPUT_CONTRACT = [
   "   evidence_plan（元素 {id, name, kind 证据类型中文, source 来源, check 核验办法, insufficiency 不足处置, status 只能是「待获取」}），",
   "   options（候选道路，元素 {id, name, tradeoff 取舍}；战略选择类至少 2 条，其他可为空）。",
   "3. added_metrics 元素硬约束：name（小写 snake_case 英文）、display_name（中文）、type（只能是 simple|ratio|derived|cumulative 之一）、definition（中文口径，写清分子/分母/统计周期/剔除规则）、dimensions（只能从给定维度清单选）、time_grains（只能是 day|week|month|quarter|year）、owner_role（必填中文角色名）。",
-  "4. added_scenarios 元素：id（小写 snake_case）、title、decision_purpose（必填决策用途）、question_tree（[]）、metric_usages（[{metric, role: outcome|driver|guardrail, note?}]，metric 必须存在）、method_refs（只能从给定方法库选，格式 <方法id>@<版本>；禁止发明方法 id）、method_bindings（[{method_ref, role, metric}]，role 必须是该方法的已声明角色，metric 必须存在）、evidence_requirements、output_spec、review_rules（文本）。",
+  "4. added_scenarios 元素：id（小写 snake_case）、title、decision_purpose（必填决策用途）、question_tree（节点数组，元素 {id 小写 snake_case, label 必填中文问题, parent? 父节点id, metric? 已有指标名}；节点使用 label，不使用 title；无节点时为 []）、metric_usages（[{metric, role: outcome|driver|guardrail, note?}]，metric 必须存在）、method_refs（只能从给定方法库选，格式 <方法id>@<版本>；禁止发明方法 id）、method_bindings（[{method_ref, role, metric}]，role 必须是该方法的已声明角色，metric 必须存在）。",
+  "   evidence_requirements、output_spec、review_rules 三个字段都必须是字符串，不能是数组或对象；多条要求写在同一个字符串中，无内容时为 \"\"。",
   "5. 禁止编造业务事实与数值结论：证据 status 一律「待获取」，verified 一律 false，judgment 一律「待验证假设」。",
   "6. 定性战略设计允许 added_metrics 为空数组；不为填满指标表编造量化定义。",
   "7. 你的输出将由人审核与业务复核，未复核不可交付。"

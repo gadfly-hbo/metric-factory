@@ -23,17 +23,15 @@ import type { Template } from "../schema/template.js";
 import { TemplateSchema } from "../schema/template.js";
 import { BlueprintSchema, type JudgmentKind, type EvidenceStatus } from "../schema/blueprint.js";
 import { MethodTemplateSchema } from "../schema/method.js";
-import { createLlmClientFromEnv } from "../llm/index.js";
 import { readEnvFile, writeManagedEnv, apiKeyEnvName, maskKey } from "./env-file.js";
 import { resolveLlmEnvAuto, DEFAULT_CHAIN } from "../llm/env-auto.js";
 import { aggregateCallStats } from "../llm/call-stats.js";
 import { isAuditDegraded, resolveDataDir } from "../llm/audit-sink.js";
-import { tryParseBudgetCaps } from "../llm/index.js";
 import { createFileBudgetStore } from "../llm/budget-store.js";
 import type { StatsView } from "./render-settings.js";
 import { settingsPage, type ChainEntry, type LlmStatus } from "./render-settings.js";
 import {
-  writeWithGate, patchBlueprintFields, patchHypothesis, patchEvidence, patchMetric, deleteMetric, patchScene, patchSceneBindings, resolveCalibers, methodYamlFromScene, methodIdFromSceneId, methodRoleId,
+  writeWithGate, patchBlueprintFields, patchHypothesis, patchEvidence, patchMetric, deleteMetric, patchScene, patchSceneBindings, methodBindingTargets, resolveCalibers, methodYamlFromScene, methodIdFromSceneId, methodRoleId,
   type WriteCtx
 } from "./api-write.js";
 import { wizardStep1Page, wizardStep2Page } from "./render-wizard.js";
@@ -55,7 +53,7 @@ import { excelExporter } from "../export/excel.js";
 import { mermaidExporter } from "../export/mermaid.js";
 import { createSapExporter, packageIdFromInstancePath, SapExportValidationError } from "../export/sap.js";
 import { SapAssemblyError } from "../sap/assemble.js";
-import { releaseInstance, ReleaseError } from "../sap/release.js";
+import { releaseInstance, ReleaseError, readReleaseIndex } from "../sap/release.js";
 import { registerReceipt, listReceipts, ReceiptError } from "../sap/receipt.js";
 import { ExportBlockedError } from "../export/gate.js";
 import type { Exporter } from "../export/types.js";
@@ -66,7 +64,12 @@ import { loadMethodsFromDir, defaultMethodsDir, lintMethodTemplate } from "../en
 import {
   validateDesign, designReview, blueprintReviewStatus, designFingerprint, findMetricReferences
 } from "../engine/blueprint.js";
+import { IntegratedJob, type UiIntegration } from "./integration.js";
+import {assertIntegratedDataTree, validInstanceId, integratedPackageId} from "./integration-paths.js";
+
 export interface UiOptions {
+  /** Explicit host capabilities; never inferred from environment or credential files. */
+  integration?: UiIntegration;
   instancePath?: string;
   templatesDir: string;
   /** LLM 配置文件（.env.local）；默认 <cwd>/.env.local，测试可注入临时路径 */
@@ -111,7 +114,11 @@ const JUDGMENT_RULE = "事实、解释、假设和建议分别表达；证据不
 const ROLE_LABELS: Record<string, string> = { outcome: "结果指标", driver: "驱动指标", guardrail: "护栏指标" };
 
 // A2 T4：delivered 派生（G3）——releases/index.yaml 按包取最新版本；比较用快照对读在 T6 交付流接
-function latestRelease(workspaceDir: string, packageId: string): { version: string; created_at: string } | null {
+function latestRelease(workspaceDir: string, packageId: string, strict = false): { version: string; created_at: string } | null {
+  if (strict) {
+    const rows = readReleaseIndex(join(workspaceDir, "releases", "index.yaml")).releases.filter(r => r.package === packageId);
+    return rows.at(-1) ?? null;
+  }
   try {
     const doc = parseYaml(readFileSync(join(workspaceDir, "releases", "index.yaml"), "utf8")) as
       { releases?: Array<{ package: string; version: string; created_at: string }> } | null;
@@ -121,7 +128,15 @@ function latestRelease(workspaceDir: string, packageId: string): { version: stri
   } catch { return null; }
 }
 
-function buildSystemDto(ctx: InstanceContext, templates: Template[], workspaceDir: string, methods: MethodTemplate[] = []): Record<string, unknown> {
+function systemPackageId(workspaceDir: string, instancePath: string, integration?: UiIntegration): string {
+  return integration ? integratedPackageId(relative(workspaceDir, instancePath)) : packageIdFromInstancePath(instancePath);
+}
+async function deliveredRelease(workspaceDir: string, instancePath: string, integration?: UiIntegration) {
+  const id = systemPackageId(workspaceDir, instancePath, integration);
+  const latest = latestRelease(workspaceDir, id, Boolean(integration));
+  return latest && (!integration || await integration.publicationSaved(id, latest.version)) ? latest : null;
+}
+async function buildSystemDto(ctx: InstanceContext, templates: Template[], workspaceDir: string, methods: MethodTemplate[] = [], integration?: UiIntegration): Promise<Record<string, unknown>> {
   const mat = materialize(ctx.base, ctx.instance);
   const bp = ctx.instance.blueprint;
   const id = relative(workspaceDir, ctx.instancePath) || basename(ctx.instancePath);
@@ -175,11 +190,8 @@ function buildSystemDto(ctx: InstanceContext, templates: Template[], workspaceDi
         evidence: method?.evidence ?? "同范围的原始记录、明确口径与独立核验条件。",
         steps: (method?.steps ?? []).map((st) => ({ title: st.title, detail: st.detail })),
         bindings: [
-          ...s.metric_usages.map((u) => ({ role: ROLE_LABELS[u.role] ?? u.role, metric: u.metric, required: true })),
-          ...(s.method_bindings ?? []).map((b) => {
-            const role = method?.roles.find((r) => r.id === b.role);
-            return { role: role?.name ?? b.role, metric: b.metric, required: role?.required ?? true };
-          })
+          ...s.metric_usages.map((u) => ({ kind:"usage", roleId:u.role, role: ROLE_LABELS[u.role] ?? u.role, metric: u.metric, required: true })),
+          ...methodBindingTargets(s, methods)
         ]
       };
     }),
@@ -187,8 +199,8 @@ function buildSystemDto(ctx: InstanceContext, templates: Template[], workspaceDi
     confirmed: blueprintReviewStatus(mat).state === "valid",
     reviewState: blueprintReviewStatus(mat).state,
     reviewPending: mat.metrics.filter(m => m.provenance.origin === "llm" && !m.provenance.reviewed_by).map(m => ({ name: m.name, display: m.display_name })),
-    engineReady: designReview(mat, ctx.base, ctx.instance, []).ready, // T6 交付门真值基础（方法面由调用方按需重算覆盖）
-    delivered: latestRelease(workspaceDir, packageIdFromInstancePath(ctx.instancePath)),
+    engineReady: designReview(mat, ctx.base, ctx.instance, methods).ready, // T6 交付门真值基础（方法面由调用方按需重算覆盖）
+    delivered: await deliveredRelease(workspaceDir, ctx.instancePath, integration),
     revision: 1, // G3：丢弃自增号；「有新工作草稿」标签由 release 快照对读派生
     chat: [], proposal: null,
     metricOnly: mat.scenarios.length === 0 && !ctx.instance.blueprint
@@ -276,7 +288,7 @@ async function llmStatus(envFilePath: string, authJsonPath?: string): Promise<Ll
   const shadow = shadowedKeys.length > 0 ? shadowedKeys : undefined;
 
   try {
-    createLlmClientFromEnv(env);
+    (await import("../llm/index.js")).createLlmClientFromEnv(env);
     const fallbackCount = chain.length - 1;
     return {
       mode: "configured",
@@ -489,14 +501,43 @@ export function createUiServer(opts: UiOptions): Server {
   const authJsonPath = opts.authJsonPath; // 密闭缝（D3/G1）：测试注入 fixture，生产缺省真实发现
   const workspaceDir = resolve(opts.workspaceDir ?? process.cwd());
   const jobs = new Map<string, DraftJob>();
+  const integratedJobs = new Map<string, IntegratedJob>();
+  const scopeFor = (job: DraftJob): IntegratedJob | undefined => {
+    if (!opts.integration) return undefined;
+    if (!job.id) throw new Error("集成任务缺少固定身份");
+    let scope = integratedJobs.get(job.id);
+    if (!scope) { opts.integration.jobStarted?.(job.id); scope = new IntegratedJob(job.id, opts.integration); integratedJobs.set(job.id, scope); }
+    return scope;
+  };
+  const clientFor = async (job: DraftJob) => {
+    const scope = scopeFor(job);
+    if (opts.integration && scope) {
+      if (!opts.integration.configured()) throw new Error("模型由 JuanerAI 提供；未配置或未授权时 AI 起草不可用，本地模板与编辑仍可使用。");
+      return { client: await opts.integration.client(scope.id, scope.controller.signal), modelLabel: opts.integration.modelLabel };
+    }
+    const { env } = await resolveLlmEnvAuto({ processEnv: process.env, envFilePath, authJsonPath });
+    return { client: (await import("../llm/index.js")).createLlmClientFromEnv(env, job.kind), modelLabel: env.MF_LLM_MODEL ?? (env.MF_LLM_BACKEND === "faux" ? "fake" : "unknown") };
+  };
+  const availableMethods = async (): Promise<MethodTemplate[]> => {
+    const builtin = await discoverMethods(opts.templatesDir);
+    if (!opts.integration) return builtin;
+    const users = await loadMethodsFromDir(opts.integration.userMethodsDir);
+    if (!users.ok) throw new Error("用户方法库不可读或损坏");
+    const seen = new Set(builtin.map(m => `${m.method.id}@${m.method.version}`));
+    for (const m of users.methods) {
+      const id = `${m.method.id}@${m.method.version}`;
+      if (seen.has(id)) throw new Error(`方法身份重复：${id}`);
+      seen.add(id);
+    }
+    return [...builtin, ...users.methods];
+  };
 
   // fire-and-forget：LLM 慢调用不占请求线程，进度由 /drafts/jobs/:id 轮询页呈现
   const runDraftJob = (job: DraftJob, base: Template, instance: Instance, instancePath: string, text: string): void => {
+    const scope = scopeFor(job);
     void (async () => {
       try {
-        const { env } = await resolveLlmEnvAuto({ processEnv: process.env, envFilePath, authJsonPath: opts.authJsonPath });
-        const client = createLlmClientFromEnv(env, job.kind); // M3 D6：caller 标签（generate/refine）
-        const modelLabel = env.MF_LLM_MODEL ?? (env.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
+        const { client, modelLabel } = await clientFor(job);
         const now = new Date().toISOString();
         const result =
           job.kind === "generate"
@@ -508,6 +549,7 @@ export function createUiServer(opts: UiOptions): Server {
           job.issues = result.issues ?? [result.stage === "call" ? result.raw : `原始返回前 300 字：${result.raw.slice(0, 300)}`];
           return;
         }
+        await scope?.claimPublication();
         await writeFile(
           draftPendingPath(instancePath),
           `# Metric Factory 待采纳草案（AI 生成；采纳走工作台「AI 草案」页，未采纳不写实例）\n${stringifyYaml(result.draft)}`,
@@ -517,7 +559,7 @@ export function createUiServer(opts: UiOptions): Server {
       } catch (e) {
         job.status = "error";
         job.error = (e as Error).message;
-      }
+      } finally { await scope?.finish(); }
     })();
   };
 
@@ -533,11 +575,10 @@ export function createUiServer(opts: UiOptions): Server {
     text: string,
     outFile: string
   ): void => {
+    const scope = scopeFor(job);
     void (async () => {
       try {
-        const { env } = await resolveLlmEnvAuto({ processEnv: process.env, envFilePath, authJsonPath: opts.authJsonPath });
-        const client = createLlmClientFromEnv(env, job.kind);
-        const modelLabel = env.MF_LLM_MODEL ?? (env.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
+        const { client, modelLabel } = await clientFor(job);
         const now = new Date().toISOString();
         const prompt =
           job.kind === "generate"
@@ -550,6 +591,7 @@ export function createUiServer(opts: UiOptions): Server {
           job.issues = result.issues ?? [result.stage === "call" ? result.raw : `原始返回前 300 字：${result.raw.slice(0, 300)}`];
           return;
         }
+        await scope?.claimPublication();
         await writeFile(
           outFile,
           `# Metric Factory 待采纳分析体系草案（AI 生成；采纳才写工作稿，未采纳不改内容）\n${stringifyYaml(result.draft)}`,
@@ -559,7 +601,7 @@ export function createUiServer(opts: UiOptions): Server {
       } catch (e) {
         job.status = "error";
         job.error = (e as Error).message;
-      }
+      } finally { await scope?.finish(); }
     })();
   };
 
@@ -571,7 +613,7 @@ export function createUiServer(opts: UiOptions): Server {
     receiptsPatch: Partial<ReceiptsUiState> = {}
   ): Promise<string> => {
     const materialized = materialize(ctx.base, ctx.instance);
-    const methods = await discoverMethods(opts.templatesDir);
+    const methods = await availableMethods();
     const review = designReview(materialized, ctx.base, ctx.instance, methods);
     const extraSections =
       exportBlock() +
@@ -595,9 +637,20 @@ export function createUiServer(opts: UiOptions): Server {
   };
 
   return createServer(async (req, res) => {
-    const url = new URL(req.url ?? "/", "http://127.0.0.1");
-    const path = url.pathname;
     try {
+      const url = new URL(req.url ?? "/", "http://127.0.0.1");
+      const path = url.pathname;
+      if (opts.integration) {
+        if (!await opts.integration.guard(req, res)) return;
+        const instanceId = /^\/api\/instances\/([^/]+)/.exec(path)?.[1];
+        if (instanceId && instanceId !== "create-job" && !validInstanceId(decodeURIComponent(instanceId))) {
+          res.writeHead(400, {"content-type":"application/json"}).end(JSON.stringify({error:"实例路径无效。"})); return;
+        }
+        for (const root of [workspaceDir, opts.integration.userMethodsDir, opts.integration.userTemplatesDir]) await assertIntegratedDataTree(root);
+        if (!(path === "/" || ["/app.js", "/api.js", "/style.css", "/docs/guide"].includes(path) || path.startsWith("/api/"))) {
+          res.writeHead(404).end(); return;
+        }
+      }
       const templates = await discoverTemplates(opts.templatesDir);
       const statusInfo = `模板 ${templates.length} 个${currentInstancePath ? ` · 当前实例 ${currentInstancePath}` : ""}`;
 
@@ -630,7 +683,7 @@ export function createUiServer(opts: UiOptions): Server {
       if (req.method === "GET" && path === "/docs/guide") {
         try {
           // 仓内文档（src/ui 与 dist chunk 两处模块位置均回仓根；workspaceDir 指向别的目录时仍可读）
-          const md = await readFile(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "docs", "工作台使用指南.md"), "utf8");
+          const md = await readFile(join(moduleDir, "..", ...(existsSync(join(moduleDir, "public")) ? [".."] : []), "docs", "工作台使用指南.md"), "utf8");
           res.writeHead(200, { "content-type": "text/plain; charset=utf-8" }).end(md);
         } catch {
           res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("指南未找到");
@@ -638,6 +691,9 @@ export function createUiServer(opts: UiOptions): Server {
         return;
       }
       if (req.method === "GET" && path === "/api/llm-status") {
+        if (opts.integration) {
+          sendJson(200, { mode: opts.integration.configured() ? "configured" : "none", integrated: true }); return;
+        }
         const status = await llmStatus(envFilePath, authJsonPath);
         sendJson(200, { mode: status.mode === "faux" ? "faux" : status.mode === "configured" ? "configured" : "none", raw: status.mode });
         return;
@@ -656,7 +712,7 @@ export function createUiServer(opts: UiOptions): Server {
             source: ctx.instance.base ? `模板基座 · ${ctx.base.template.industry}` : "AI 草稿",
             metricCount: mat.metrics.length,
             sceneCount: mat.scenarios.length,
-            delivered: latestRelease(workspaceDir, packageIdFromInstancePath(found.path)), // G3：已交付版本标签派生
+            delivered: await deliveredRelease(workspaceDir, found.path, opts.integration), // G3：已交付版本标签派生
             hasBlueprint: Boolean(bp)
           });
         }
@@ -664,13 +720,13 @@ export function createUiServer(opts: UiOptions): Server {
         return;
       }
       if (req.method === "GET" && path === "/api/templates") {
-        const methods = await discoverMethods(opts.templatesDir);
+        const methods = await availableMethods();
         // U1-a：templates/user/ 宽松装载（用户草稿模板，「我的模板」过滤源；不进 lint 门不进匹配池）
         const userTemplates: Array<Record<string, unknown>> = [];
         try {
-          for (const f of (await readdir(join(opts.templatesDir, "user"))).filter(n => n.endsWith(".yaml"))) {
+          for (const f of (await readdir(opts.integration?.userTemplatesDir ?? join(opts.templatesDir, "user"))).filter(n => n.endsWith(".yaml"))) {
             try {
-              const doc = parseYaml(await readFile(join(opts.templatesDir, "user", f), "utf8")) as {
+              const doc = parseYaml(await readFile(join(opts.integration?.userTemplatesDir ?? join(opts.templatesDir, "user"), f), "utf8")) as {
                 id: string; name: string; purpose?: string; incomplete?: boolean;
                 metrics?: Array<{ name: string; description: string; group?: string }>;
               };
@@ -716,26 +772,29 @@ export function createUiServer(opts: UiOptions): Server {
         const instancePath = resolve(workspaceDir, id);
         const ctx = await loadInstanceContext(instancePath, templates);
         if (!ctx) { sendJson(404, { error: `实例不可读：${id}` }); return; }
-        const methods = await discoverMethods(opts.templatesDir);
-        sendJson(200, buildSystemDto(ctx, templates, workspaceDir, methods));
+        const methods = await availableMethods();
+        sendJson(200, await buildSystemDto(ctx, templates, workspaceDir, methods, opts.integration));
         return;
       }
       // A2 T3（G1/G4）：NL 创建 job——生成完成即自动落盘 system-<时间戳>，前端轮询进 work
       if (req.method === "POST" && path === "/api/instances/create-job") {
+        if (opts.integration && [...integratedJobs.values()].some(j => j.active || j.state() === "unknown")) {
+          sendJson(409, { error: "上次任务仍在运行或结果尚未核清，不能自动重试。" }); return;
+        }
         const chunks: Buffer[] = [];
-        for await (const c of req) chunks.push(c as Buffer);
+        let size = 0;
+        for await (const c of req) { size += c.length; if (opts.integration && size > 16 * 1024 * 1024) throw new Error("请求超过工作区限制。"); chunks.push(c as Buffer); }
         const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { need?: string };
         const need = String(body.need ?? "").trim();
         if (!need) { sendJson(422, { error: "先写一点业务需求，几个字也可以。" }); return; }
         const jobId = randomUUID();
         const job: DraftJob = { id: jobId, kind: "generate", status: "running", returnTo: "blueprint-create" };
         jobs.set(jobId, job);
-        const methods = await discoverMethods(opts.templatesDir);
+        const methods = await availableMethods();
+        const scope = scopeFor(job);
         void (async () => {
           try {
-            const { env } = await resolveLlmEnvAuto({ processEnv: process.env, envFilePath, authJsonPath: opts.authJsonPath });
-            const client = createLlmClientFromEnv(env, job.kind);
-            const modelLabel = env.MF_LLM_MODEL ?? (env.MF_LLM_BACKEND === "faux" ? "fake" : "unknown");
+            const { client, modelLabel } = await clientFor(job);
             const result = await generateBlueprintDraft(client, buildBlueprintGeneratePrompt(EMPTY_TEMPLATE, methods, need), need, modelLabel, new Date().toISOString());
             if (!result.ok) {
               job.status = "error";
@@ -769,6 +828,7 @@ export function createUiServer(opts: UiOptions): Server {
               job.issues = issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`);
               return;
             }
+            await scope?.claimPublication();
             await mkdir(dirname(outPath), { recursive: true });
             await writeInstanceFile(outPath, instance.data);
             job.status = "done";
@@ -776,22 +836,32 @@ export function createUiServer(opts: UiOptions): Server {
           } catch (e) {
             job.status = "error";
             job.error = (e as Error).message;
-          }
+          } finally { await scope?.finish(); }
         })();
         sendJson(202, { jobId: job.id });
         return;
+      }
+      const cancelMatch = path.match(/^\/api\/jobs\/([a-f0-9-]+)\/cancel$/);
+      if (opts.integration && cancelMatch && req.method === "POST") {
+        const scope = integratedJobs.get(cancelMatch[1]!);
+        if (!scope) { sendJson(404, { error: "任务身份未知，不能宣称停止。" }); return; }
+        sendJson(200, { cancellation: scope.cancel() }); return;
+      }
+      if (opts.integration && req.method === "GET" && path === "/api/integration/state") {
+        sendJson(200, { active: [...integratedJobs.values()].some(j => j.active), unknown: [...integratedJobs.values()].some(j => j.state() === "unknown") }); return;
       }
       const apiJobMatch = req.method === "GET" ? path.match(/^\/api\/jobs\/([a-f0-9-]+)$/) : null;
       if (apiJobMatch) {
         const job = jobs.get(apiJobMatch[1] ?? "");
         if (!job) { sendJson(404, { error: "任务不存在（服务可能已重启）" }); return; }
-        sendJson(200, { status: job.status, error: job.error, issues: job.issues, instanceId: job.instanceId ?? null });
+        sendJson(200, { status: job.status, error: job.error, issues: job.issues, instanceId: job.instanceId ?? null, cancellation: integratedJobs.get(apiJobMatch[1]!)?.state() });
         return;
       }
 
       const readJsonBody = async (): Promise<Record<string, unknown>> => {
         const chunks: Buffer[] = [];
-        for await (const c of req) chunks.push(c as Buffer);
+        let size = 0;
+        for await (const c of req) { size += c.length; if (opts.integration && size > 16 * 1024 * 1024) throw new Error("请求超过工作区限制。"); chunks.push(c as Buffer); }
         return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as Record<string, unknown>;
       };
       // ===== A2 T6：审核行（G7）/ 复核确认 / 交付（G3 自动版本）/ 导出直链 =====
@@ -800,7 +870,7 @@ export function createUiServer(opts: UiOptions): Server {
         const id = decodeURIComponent(t6Match[1] ?? "");
         const ctx = await loadInstanceContext(resolve(workspaceDir, id), templates);
         if (!ctx) { sendJson(404, { error: `实例不可读：${id}` }); return; }
-        const methods = await discoverMethods(opts.templatesDir);
+        const methods = await availableMethods();
         const action = t6Match[2]!;
         if (action === "approve-metric" || action === "reject-metric") {
           const body = await readJsonBody() as { name?: string; reviewer?: string };
@@ -808,17 +878,17 @@ export function createUiServer(opts: UiOptions): Server {
           const mat = materialize(ctx.base, ctx.instance);
           if (!mat.metrics.some(m => m.name === name)) { sendJson(404, { errors: [`指标 ${name} 不存在。`] }); return; }
           const next = action === "approve-metric"
-            ? applyApproval(ctx.instance, name, String(body.reviewer ?? process.env.MF_REVIEWER ?? process.env.USER ?? "unknown"))
+            ? applyApproval(ctx.instance, name, String(body.reviewer ?? opts.integration?.reviewer ?? process.env.MF_REVIEWER ?? process.env.USER ?? "unknown"))
             : applyRejection(ctx.instance, name);
           const result = await writeWithGate(ctx, methods, () => ({ instance: next }));
           if (!result.ok) { sendJson(result.status, { errors: result.errors }); return; }
           const fresh = await loadInstanceContext(ctx.instancePath, templates);
-          sendJson(200, buildSystemDto(fresh ?? ctx, templates, workspaceDir, methods));
+          sendJson(200, await buildSystemDto(fresh ?? ctx, templates, workspaceDir, methods, opts.integration));
           return;
         }
         if (action === "confirm-review") {
           const body = await readJsonBody() as { confirmed_by?: string };
-          const confirmedBy = String(body.confirmed_by ?? process.env.MF_REVIEWER ?? process.env.USER ?? "").trim();
+          const confirmedBy = String(body.confirmed_by ?? opts.integration?.reviewer ?? process.env.MF_REVIEWER ?? process.env.USER ?? "").trim();
           const mat = materialize(ctx.base, ctx.instance);
           if (!ctx.instance.blueprint) { sendJson(422, { errors: ["当前实例无分析体系（仅指标体系模式无需业务复核）。"] }); return; }
           if (!confirmedBy) { sendJson(422, { errors: ["复核人不能为空（复核动作必须归属到具体责任人）。"] }); return; }
@@ -834,30 +904,42 @@ export function createUiServer(opts: UiOptions): Server {
           const result = await writeWithGate(ctx, methods, () => ({ instance: confirmed }));
           if (!result.ok) { sendJson(result.status, { errors: result.errors }); return; }
           const fresh = await loadInstanceContext(ctx.instancePath, templates);
-          sendJson(200, buildSystemDto(fresh ?? ctx, templates, workspaceDir, methods));
+          sendJson(200, await buildSystemDto(fresh ?? ctx, templates, workspaceDir, methods, opts.integration));
           return;
         }
         if (action === "deliver") {
           // G3：自动建议 next patch（无既有发布 → 1.0.0）；same-content 阻断由引擎透出
-          const packageId = packageIdFromInstancePath(ctx.instancePath);
-          const latest = latestRelease(workspaceDir, packageId);
+          const packageId = systemPackageId(workspaceDir, ctx.instancePath, opts.integration);
+          const latest = latestRelease(workspaceDir, packageId, Boolean(opts.integration));
           const [maj, min, pat] = (latest?.version ?? "1.0.0").split(".").map(Number) as [number, number, number];
           const nextVersion = latest ? `${maj}.${min}.${pat + 1}` : "1.0.0";
           try {
             const result = await releaseInstance({
               instancePath: ctx.instancePath,
+              packageId: opts.integration ? packageId : undefined,
               version: nextVersion,
               templatesDir: opts.templatesDir,
               releasesDir: join(workspaceDir, "releases"),
-              releasedBy: process.env.MF_REVIEWER ?? process.env.USER ?? "unknown",
+              releasedBy: opts.integration?.reviewer ?? process.env.MF_REVIEWER ?? process.env.USER ?? "unknown",
+              methods: opts.integration ? methods : undefined,
               note: "工作台交付（A2 SPA）",
               now: new Date().toISOString()
             });
+            await opts.integration?.published(result);
             const fresh = await loadInstanceContext(ctx.instancePath, templates);
-            const dto = buildSystemDto(fresh ?? ctx, templates, workspaceDir, methods);
+            const dto = await buildSystemDto(fresh ?? ctx, templates, workspaceDir, methods, opts.integration);
+            if (opts.integration && !dto.delivered) throw Error("HOST_COPY_UNCONFIRMED");
             sendJson(201, { version: result.version, packageId: result.packageId, contentFingerprint: result.contentFingerprint, system: dto });
           } catch (e) {
             if (e instanceof ReleaseError) {
+              if (opts.integration && e.rule === "same-content" && e.info.packageId === packageId && e.info.publishedVersion &&
+                  !await opts.integration.publicationSaved(packageId, e.info.publishedVersion)) {
+                await opts.integration.recoverPublished(packageId, e.info.publishedVersion);
+                const dto = await buildSystemDto(ctx, templates, workspaceDir, methods, opts.integration);
+                if (!dto.delivered) throw Error("HOST_COPY_UNCONFIRMED");
+                sendJson(201, { version: e.info.publishedVersion, packageId, system: dto });
+                return;
+              }
               sendJson(422, { errors: [e.rule === "same-content" ? "当前草稿与已交付版本相同，无需重复生成。" : `[${e.rule}] ${e.message}`] });
               return;
             }
@@ -871,12 +953,20 @@ export function createUiServer(opts: UiOptions): Server {
       if (t6ExportMatch && (req.method === "GET" || req.method === "HEAD")) {
         const id = decodeURIComponent(t6ExportMatch[1] ?? "");
         const format = t6ExportMatch[2]!;
+        if (opts.integration && format === "sap") {
+          const packageId = systemPackageId(workspaceDir, resolve(workspaceDir, id), opts.integration);
+          const latest = latestRelease(workspaceDir, packageId, true);
+          if (!latest) { sendJson(404, {errors:["该体系尚无已保存的发布版本。"]}); return; }
+          const saved = await opts.integration.exportPublished(packageId, latest.version);
+          res.writeHead(200, {"content-type":"text/yaml; charset=utf-8", "content-disposition":`attachment; filename="${saved.filename}"`});
+          res.end(req.method === "HEAD" ? undefined : saved.bytes); return;
+        }
         const ctx = await loadInstanceContext(resolve(workspaceDir, id), templates);
         if (!ctx) { sendJson(404, { error: `实例不可读：${id}` }); return; }
         const exporters: Record<string, Exporter> = { metricflow: metricflowExporter, excel: excelExporter, mermaid: mermaidExporter };
         if (format !== "sap" && !exporters[format]) { sendJson(422, { errors: [`未知导出格式：${format}`] }); return; }
         const mat = materialize(ctx.base, ctx.instance);
-        const methods = await discoverMethods(opts.templatesDir);
+        const methods = await availableMethods();
         // 与表单导出同一全量门（含 LLM 审核阻断与设计缺口；交付物语义一致）
         const issues = validateDesign(mat, ctx.base, ctx.instance, methods);
         if (issues.length > 0) { sendJson(422, { errors: issues.map(i => `[${i.rule}] ${i.path}: ${i.message}`) }); return; }
@@ -930,13 +1020,16 @@ export function createUiServer(opts: UiOptions): Server {
           await mkdir(dirname(outPath), { recursive: true });
           await writeInstanceFile(outPath, instance);
           const ctx = await loadInstanceContext(outPath, templates);
-          sendJson(201, { instanceId: relative(workspaceDir, outPath), system: ctx ? buildSystemDto(ctx, templates, workspaceDir, await discoverMethods(opts.templatesDir)) : null });
+          sendJson(201, { instanceId: relative(workspaceDir, outPath), system: ctx ? await buildSystemDto(ctx, templates, workspaceDir, await availableMethods(), opts.integration) : null });
           return;
         }
         const ctx = await loadInstanceContext(resolve(workspaceDir, id), templates);
         if (!ctx) { sendJson(404, { error: `实例不可读：${id}` }); return; }
-        const methods = await discoverMethods(opts.templatesDir);
+        const methods = await availableMethods();
         if (action === "refine-job") {
+          if (opts.integration && [...integratedJobs.values()].some(j => j.active || j.state() === "unknown")) {
+            sendJson(409, { errors: ["现有任务尚未结算，不能开始新的模型任务。"] }); return;
+          }
           const body = await readJsonBody() as { instruction?: string };
           const instruction = String(body.instruction ?? "").trim();
           if (!instruction) { sendJson(422, { errors: ["先说说希望怎样修改。"] }); return; }
@@ -955,17 +1048,16 @@ export function createUiServer(opts: UiOptions): Server {
             sendJson(422, { errors: ["没有可采纳的建议（草案不存在或已被处理），请重新发起。"] });
             return;
           }
-          const merged: Instance = {
-            ...ctx.instance,
-            blueprint: pending.draft.blueprint,
-            added: pending.draft.added,
-            added_scenarios: pending.draft.added_scenarios
-          };
-          const result = await writeWithGate(ctx, methods, () => ({ instance: merged }));
+          const applied = applyDraft(ctx.instance, pending.draft, ctx.base);
+          if (!applied.ok) {
+            sendJson(422, { errors: applied.errors.map(e => `[${e.rule}] ${e.message}`) });
+            return;
+          }
+          const result = await writeWithGate(ctx, methods, () => ({ instance: applied.instance }));
           if (!result.ok) { sendJson(result.status, { errors: result.errors }); return; }
           await rm(join(dirname(ctx.instancePath), "draft.pending.yaml"), { force: true });
           const fresh = await loadInstanceContext(ctx.instancePath, templates);
-          sendJson(200, buildSystemDto(fresh ?? ctx, templates, workspaceDir, methods));
+          sendJson(200, await buildSystemDto(fresh ?? ctx, templates, workspaceDir, methods, opts.integration));
           return;
         }
         if (action === "discard-refine") {
@@ -1003,7 +1095,7 @@ export function createUiServer(opts: UiOptions): Server {
         return;
       }
       // ===== U1-a：用户指标模板（templates/user/ 宽松装载；不进 lint 门不进匹配池）=====
-      const userDir = join(opts.templatesDir, "user");
+      const userDir = opts.integration?.userTemplatesDir ?? join(opts.templatesDir, "user");
       if (req.method === "POST" && path === "/api/templates/user") {
         const body = await readJsonBody() as { name?: string; rows?: Array<{ name?: string; description?: string; group?: string; formula?: string; unit?: string }>; purpose?: string };
         const name = String(body.name ?? "").trim();
@@ -1030,10 +1122,13 @@ export function createUiServer(opts: UiOptions): Server {
       if (userTplMatch && req.method === "POST") {
         // SPA use-template 指标类（用户草稿模板）：创建 blank 基座 + added 指标（manual 来源）
         const body = await readJsonBody() as { id?: string };
+        if (opts.integration && (typeof body.id !== "string" || !/^user-[a-z0-9]+$/.test(body.id))) {
+          sendJson(400, { errors: ["用户模板身份无效。"] }); return;
+        }
         const file = join(userDir, `${body.id}.yaml`);
         if (!existsSync(file)) { sendJson(404, { errors: [`用户模板 ${body.id} 不存在。`] }); return; }
         const doc = parseYaml(await readFile(file, "utf8")) as { name?: string; metrics?: Array<{ name: string; description: string; group?: string; formula?: string }> };
-        const methods = await discoverMethods(opts.templatesDir);
+        const methods = await availableMethods();
         const slug = (s: string, i: number) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || `metric_${i + 1}`;
         const seen = new Set<string>();
         const added = (doc.metrics ?? []).map((m, i) => {
@@ -1060,7 +1155,7 @@ export function createUiServer(opts: UiOptions): Server {
         await mkdir(dirname(outPath), { recursive: true });
         await writeInstanceFile(outPath, instanceParsed.data);
         const ctx = await loadInstanceContext(outPath, templates);
-        sendJson(201, { instanceId: relative(workspaceDir, outPath), system: ctx ? buildSystemDto(ctx, templates, workspaceDir, await discoverMethods(opts.templatesDir)) : null });
+        sendJson(201, { instanceId: relative(workspaceDir, outPath), system: ctx ? await buildSystemDto(ctx, templates, workspaceDir, await availableMethods(), opts.integration) : null });
         return;
       }
 
@@ -1068,14 +1163,14 @@ export function createUiServer(opts: UiOptions): Server {
         const instancePath = resolve(workspaceDir, id);
         return await loadInstanceContext(instancePath, templates);
       };
-      const dtoAfter = async (ctx: WriteCtx) => buildSystemDto(ctx, templates, workspaceDir, await discoverMethods(opts.templatesDir));
+      const dtoAfter = async (ctx: WriteCtx) => await buildSystemDto(ctx, templates, workspaceDir, await availableMethods(), opts.integration);
 
       const writeMatch = path.match(/^\/api\/instances\/([^/]+)(?:\/(blueprint|metrics|scenes|resolve)(.*))?$/);
       if (writeMatch && req.method !== "GET") {
         const id = decodeURIComponent(writeMatch[1] ?? "");
         const ctx = await loadCtxById(id);
         if (!ctx) { sendJson(404, { error: `实例不可读：${id}` }); return; }
-        const methods = await discoverMethods(opts.templatesDir);
+        const methods = await availableMethods();
         const rest = writeMatch[3] ?? "";
         const gate = async (mutate: () => { instance: unknown } | { errors: string[] } | { blocked: true; references: string[] }) => {
           const next = mutate();
@@ -1132,7 +1227,7 @@ export function createUiServer(opts: UiOptions): Server {
         // POST /api/instances/:id/scenes（方法模板 → 新场景：T7 use-template method / generate-scene）
         if (writeMatch[2] === "scenes" && rest === "" && req.method === "POST") {
           const body = await readJsonBody() as { methodId?: string; purpose?: string };
-          const methods = await discoverMethods(opts.templatesDir);
+          const methods = await availableMethods();
           const method = methods.find(m => m.method.id === body.methodId);
           if (!method) { sendJson(404, { errors: [`方法 ${body.methodId} 不存在。`] }); return; }
           const mat = materialize(ctx.base, ctx.instance);
@@ -1159,7 +1254,7 @@ export function createUiServer(opts: UiOptions): Server {
         if (writeMatch[2] === "scenes" && bindingsMatch && req.method === "PATCH") {
           const body = await readJsonBody() as { bindings?: Array<{ role?: string; metric?: string }> };
           if (!Array.isArray(body.bindings)) { sendJson(422, { errors: ["bindings 数组必填。"] }); return; }
-          await gate(() => patchSceneBindings(ctx, bindingsMatch[1]!, body.bindings ?? []));
+          await gate(() => patchSceneBindings(ctx, bindingsMatch[1]!, body.bindings ?? [], methods));
           return;
         }
         // POST /api/instances/:id/scenes/:sid/save-as-method（G8 另存新方法 → templates/methods/；场景指向新方法）
@@ -1173,7 +1268,7 @@ export function createUiServer(opts: UiOptions): Server {
           const name = String(body.name ?? "").trim();
           if (!name) { sendJson(422, { errors: ["方法名称必填。"] }); return; }
           const id = methodIdFromSceneId(scene.id);
-          const methodsDir = join(opts.templatesDir, "methods");
+          const methodsDir = opts.integration?.userMethodsDir ?? join(opts.templatesDir, "methods");
           const outFile = join(methodsDir, `${id}.yaml`);
           if (existsSync(outFile)) { sendJson(409, { errors: [`方法 ${id}@0.1.0 已存在（templates/methods/${id}.yaml）；不覆盖，请换名或直接编辑该方法。`] }); return; }
           // 角色/语境/家族从场景与方法库派生（A1 另存方法同构：outcome/driver 必需、guardrail 可选）
@@ -1197,7 +1292,7 @@ export function createUiServer(opts: UiOptions): Server {
           // 场景指向新方法（G8：引用不复制；步骤改由新方法承载）——重载方法库后过门（新方法须可解析）
           const ref = `${id}@0.1.0`;
           const freshCtx = await loadInstanceContext(ctx.instancePath, templates);
-          const gateResult = await writeWithGate(freshCtx ?? ctx, await discoverMethods(opts.templatesDir), (inst) => patchScene({ ...ctx, instance: inst }, scene.id, { method_refs: [ref] }));
+          const gateResult = await writeWithGate(freshCtx ?? ctx, await availableMethods(), (inst) => patchScene({ ...ctx, instance: inst }, scene.id, { method_refs: [ref] }));
           if (!gateResult.ok) {
             await rm(outFile, { force: true }); // 场景更新失败 → 回滚新方法文件（不留孤儿资产）
             sendJson(gateResult.status, { errors: gateResult.errors });
@@ -1270,7 +1365,7 @@ export function createUiServer(opts: UiOptions): Server {
         const job: DraftJob = { kind: "generate", status: "running", returnTo: "blueprint-create" };
         jobs.set(id, job);
         // D13 空白基座：无基模板，建议指标 dimensions 须空（prompt 已钉死）；方法库照常注入供 method_refs 选择
-        runBlueprintJob(job, EMPTY_TEMPLATE, undefined, await discoverMethods(opts.templatesDir), text, createDraftPath);
+        runBlueprintJob(job, EMPTY_TEMPLATE, undefined, await availableMethods(), text, createDraftPath);
         res.writeHead(303, { location: `/drafts/jobs/${id}` }).end();
         return;
       }
@@ -1329,7 +1424,7 @@ export function createUiServer(opts: UiOptions): Server {
           rerender(instance.error.issues.map((i) => `[instance] ${i.path.join(".")}: ${i.message}`));
           return;
         }
-        const issues = validateDesign(materialize(EMPTY_TEMPLATE, instance.data), EMPTY_TEMPLATE, instance.data, await discoverMethods(opts.templatesDir), { skipReviewGate: true, writeMode: true });
+        const issues = validateDesign(materialize(EMPTY_TEMPLATE, instance.data), EMPTY_TEMPLATE, instance.data, await availableMethods(), { skipReviewGate: true, writeMode: true });
         if (issues.length > 0) {
           rerender(issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`));
           return;
@@ -1468,7 +1563,7 @@ export function createUiServer(opts: UiOptions): Server {
 
       // ===== 方法模板库（A1 第二类模板；须在 /templates/:id 之前注册——"methods" 会被模板 id 通配吞掉）=====
       if (path === "/templates/methods") {
-        const methods = await discoverMethods(opts.templatesDir);
+        const methods = await availableMethods();
         const html = layout(
           "templates",
           "方法模板库",
@@ -1483,7 +1578,7 @@ export function createUiServer(opts: UiOptions): Server {
       const methodMatch = path.match(/^\/templates\/methods\/([a-z0-9-]+)$/);
       if (methodMatch) {
         const id = methodMatch[1]!;
-        const methods = await discoverMethods(opts.templatesDir);
+        const methods = await availableMethods();
         const m = methods.find((x) => x.method.id === id);
         if (!m) {
           res.writeHead(404, { "content-type": "text/html; charset=utf-8" }).end(
@@ -1655,7 +1750,7 @@ export function createUiServer(opts: UiOptions): Server {
           return;
         }
         const materialized = materialize(ctx.base, ctx.instance);
-        const methods = await discoverMethods(opts.templatesDir);
+        const methods = await availableMethods();
         const review = designReview(materialized, ctx.base, ctx.instance, methods);
         const html = layout(
           "instance",
@@ -1697,7 +1792,7 @@ export function createUiServer(opts: UiOptions): Server {
           return;
         }
         const materialized = materialize(ctx.base, ctx.instance);
-        const methods = await discoverMethods(opts.templatesDir);
+        const methods = await availableMethods();
         const html = layout(
           "instance",
           "场景与方法",
@@ -1780,7 +1875,7 @@ export function createUiServer(opts: UiOptions): Server {
         }
         const form = await readFormBody(req);
         const values = readScenarioFormValues(form);
-        const result = submitScenario(ctx, await discoverMethods(opts.templatesDir), values, "new");
+        const result = submitScenario(ctx, await availableMethods(), values, "new");
         if (!result.ok) {
           res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
             layout("instance", "决策场景 · 新建", "全量校验未通过（零写盘）——修正下列问题后重试。",
@@ -1812,7 +1907,7 @@ export function createUiServer(opts: UiOptions): Server {
         }
         const form = await readFormBody(req);
         const values = { ...readScenarioFormValues(form), id }; // id 以路径为准
-        const result = submitScenario(ctx, await discoverMethods(opts.templatesDir), values, "edit");
+        const result = submitScenario(ctx, await availableMethods(), values, "edit");
         if (!result.ok) {
           res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
             layout("instance", "决策场景 · 编辑", "全量校验未通过（零写盘）——修正下列问题后重试。",
@@ -2021,7 +2116,7 @@ export function createUiServer(opts: UiOptions): Server {
           fail(instParsed.error.issues.map((i) => `[instance] ${i.path.join(".")}: ${i.message}`));
           return;
         }
-        const issues = validateDesign(materialize(ctx.base, instParsed.data), ctx.base, instParsed.data, await discoverMethods(opts.templatesDir), { skipReviewGate: true, writeMode: true });
+        const issues = validateDesign(materialize(ctx.base, instParsed.data), ctx.base, instParsed.data, await availableMethods(), { skipReviewGate: true, writeMode: true });
         if (issues.length > 0) {
           fail(issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`));
           return;
@@ -2101,7 +2196,7 @@ export function createUiServer(opts: UiOptions): Server {
         const id = randomUUID().slice(0, 8);
         const job: DraftJob = { kind, status: "running", returnTo: "blueprint" };
         jobs.set(id, job);
-        runBlueprintJob(job, ctx.base, ctx.instance, await discoverMethods(opts.templatesDir), text, draftPendingPath(ctx.instancePath));
+        runBlueprintJob(job, ctx.base, ctx.instance, await availableMethods(), text, draftPendingPath(ctx.instancePath));
         res.writeHead(303, { location: `/drafts/jobs/${id}` }).end();
         return;
       }
@@ -2171,7 +2266,7 @@ export function createUiServer(opts: UiOptions): Server {
           return;
         }
         const materialized = materialize(ctx.base, applied.instance);
-        const issues = validateDesign(materialized, ctx.base, applied.instance, await discoverMethods(opts.templatesDir), { skipReviewGate: true, writeMode: true });
+        const issues = validateDesign(materialized, ctx.base, applied.instance, await availableMethods(), { skipReviewGate: true, writeMode: true });
         if (issues.length > 0) {
           res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
             layout("instance", "分析体系草案", "草案合入校验未通过（零写盘，草案已保留）。",
@@ -2205,7 +2300,7 @@ export function createUiServer(opts: UiOptions): Server {
         const form = await readFormBody(req);
         const confirmedBy = (form.get("confirmed_by") ?? "").trim();
         const materialized = materialize(ctx.base, ctx.instance);
-        const methods = await discoverMethods(opts.templatesDir);
+        const methods = await availableMethods();
         const review = designReview(materialized, ctx.base, ctx.instance, methods);
         const failDelivery = async (msg: string, status = 422) => {
           res.writeHead(status, { "content-type": "text/html; charset=utf-8" }).end(
@@ -2318,7 +2413,7 @@ export function createUiServer(opts: UiOptions): Server {
           );
           return;
         }
-        const issues = validateDesign(materialize(ctx.base, instParsed.data), ctx.base, instParsed.data, await discoverMethods(opts.templatesDir), { skipReviewGate: true, writeMode: true });
+        const issues = validateDesign(materialize(ctx.base, instParsed.data), ctx.base, instParsed.data, await availableMethods(), { skipReviewGate: true, writeMode: true });
         if (issues.length > 0) {
           res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
             layout("instance", "删除指标", "删除后全量校验未通过（零写盘）。",
@@ -2364,7 +2459,7 @@ export function createUiServer(opts: UiOptions): Server {
             materialized.mapping = mappingFile.data.mappings.filter((m) => names.has(m.metric));
           }
         } catch { /* 无映射文件 */ }
-        const issues = validateDesign(materialized, ctx.base, ctx.instance, await discoverMethods(opts.templatesDir));
+        const issues = validateDesign(materialized, ctx.base, ctx.instance, await availableMethods());
         if (issues.length > 0) {
           res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
             layout("instance", "导出前校验未通过", "实例存在未解决问题，修正后才能导出。", formErrorPage("校验失败", issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`)), statusInfo)
@@ -2451,7 +2546,7 @@ export function createUiServer(opts: UiOptions): Server {
             version,
             templatesDir: opts.templatesDir,
             releasesDir: join(workspaceDir, "releases"),
-            releasedBy: process.env.MF_REVIEWER ?? process.env.USER ?? "unknown",
+            releasedBy: opts.integration?.reviewer ?? process.env.MF_REVIEWER ?? process.env.USER ?? "unknown",
             note,
             now: new Date().toISOString()
           });
@@ -2655,7 +2750,7 @@ export function createUiServer(opts: UiOptions): Server {
           return;
         }
         const materialized = materialize(ctx.base, parsed.data);
-        const issues = validateDesign(materialized, ctx.base, parsed.data, await discoverMethods(opts.templatesDir), { skipReviewGate: true, writeMode: true });
+        const issues = validateDesign(materialized, ctx.base, parsed.data, await availableMethods(), { skipReviewGate: true, writeMode: true });
         if (issues.length > 0) {
           res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
             layout("instance", "写回失败", "全量校验未通过（零写盘）。", formErrorPage("校验失败", issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`)), statusInfo)
@@ -2825,7 +2920,7 @@ export function createUiServer(opts: UiOptions): Server {
           return;
         }
         const materialized = materialize(ctx.base, applied.instance);
-        const issues = validateDesign(materialized, ctx.base, applied.instance, await discoverMethods(opts.templatesDir), { skipReviewGate: true, writeMode: true });
+        const issues = validateDesign(materialized, ctx.base, applied.instance, await availableMethods(), { skipReviewGate: true, writeMode: true });
         if (issues.length > 0) {
           res.writeHead(422, { "content-type": "text/html; charset=utf-8" }).end(
             layout("drafts", "AI 草案", "草案合入校验未通过（零写盘，草案已保留）。", formErrorPage("校验失败", issues.map((i) => `[${i.rule}] ${i.path}: ${i.message}`)), statusInfo)
@@ -2862,7 +2957,7 @@ export function createUiServer(opts: UiOptions): Server {
         } else {
           const { env } = await resolveLlmEnvAuto({ processEnv: process.env, envFilePath, authJsonPath });
           const dataDir = resolveDataDir(env);
-          const caps = tryParseBudgetCaps(env);
+          const caps = (await import("../llm/index.js")).tryParseBudgetCaps(env);
           const d = createFileBudgetStore(dataDir, caps).describeBudget();
           const warns: { label: string; note: string }[] = [];
           if (caps.maxTokens !== undefined && d.usedTokens >= caps.maxTokens * 0.8) {
@@ -2954,10 +3049,11 @@ export function createUiServer(opts: UiOptions): Server {
         layout("home", "未找到", `路径 ${path} 不存在。`, `<div class="empty">页面不存在<br><a class="btn" href="/">返回工作台</a></div>`, statusInfo)
       );
     } catch (e) {
+      if (opts.integration) { res.writeHead(500, {"content-type":"application/json; charset=utf-8"}).end(JSON.stringify({errors:[(e as Error).message]})); return; }
       res.writeHead(500, { "content-type": "text/html; charset=utf-8" }).end(
         layout("home", "服务错误", "页面渲染失败。", `<div class="empty">${escapeHtml((e as Error).message)}</div>`, "error")
       );
-    }
+    } finally { opts.integration?.requestFinished?.(req); }
   });
 }
 

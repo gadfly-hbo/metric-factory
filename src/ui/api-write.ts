@@ -164,8 +164,21 @@ const ENGINE_ROLE_BY_LABEL: Record<string, "outcome" | "driver" | "guardrail"> =
   "结果指标": "outcome", "驱动指标": "driver", "护栏指标": "guardrail"
 };
 
-/** 场景绑定编辑（demo bindings ↔ 引擎 metric_usages；method_bindings 原样保留——G8 引用不复制）。 */
-export function patchSceneBindings(ctx: WriteCtx, sceneId: string, bindings: Array<{ role?: string; metric?: string }>): { instance: unknown } | { errors: string[] } {
+/** Method definitions retain editable role identities even when an instance unbinds one. */
+export function methodBindingTargets(scene: Instance["added_scenarios"][number], methods: MethodTemplate[]) {
+  const refs = [...new Set([...(scene.method_refs ?? []), ...(scene.method_bindings ?? []).map((b) => b.method_ref)])];
+  return refs.flatMap((ref) => {
+    const method = methods.find((m) => `${m.method.id}@${m.method.version}` === ref);
+    const roles = method?.roles ?? (scene.method_bindings ?? []).filter((b) => b.method_ref === ref).map((b) => ({id:b.role,name:b.role,required:true}));
+    return roles.map((role) => ({kind:"method" as const,methodRef:ref,roleId:role.id,role:role.name,required:role.required,
+      metric:(scene.method_bindings ?? []).find((b) => b.method_ref === ref && b.role === role.id)?.metric ?? ""}));
+  });
+}
+
+export interface SceneBindingInput { role?: string; metric?: string; kind?: string; methodRef?: string; roleId?: string }
+
+/** 现有绑定编辑：只更新实例的指标引用，不复制或修改方法定义；歧义显示名拒绝猜测。 */
+export function patchSceneBindings(ctx: WriteCtx, sceneId: string, bindings: SceneBindingInput[], methods: MethodTemplate[] = []): { instance: unknown } | { errors: string[] } {
   const idx = ctx.instance.added_scenarios.findIndex((s) => s.id === sceneId);
   const inAdded = idx >= 0;
   const mat = materialize(ctx.base, ctx.instance);
@@ -173,13 +186,33 @@ export function patchSceneBindings(ctx: WriteCtx, sceneId: string, bindings: Arr
   if (!scene) return { errors: [`场景 ${sceneId} 不存在。`] };
   const known = new Set(mat.metrics.map((m) => m.name));
   const usages = [];
+  const methodBindings = [];
+  const targets = methodBindingTargets(scene, methods);
+  const seenMethodRoles = new Set<string>();
   for (const b of bindings) {
-    if (!b.metric || !known.has(b.metric)) return { errors: [`绑定引用了不存在的指标：${b.metric || "（空）"}。`] };
-    const role = b.role ? ENGINE_ROLE_BY_LABEL[b.role] : undefined;
-    if (!role) return { errors: [`无法识别的角色：${b.role}（可用：结果指标/驱动指标/护栏指标）。`] };
-    usages.push({ metric: b.metric, role });
+    if (!b || !b.metric || !known.has(b.metric)) return { errors: [`绑定引用了不存在的指标：${b?.metric || "（空）"}。`] };
+    const role = b.role && Object.hasOwn(ENGINE_ROLE_BY_LABEL, b.role) ? ENGINE_ROLE_BY_LABEL[b.role] : undefined;
+    let matches = targets.filter((entry) => entry.role === b.role);
+    if (b.kind === "usage") {
+      if (!role || role !== b.roleId || b.methodRef !== undefined) return { errors: ["指标用途身份不一致。"] };
+      usages.push({metric:b.metric,role}); continue;
+    }
+    if (b.kind === "method") {
+      matches = matches.filter((entry) => entry.methodRef === b.methodRef && entry.roleId === b.roleId);
+    } else {
+      if (b.kind !== undefined || b.methodRef !== undefined || b.roleId !== undefined) return { errors: ["绑定身份不完整。"] };
+      // Legacy callers without identities are accepted only when labels identify one target.
+      if (matches.length > 1 || (role && matches.length > 0)) return { errors: [`角色名称存在歧义：${b.role}，未更改绑定。`] };
+      if (role) { usages.push({ metric: b.metric, role }); continue; }
+    }
+    if (matches.length !== 1) return { errors: [`无法唯一识别角色：${b.role}。`] };
+    const target = matches[0]!;
+    const identity = `${target.methodRef}/${target.roleId}`;
+    if (seenMethodRoles.has(identity)) return { errors: [`方法角色重复：${b.role}，未更改绑定。`] };
+    seenMethodRoles.add(identity);
+    methodBindings.push({method_ref:target.methodRef,role:target.roleId,metric:b.metric});
   }
-  const next = { ...scene, metric_usages: usages };
+  const next = { ...scene, metric_usages: usages, ...((scene.method_bindings || targets.length) ? { method_bindings: methodBindings } : {}) };
   if (inAdded) {
     const added_scenarios = [...ctx.instance.added_scenarios];
     added_scenarios[idx] = next;

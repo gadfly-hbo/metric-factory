@@ -87,7 +87,8 @@ test("空串语义（G2）：任何层的空串按未设置，低层值流入", 
   writeFileSync(envFile, "MF_LLM_MODEL=minimax-cn/MiniMax-M3\n", "utf8");
   const { env, sources } = await resolveLlmEnvAuto({
     processEnv: { MF_LLM_MODEL: "" },
-    envFilePath: envFile
+    envFilePath: envFile,
+    authJsonPath: join(envFileDir, "no-auth.json")
   });
   expect(env.MF_LLM_MODEL).toBe("minimax-cn/MiniMax-M3");
   expect(sources["MF_LLM_MODEL"]).toBe("env-file");
@@ -118,7 +119,7 @@ test("注入缝（G1）：authJsonPath 参数 > processEnv.MF_LLM_AUTH_JSON_PATH
 });
 
 test("env 超集（D4）：非 LLM 的 process 变量原样透传", async () => {
-  const { env } = await resolveLlmEnvAuto({ processEnv: { PATH: "/usr/bin", MF_REVIEWER: "alice" } });
+  const { env } = await resolveLlmEnvAuto({ processEnv: { PATH: "/usr/bin", MF_REVIEWER: "alice" }, authJsonPath: join(mkdtempSync(join(tmpdir(), "mf-env-no-auth-")), "auth.json") });
   expect(env.PATH).toBe("/usr/bin");
   expect(env.MF_REVIEWER).toBe("alice");
 });

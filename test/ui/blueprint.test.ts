@@ -520,7 +520,7 @@ test("AT2 零指标战略：首页一句话 → faux 草稿 → 预览 → 采�
   expect(written.base).toBeUndefined();
   expect(written.added ?? []).toHaveLength(0);
   expect(written.blueprint.title).toBe("门店扩张选择分析体系");
-  expect(written.blueprint.provenance.prompt_version).toBe("v1.0.0"); // D9 独立 prompt 版本
+  expect(written.blueprint.provenance.prompt_version).toBe("v1.0.1"); // D9 corrected contract retains an explicit prompt version
 
   // 总览/交付渲染；复核确认 → 就绪；发布零指标包成功（D13 + A04 兼容面）
   const overview = await (await fetch(`${base}/instance/overview`)).text();

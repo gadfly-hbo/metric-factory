@@ -1,7 +1,7 @@
 // A2 T7：助手提案流（先看建议再采纳）/ AT3 放弃零改动 / U1-a 用户模板 / 导入 / 从模板创建。
 import { test, expect, beforeAll, afterAll } from "vitest";
 import { createUiServer } from "../../src/ui/server.js";
-import { mkdtemp, mkdir, cp, readFile, readdir, access } from "node:fs/promises";
+import { mkdtemp, mkdir, cp, readFile, readdir, access, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -168,5 +168,44 @@ test("Playwright：AT3 独立数据专题（NL 修正 → 提案卡 → 放弃 �
     expect(afterYaml).toBe(beforeYaml); // AT3：零改动（字节级）
   } finally {
     await browser.close();
+  }
+});
+
+// MF-05: the SPA must use the supplier's existing incremental apply contract.
+test("MF-05 refine adoption preserves existing referenced metrics and scenes; collisions refuse without writes", async () => {
+  const fixture = parseYaml(await readFile(path.join(repoRoot, "test/fixtures/instance-blueprint.yaml"), "utf8"));
+  fixture.added_scenarios = [{ id: "retained_scene", version: "0.1.0", title: "保留场景", decision_purpose: "待验证设计",
+    question_tree: [{id:"root",label:"待确认问题",metric:"scratch_quality_score"}],
+    metric_usages: [{metric:"scratch_quality_score",role:"outcome"}], method_refs: [],
+    evidence_requirements:"待获取",output_spec:"仅设计",review_rules:"待复核" }];
+  const payload = JSON.parse(FAUX_REFINE);
+  payload.blueprint.questions[0].metric_refs = ["scratch_quality_score"];
+  const draft = {generator:{model:"fake/offline",prompt_version:"test",describe:"仅修改目的，保留指标和场景",created_at:"2026-10-19T00:00:00.000Z"},
+    added:[],modified:[],removed:[],caliber:{},added_scenarios:[],
+    blueprint:{...payload.blueprint,provenance:{origin:"llm",model:"fake/offline",prompt_version:"test"}}};
+  for (const variant of ["preserve", "metric-conflict", "scenario-conflict"]) {
+    const id = `mf-refine-${variant}/instance.yaml`, dir = path.join(workspace, path.dirname(id));
+    await mkdir(dir, {recursive:true});
+    const instancePath = path.join(workspace,id), pendingPath = path.join(dir,"draft.pending.yaml");
+    await writeFile(instancePath, JSON.stringify(fixture));
+    const candidate = structuredClone(draft);
+    if (variant === "metric-conflict") candidate.added = fixture.added;
+    if (variant === "scenario-conflict") candidate.added_scenarios = fixture.added_scenarios;
+    await writeFile(pendingPath, JSON.stringify(candidate));
+    const before = await readFile(instancePath), pending = await readFile(pendingPath);
+    const response = await api(`/api/instances/${encodeURIComponent(id)}/apply-refine`,"POST",{});
+    if (variant === "preserve") {
+      expect(response.status).toBe(200);
+      const after = parseYaml(await readFile(instancePath,"utf8"));
+      expect(after.added).toEqual(fixture.added);
+      expect(after.added_scenarios).toEqual(fixture.added_scenarios);
+      expect(after.blueprint.purpose).toBe(payload.blueprint.purpose);
+      await expect(access(pendingPath)).rejects.toThrow();
+    } else {
+      expect(response.status).toBe(422);
+      expect((await response.json()).errors.join(" ")).toContain(variant === "metric-conflict" ? "added-conflict" : "scenario-conflict");
+      expect(await readFile(instancePath)).toEqual(before);
+      expect(await readFile(pendingPath)).toEqual(pending);
+    }
   }
 });

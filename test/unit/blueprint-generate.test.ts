@@ -103,6 +103,18 @@ test("失败三阶段：call / parse / payload（畸形 JSON fail-closed 拒）"
   }
 });
 
+test("MF live001: missing question label and array evidence remain rejected, never silently repaired", async () => {
+  const invalid = {...VALID_PAYLOAD, added_scenarios:[{...VALID_PAYLOAD.added_scenarios[0],question_tree:[{id:"root",title:"wrong field"}],evidence_requirements:["wrong type"]}]};
+  const result = await generateBlueprintDraft(createFakeClient(JSON.stringify(invalid)), {system:"s",user:"u"}, "synthetic", "fake/demo", NOW);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.stage).toBe("payload");
+    expect(result.issues?.join("\n")).toContain("question_tree.0.label");
+    expect(result.issues?.join("\n")).toContain("evidence_requirements");
+  }
+  expect(result).not.toHaveProperty("draft");
+});
+
 test("payload 硬约束：verified=true 或证据 status=已核验 也照收（schema 合法），诚实性由提示词与复核门承担", () => {
   // 边界登记：LLM 载荷层不强制 verified=false——schema 允许 true，业务门在 validateBlueprint 的
   // hypothesis-verification 规则（verified 需已核验证据）。此处钉死分层，防误以为载荷层有该约束。

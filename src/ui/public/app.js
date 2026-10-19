@@ -15,6 +15,18 @@ const btn = (label,action,cls="",attrs="") => `<button class="btn ${cls}" data-a
 const tag = (label,cls="")=>`<span class="tag ${cls}">${label}</span>`;
 let modalReturn = null;
 let generateTimer = null;
+let activeGeneration = null;
+async function stopIntegratedJob(jobId) {
+  try {
+    let result = await Api.cancelJob(jobId);
+    for (let attempt = 0; result.cancellation === "requested" && attempt < 30; attempt++) {
+      toast("停止请求已受理，正在核对在途结果。原需求仍保留。");
+      await new Promise(r => setTimeout(r, 1000));
+      result = await Api.job(jobId);
+    }
+    toast(result.cancellation === "stopped" ? "生成已停止，原需求仍保留。" : result.cancellation === "completed" ? "任务已完成，结果已保留。" : result.cancellation === "failed" ? "任务未能完成，原需求仍保留。" : "停止结果尚未核清，未自动继续。原需求仍保留。");
+  } catch { toast("停止结果尚未核清，未自动继续。原需求仍保留。"); }
+}
 
 
 
@@ -59,7 +71,7 @@ function renderHome(){return `<section class="home">
   <div class="composer">
     <label for="need">描述你的业务与需求</label>
     <textarea id="need" placeholder="可以是一个经营问题、一项重大选择，或一套想建立的指标体系……">${esc(state.homeDraft)}</textarea>
-    <div class="composer-bottom"><span class="fine">先用自己的话说，不必先选择分析类别。<br>${state.llmMode==="configured"?"AI 起草由已配置模型生成，采纳前可预览。":state.llmMode==="faux"?"未配置真实模型，当前为确定性演示模式。":"AI 起草需在设置页配置模型；模板路径不需要模型。"}</span>${btn('生成体系草稿 <span aria-hidden="true">↗</span>',"generate","primary")}</div>
+    <div class="composer-bottom"><span class="fine">先用自己的话说，不必先选择分析类别。<br>${state.llmMode==="configured"?"AI 起草由已配置模型生成，采纳前可预览。":state.integrated?"模型由 JuanerAI 提供；未配置或未授权时 AI 起草不可用，本地模板与编辑仍可使用。":state.llmMode==="faux"?"未配置真实模型，当前为确定性演示模式。":"AI 起草需在设置页配置模型；模板路径不需要模型。"}</span>${btn('生成体系草稿 <span aria-hidden="true">↗</span>',"generate","primary")}</div>
     <p class="inline-error" id="home-error" role="alert" hidden></p>
   </div>
   <div class="home-paths"><span>也可以从已有积累开始</span>${btn('浏览模板库 <span aria-hidden="true">→</span>',"library","small quiet")}<span class="divider"></span>${btn("导入我的指标模板","import","small quiet")}</div>
@@ -270,7 +282,7 @@ function showAbout(){showModal("自然语言驱动的分析体系工作台","本
   <p>把自然语言需求变成分析设计。经营与战略是管理语境，数据分析是共享专业能力；也允许独立数据专题。</p>
   <div class="about-flow"><div><strong>01</strong><span>描述要研究的问题或要做的选择，无需先选类别或模板。</span></div><div><strong>02</strong><span>在体系总览维护问题、假设、反证与改变判断的条件。</span></div><div><strong>03</strong><span>指标体系和场景方法联动；定性战略设计可以暂时没有指标。</span></div><div><strong>04</strong><span>固定设计版本，保留实际证据待获取状态，按需沉淀两类模板。</span></div></div>
   <a class="proposal-link" href="/docs/guide" target="_blank" rel="noopener">阅读工作台使用指南与验收范围 ↗</a>
-  <p class="note">所有写操作经引擎校验（校验不过零写盘），体系保存在本地实例文件。模型可在设置页配置；未配置时为确定性演示模式。发布产物进入 releases/ 版本登记。</p>`,btn("开始体验","close-modal","primary"));}
+  <p class="note">所有写操作经引擎校验（校验不过零写盘），体系保存在本地实例文件。${state.integrated?"模型由 JuanerAI 提供；未配置或未授权时 AI 起草不可用，本地模板与编辑仍可使用。":"模型可在设置页配置；未配置时为确定性演示模式。"}发布产物进入 releases/ 版本登记。</p>`,btn("开始体验","close-modal","primary"));}
 
 async function requestRefine(text){
   const s=current();if(!s)return;
@@ -341,10 +353,14 @@ async function handleAction(action,el){
       try{sessionStorage.setItem("mf-need",text);}catch{} // G4：刷新后需求保留
       if(!text){const err=$("#home-error");err.textContent="先写一点业务需求，几个字也可以。";err.hidden=false;$("#need").focus();break;}
       setRoute("generating");state.busy=true;
-      // A2 T3（G1/G4）：POST create-job → 轮询 → 完成自动落盘进 work；停止=离开轮询（服务端照常完成，G4）
+      const generation={jobId:null,stopRequested:false};activeGeneration=generation;
+      // 集成模式停止同一次任务；独立入口保持原有行为。
       void Api.createJob(text).then(({jobId})=>{
+        generation.jobId=jobId;
+        if (state.integrated && generation.stopRequested) { void stopIntegratedJob(jobId); return; }
         const timer=setInterval(async()=>{
           const job=await Api.job(jobId).catch(()=>null);
+          if(state.integrated&&(activeGeneration!==generation||generation.stopRequested)){clearInterval(timer);return;}
           if(!state.busy||state.route!=="generating"){clearInterval(timer);return;} // 已停止/离开
           if(!job)return;
           if(job.status==="done"&&job.instanceId){
@@ -359,12 +375,18 @@ async function handleAction(action,el){
           }
         },1500);
         generateTimer=timer;
-      }).catch(e=>{state.busy=false;setRoute("home");toast(`生成未能启动：${String(e&&e.message||e)}。需求文本已保留。`);});
+      }).catch(e=>{if(state.integrated&&activeGeneration!==generation)return;state.busy=false;setRoute("home");toast(`生成未能启动：${String(e&&e.message||e)}。需求文本已保留。`);});
       break;
     }
-    case "stop-generation":{ // G4：客户端离开轮询；服务端任务照常完成（产物不丢，出现在「我的体系」）
+    case "stop-generation":{
       if(generateTimer)clearInterval(generateTimer);
-      state.busy=false;setRoute("home");toast("生成已停止，原需求仍保留。");break;
+      state.busy=false;setRoute("home");
+      if (state.integrated) {
+        if(activeGeneration)activeGeneration.stopRequested=true;
+        toast("正在请求停止，原需求仍保留。");
+        if (activeGeneration?.jobId) void stopIntegratedJob(activeGeneration.jobId);
+      } else toast("生成已停止，原需求仍保留。");
+      break;
     }
     case "save-draft":toast("工作草稿已保存。");break;
     case "rename":showModal("修改体系名称","名称帮助你找到这套体系。",`<div class="field"><label for="system-name">体系名称</label><input id="system-name" value="${esc(s.title)}"></div>`,btn("取消","close-modal")+btn("保存名称","save-name","primary"));break;
@@ -463,7 +485,7 @@ async function handleAction(action,el){
     case "bindings":showBindings();break;
     case "save-bindings":{
       const sc=s.scenes[s.sceneIndex||0];
-      const bindings=[...document.querySelectorAll("[data-binding-index]")].map(select=>({role:sc.bindings[Number(select.dataset.bindingIndex)].role,metric:select.value})).filter(b=>b.metric);
+      const bindings=[...document.querySelectorAll("[data-binding-index]")].map(select=>({...sc.bindings[Number(select.dataset.bindingIndex)],metric:select.value})).filter(b=>b.metric);
       try{await Api.patchBindings(s.id,sc.id,bindings);await refreshSystem();closeModal();render();toast(sc.bindings.length>bindings.length?"场景草稿已保存，未绑定项会在检查时提示。":"场景绑定已保存，引用当前体系的指标。");}catch(e){apiModalError(e);}break;
     }
     case "edit-scene":{
@@ -603,6 +625,7 @@ window.addEventListener("hashchange",()=>applyHash());
     state.templates=tpl.templates;
     state.methodTemplates=tpl.methodTemplates;
     state.llmMode=llm.mode;
+    state.integrated=llm.integrated===true;
   }catch(e){console.error(e);toast("工作区数据加载失败，可刷新重试。");}
   try{const kept=sessionStorage.getItem("mf-need");if(kept)state.homeDraft=kept;}catch{}
   if(location.hash&&location.hash!=="#home")applyHash();else render();
