@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { createPiTransport, type ModelConfig } from "pi-agent-runtime";
-import { getBuiltinModels, type BuiltinProvider } from "@earendil-works/pi-ai/providers/all";
-import type { Api, Model } from "@earendil-works/pi-ai";
+import { configuredModels, unsupportedModels } from "./configured-models.js";
 import type { LlmClient } from "./types.js";
 import { createFakeClient } from "./fake-client.js";
 import { createPiClient, type PiCandidate } from "./pi-client.js";
@@ -44,13 +43,6 @@ const TRUTH_TABLE: Record<string, ModelConfig> = {
     maxOutputTokens: 16_384,
     input: ["text"]
   }
-};
-
-/** G1：pi-ai 目录 api 值 → runtime 两协议映射表；未知值显式拒绝。 */
-const PROTOCOL_MAP: Record<string, ModelConfig["protocol"]> = {
-  "openai-completions": "openai-completions",
-  "openai-responses": "openai-completions",
-  "anthropic-messages": "anthropic-messages"
 };
 
 const RUNTIME_PROTOCOLS = ["openai-completions", "anthropic-messages"] as const;
@@ -121,17 +113,9 @@ function resolveModelConfig(spec: string, env: NodeJS.ProcessEnv, isFallback: bo
       maxOutputTokens: 8_192
     };
   }
-  // (c) pi-ai 内置静态目录回退（现行解析路径）；G1 协议映射表
-  const catalog = getBuiltinModels(provider as BuiltinProvider).find((m) => m.id === modelId);
-  if (catalog) {
-    const protocol = PROTOCOL_MAP[catalog.api];
-    if (!protocol) {
-      throw new Error(
-        `${where} 的协议 ${catalog.api} 暂不支持：请经 MF_LLM_BASE_URL 走 OpenAI 兼容网关接入（详见 README provider 配置表）`
-      );
-    }
-    return toModelConfig(catalog);
-  }
+  // (c) 固定中立配置保持原目录解析结果；Pi 只由共享 SDK Adapter 引用。
+  if (Object.hasOwn(configuredModels, spec)) return structuredClone(configuredModels[spec]!);
+  if (Object.hasOwn(unsupportedModels, spec)) throw new Error(`${where} ${unsupportedModels[spec]}`);
   // (d) 其余显式拒绝，文案列出三条可用路径
   throw new Error(
     `${where} 无法解析，可用路径有三：\n` +
@@ -139,18 +123,6 @@ function resolveModelConfig(spec: string, env: NodeJS.ProcessEnv, isFallback: bo
       `  2) 自定义网关：设置 MF_LLM_BASE_URL（协议缺省 openai-completions，MF_LLM_API 可覆盖）\n` +
       `  3) pi-ai 内置目录模型：如 openai/gpt-4o、anthropic/claude-sonnet-4-5（检查 provider/model-id 拼写）`
   );
-}
-
-/** catalog 条目 → runtime ModelConfig（数据级字段拷贝 + G1 协议映射）。 */
-function toModelConfig(catalog: Model<Api>): ModelConfig {
-  return {
-    provider: catalog.provider,
-    id: catalog.id,
-    protocol: PROTOCOL_MAP[catalog.api]!,
-    endpoint: catalog.baseUrl,
-    contextWindow: catalog.contextWindow ?? 128_000,
-    maxOutputTokens: catalog.maxTokens ?? 8_192
-  };
 }
 
 /** provider → 环境变量名（密钥只从注入 env 读，不经 process.env 桥——G3；D6 合一后委托 provider-keys）。 */

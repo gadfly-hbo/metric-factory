@@ -11,17 +11,17 @@ function findPiImportViolations(content: string): string[] {
   return PI_PACKAGE_NAMES.filter((pkg) => content.includes(pkg));
 }
 
-async function walkSrc(dir: string): Promise<string[]> {
+async function walkSrc(dir: string, includeAdapter = false): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
   const files = await Promise.all(
     entries.map(async (e) => {
       const p = join(dir, e.name);
-      return e.isDirectory() ? walkSrc(p) : [p];
+      return e.isDirectory() ? walkSrc(p, includeAdapter) : [p];
     })
   );
   return files
     .flat()
-    .filter((f) => f.startsWith("src/") && !f.startsWith("src/llm/") && /\.ts$/.test(f));
+    .filter((f) => f.startsWith("src/") && (includeAdapter || !f.startsWith("src/llm/")) && /\.ts$/.test(f));
 }
 
 test("fake client 返回脚本化响应（引擎级测试注入用）", async () => {
@@ -54,6 +54,16 @@ test("src/llm 之外的业务代码零 pi import（适配层边界钉死）", as
     const content = await readFile(f, "utf8");
     expect(findPiImportViolations(content), `${f} 不应直接 import pi 包`).toEqual([]);
   }
+});
+
+test("MF-03 shared SDK is the sole direct Pi consumer, including the standalone adapter", async () => {
+  for (const file of await walkSrc("src", true)) {
+    const content = await readFile(file, "utf8");
+    expect(findPiImportViolations(content).filter(name => name !== "pi-agent-runtime"), file).toEqual([]);
+  }
+  const pkg = JSON.parse(await readFile("package.json", "utf8"));
+  expect(pkg.dependencies).not.toHaveProperty("@earendil-works/pi-ai");
+  expect(pkg.dependencies).not.toHaveProperty("@earendil-works/pi-agent-core");
 });
 
 // 负例（D9/KA5）：guard 必须能检出三个 pi 包名中任意一个的直接 import

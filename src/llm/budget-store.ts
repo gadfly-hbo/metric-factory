@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync, openSync, closeSync, fsyncSync } from "node:fs";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { RuntimeFault, type BudgetLease, type BudgetStore, type Limits, type UncappedBudgetLease, type UncappedLimits } from "pi-agent-runtime";
@@ -58,7 +58,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export type DescribableBudgetStore = BudgetStore & { describeBudget(): BudgetDescription };
 
-export function createFileBudgetStore(dataDir: string, caps: BudgetCaps = {}): DescribableBudgetStore {
+export function createFileBudgetStore(dataDir: string, caps: BudgetCaps = {}, strict = false): DescribableBudgetStore {
   const file = join(dataDir, "model-budget.json");
   const tmp = `${file}.tmp`;
   const lockPath = join(dataDir, ".model-budget-lock");
@@ -72,7 +72,7 @@ export function createFileBudgetStore(dataDir: string, caps: BudgetCaps = {}): D
       } catch {
         try {
           const st = await stat(lockPath);
-          if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
+          if (!strict && Date.now() - st.mtimeMs > LOCK_STALE_MS) {
             await rm(lockPath, { force: true }); // 死 owner 接管（op 毫秒级，超阈值必为残留）
             continue;
           }
@@ -91,9 +91,19 @@ export function createFileBudgetStore(dataDir: string, caps: BudgetCaps = {}): D
   }
 
   async function load(): Promise<BudgetFile> {
-    if (!existsSync(file)) return { version: 1, tasks: {} };
+    if (!existsSync(file)) {
+      if (strict) throw new RuntimeFault("STATE_FAILED");
+      return { version: 1, tasks: {} };
+    }
     try {
       const parsed = JSON.parse(await readFile(file, "utf8")) as BudgetFile;
+      if (strict) {
+        if (parsed.version !== 1 || !parsed.tasks || typeof parsed.tasks !== "object" || Array.isArray(parsed.tasks)) throw new RuntimeFault("STATE_FAILED");
+        for (const entry of Object.values(parsed.tasks)) {
+          if (!entry || typeof entry.configuration !== "string" || !entry.limits || !entry.usage || typeof entry.usage !== "object") throw new RuntimeFault("STATE_FAILED");
+          for (const amount of Object.values(entry.usage)) counted(amount);
+        }
+      }
       return { version: 1, tasks: parsed.tasks ?? {} };
     } catch (error) {
       throw new Error(`预算账本不可读（${file}）：${error instanceof Error ? error.message : String(error)}`);
@@ -103,7 +113,7 @@ export function createFileBudgetStore(dataDir: string, caps: BudgetCaps = {}): D
   function persist(data: BudgetFile): void {
     // 10 万 FIFO：剪最老已释放条目（owner 在役不剪）——「累计」只数留存条目（GRILL 披露口径）
     const ids = Object.keys(data.tasks);
-    if (ids.length > MAX_TASKS) {
+    if (!strict && ids.length > MAX_TASKS) {
       let overflow = ids.length - MAX_TASKS;
       for (const id of ids) {
         if (overflow <= 0) break;
@@ -114,8 +124,16 @@ export function createFileBudgetStore(dataDir: string, caps: BudgetCaps = {}): D
       }
     }
     // 同步写 + 原子改名（锁内毫秒级临界区；rename 原子性由 POSIX 保证——绝无 fire-and-forget 竞态）
-    writeFileSync(tmp, JSON.stringify(data));
-    renameSync(tmp, file);
+    if (strict) {
+      const fd = openSync(tmp, "w", 0o600);
+      try { writeFileSync(fd, JSON.stringify(data)); fsyncSync(fd); } finally { closeSync(fd); }
+      renameSync(tmp, file);
+      const dir = openSync(dataDir, "r");
+      try { fsyncSync(dir); } finally { closeSync(dir); }
+    } else {
+      writeFileSync(tmp, JSON.stringify(data));
+      renameSync(tmp, file);
+    }
   }
 
   function zeroUsage(uncapped: boolean): Record<string, number> {
@@ -172,6 +190,7 @@ export function createFileBudgetStore(dataDir: string, caps: BudgetCaps = {}): D
       if (!entry) throw new RuntimeFault("STATE_FAILED");
       return entry;
     };
+    const dataForCap = (): BudgetFile => JSON.parse(readFileSync(file, "utf8")) as BudgetFile;
     const lease: UncappedBudgetLease = {
       snapshot: () => ({ ...readOwn().usage }) as never,
       reserveModel: async () => {
@@ -180,6 +199,7 @@ export function createFileBudgetStore(dataDir: string, caps: BudgetCaps = {}): D
       reserveModelUpTo: async (maximum: number) => {
         // runtime 契约（红队核查点 a）：uncapped 下必须恰好返回 maximum，不得在预留环节缩量
         return mutate((entry) => {
+          if (strict) assertCapOrThrow(dataForCap());
           const tokens = counted(maximum);
           entry.usage.modelCalls = counted((entry.usage.modelCalls ?? 0) + 1); // calls 按 attempt 计（G6）
           entry.usage.resourceUnits = counted((entry.usage.resourceUnits ?? 0) + 1);
@@ -236,11 +256,13 @@ export function createFileBudgetStore(dataDir: string, caps: BudgetCaps = {}): D
         const data = await load();
         const existing = data.tasks[taskId];
         if (existing?.owner && existing.owner.runId !== runId) throw new RuntimeFault("TASK_BUSY");
+        if (strict && existing && (existing.configuration !== configuration || JSON.stringify(existing.limits) !== JSON.stringify(limits))) throw new RuntimeFault("CONFIGURATION_CHANGED");
+        if (strict && existing && (existing.usage.reservedOutputTokens ?? 0) > 0) throw new RuntimeFault("STATE_FAILED");
         assertCapOrThrow(data); // G1：上限判定点——聚合全部条目，超限拒绝新调用
         data.tasks[taskId] = {
           configuration,
           limits,
-          usage: zeroUsage(true),
+          usage: strict && existing ? { ...existing.usage } : zeroUsage(true),
           owner: { runId, pid: process.pid, bootId: 0, acquiredAt: new Date().toISOString() }
         };
         persist(data);
@@ -248,12 +270,16 @@ export function createFileBudgetStore(dataDir: string, caps: BudgetCaps = {}): D
       });
     },
     describeBudget: (): BudgetDescription => {
-      if (!existsSync(file)) return { usedTokens: 0, usedCalls: 0, caps, budgetFile: file };
+      if (!existsSync(file)) {
+        if (strict) throw new RuntimeFault("STATE_FAILED");
+        return { usedTokens: 0, usedCalls: 0, caps, budgetFile: file };
+      }
       try {
         const parsed = JSON.parse(readFileSync(file, "utf8")) as BudgetFile;
         const { tokens, calls } = aggregate(parsed);
         return { usedTokens: tokens, usedCalls: calls, caps, budgetFile: file };
-      } catch {
+      } catch (error) {
+        if (strict) throw error;
         return { usedTokens: 0, usedCalls: 0, caps, budgetFile: file };
       }
     }
