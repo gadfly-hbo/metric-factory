@@ -1,0 +1,74 @@
+# Metric Factory 企业实例（blank 基座，无行业模板）
+instance:
+  created_at: 2026-10-19T03:46:03.691Z
+caliber_switches: {}
+added: []
+removed: []
+modified: []
+concept_refs: []
+added_scenarios: []
+blueprint:
+  title: 扩店与存量盈利战略比较体系
+  intent: 设计具体分析方案
+  purpose: 比较扩店与优化存量两条路线，辅助明年战略取舍
+  decision: 明年应继续扩店，还是先优化存量门店盈利能力
+  boundary: 仅覆盖门店拓展与存量盈利两条路线比较，不含选址与单店运营细节
+  deliverable: 两条路线的取舍分析与建议，供管理层决策
+  contexts:
+    - 战略选择
+  organizations:
+    - 假设先行
+  questions:
+    - id: expansion_value
+      title: 继续扩店的价值有多大
+      detail: 新开门店能带来多少增量收入与利润，需哪些前置资源
+      metric_refs: []
+    - id: stock_profit_gap
+      title: 存量门店盈利差距在哪
+      detail: 存量门店的利润差距主要来自哪些经营环节
+      metric_refs: []
+  hypotheses:
+    - id: h_expansion_dilutive
+      statement: 新店盈利爬坡期长，短期摊薄整体利润率
+      judgment: 待验证假设
+      support: 新店前期投入与爬坡为常见规律，待获取本企业数据
+      counter: 若新店回本快，则摊薄效应有限
+      change_condition: 若数据显示新店短期即达盈亏平衡，则改变判断
+      verified: false
+    - id: h_stock_improvable
+      statement: 存量门店存在可改善的盈利空间
+      judgment: 待验证假设
+      support: 门店间利润分化为常见现象，待获取本企业数据
+      counter: 若存量门店已普遍接近效率上限则改善空间小
+      change_condition: 若数据显示门店利润高度一致且已近上限，则改变判断
+      verified: false
+  evidence_plan:
+    - id: ev_new_store_cohort
+      name: 新店开店队列经营数据
+      kind: 门店经营数据
+      source: 内部财务与门店台账系统
+      check: 核对口径一致性与期间完整性
+      insufficiency: 不足时先用小样本定性访谈补充
+      status: 待获取
+    - id: ev_stock_profit_spread
+      name: 存量门店利润分布数据
+      kind: 门店经营数据
+      source: 内部财务系统按门店汇总
+      check: 抽查头部与尾部门店数据准确性
+      insufficiency: 不足时按区域抽样分析并标注局限
+      status: 待获取
+  options:
+    - id: opt_expand
+      name: 继续扩店路线
+      tradeoff: 换取规模增长，但承担资金占用与爬坡期利润摊薄
+    - id: opt_optimize
+      name: 优化存量盈利路线
+      tradeoff: 利润改善更可控，但增长天花板与规模扩张受限
+  provenance:
+    origin: llm
+    model: xiaomi-token-plan-cn/mimo-v2.6-flash
+    prompt_version: v1.0.0
+  review:
+    confirmed_by: 黄博（业务复核 2026-10-19）
+    confirmed_at: 2026-10-19T03:46:40.721Z
+    design_fingerprint: sha256:aad666df7f7dd89e6a73976d269d9bc3b88a09abc99f975f5b32140fee7cfbb1

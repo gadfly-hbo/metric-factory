@@ -2,6 +2,19 @@
 
 > dev-flow 全程走完（红队 GO → PRD/GRILL G1-G9+U1 → UI-GATE 批准 → 8 切片 → 3 轮评审收敛 → SHIP 两拍复跑后提交推送）。前序 A1 交接见 `.flow/archive-a1-20261018/handoff.md`。
 
+## 接入准备批（2026-10-19 下午，紧接 A2 SHIP 后，用户指令「完成接入 juanerai 前工作台侧全部准备工作」）
+
+- **真实 LLM 冒烟已跑**（挂账销项）：`scripts/llm-smoke.sh` 双候选——xiaomi mimo-v2.6-flash 全链路成功（generate/refine 出稿 + fail-closed 审核门实测拦截未审指标）；minimax MiniMax-M3 parse 阶段整批拒绝（沿用 A1 挂账）。留档 `/tmp/mf-llm-smoke-20261019-112633/`（本机）。
+- **blueprint 样板包入库**（releases/，真实 LLM 出稿 + 人工审核/复核 + 交付登记）：
+  - `coffee-weekly-review@1.0.0`（连锁咖啡门店周度经营复盘：blueprint 完整 + 3 指标 reviewed_by 在包）
+  - `store-expansion-strategy@1.0.0`（零指标战略包：扩店 vs 存量盈利，v0.4 零指标合法样例）
+  - 源实例在 `examples/`；index 追加 2 条（共 6 条）；两包过 validateSapPackage 全规则独立复验
+- **消费指引 v0.4 更新**（`docs/sap-consumption-guide.md`）：§3 校验表 +规则 6-7（blueprint 禁带 review / blueprint→metrics 引用一致）；新增 §4.1 blueprint 消费语义（六字段表 + 三条硬边界）、§4.2 零指标包消费语义；§5 same-content 纪律；§8 批次状态；§9 样板登记（含真实 LLM 出稿实测备注：冗长需求触发截断、scenarios.question_tree 形状风险）
+- **Change 输入包 v0.2**（`docs/juanerai-change-input-xanthil-sap-install-v0.2.md`，取代 v0.1）：blueprint 消费六条行为定义（§2.3）+ 零指标包（§2.4）+ 校验规则 7-8 + 验收场景 A5-A9 + 非目标增补（提示词拼接不构成蓝图消费）
+- **引擎小修**：实例文件头注释 blank 基座不再输出「fork 自 undefined」
+- 验证门全绿：lint 13 + tsc 0 + 73 文件 478 tests + contract 1；net-sales-oracle 字节基线不受影响（index 追加用原手工风格，避免 safe_dump 折行改写旧条目解析值——教训记录）
+- **遗留**：JuanerAI 侧消费面开发（按其宪法走 Change，本仓不碰）；T9 旧表单退役；MiniMax-M3 稳定性
+
 ## 已交付（T1-T8）
 
 - **复刻 oracle（T1）**：`test/ui/oracle/`（flows.mjs 可导入核心 + capture.mjs CLI）——demo 7 视图骨架（组件级折叠：19 类重复列表+context-row/recent 只比首子形态）+ 几何锚（内容高度锚只比宽）+ 行为断言（dialog 原生/Esc 焦点回归/390px 无横溢/skip-link）；防漂移锚 = `test/fixtures/demo-anchor/`（5 文件字节快照 + hashes.txt）+ `scripts/check-demo-anchor.sh`（--refresh 重锚后必须重拍基线+重过 UI-GATE）。

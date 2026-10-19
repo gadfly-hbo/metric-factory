@@ -1,0 +1,120 @@
+# Metric Factory 企业实例（blank 基座，无行业模板）
+instance:
+  created_at: 2026-10-19T03:41:44.162Z
+caliber_switches: {}
+added:
+  - name: net_sales
+    display_name: 净销售
+    type: derived
+    definition: 统计周期（周）内成交金额合计减去同期退款金额合计；剔除测试订单、员工内购单与未支付订单；以订单支付时间归属周次
+    dimensions: []
+    time_grains:
+      - week
+    owner_role: 门店运营经理
+    caliber_switches: {}
+    provenance:
+      origin: llm
+      model: xiaomi-token-plan-cn/mimo-v2.6-flash
+      prompt_version: v1.0.0
+      reviewed_by: 黄博（人工审核 2026-10-19）
+    review:
+      required: true
+  - name: refund_amount
+    display_name: 退款额
+    type: cumulative
+    definition: 统计周期（周）内实际退款成功金额合计；剔除已撤销的退款申请与测试退款；以退款成功时间归属周次
+    dimensions: []
+    time_grains:
+      - week
+    owner_role: 门店运营经理
+    caliber_switches: {}
+    provenance:
+      origin: llm
+      model: xiaomi-token-plan-cn/mimo-v2.6-flash
+      prompt_version: v1.0.0
+      reviewed_by: 黄博（人工审核 2026-10-19）
+    review:
+      required: true
+  - name: repeat_purchase_rate
+    display_name: 复购率
+    type: ratio
+    definition: 分子：统计周（week）内购买≥2次的客户数；分母：该周有购买行为的去重客户数；剔除员工账号、测试账号与已注销会员
+    dimensions: []
+    time_grains:
+      - week
+    owner_role: 会员运营专员
+    caliber_switches: {}
+    provenance:
+      origin: llm
+      model: xiaomi-token-plan-cn/mimo-v2.6-flash
+      prompt_version: v1.0.0
+      reviewed_by: 黄博（人工审核 2026-10-19）
+    review:
+      required: true
+removed: []
+modified: []
+concept_refs: []
+added_scenarios: []
+blueprint:
+  title: 连锁咖啡门店周度经营复盘体系
+  intent: 建设可复用体系
+  purpose: 建立一套可按周重复执行的门店经营复盘框架，帮助区域与门店管理者及时发现净销售、退款与复购三方面的异常与趋势
+  decision: 本周各门店经营表现是否正常，哪些门店或哪些环节需要进一步排查与干预
+  boundary: 覆盖连锁咖啡门店周度口径的净销售、退款额与复购率；不含成本费用与利润归因、门店选址与新店拓展评估、营销活动增量效果验证
+  deliverable: 每周输出一份复盘简报：三项核心指标的当周值与环比/同比变化、异常门店清单、待确认问题与下一步排查建议
+  contexts:
+    - 经营改善
+  organizations:
+    - 假设先行
+  questions:
+    - id: weekly_sales_health
+      title: 本周净销售表现是否健康
+      detail: 对比上周与去年同期，净销售的变化来自哪些门店或品类，是否存在单店大幅下滑
+      metric_refs:
+        - net_sales
+        - refund_amount
+    - id: customer_quality_stability
+      title: 客户质量与退款风险是否稳定
+      detail: 复购率是否保持稳定，退款额占比上升是否指向出品或服务问题
+      metric_refs:
+        - refund_amount
+        - repeat_purchase_rate
+  hypotheses:
+    - id: h_refund_drag
+      statement: 部分门店净销售下滑主要由退款额异常上升拖累
+      judgment: 待验证假设
+      support: 退款额与净销售同期反向变动的初步观察
+      counter: 净销售下滑也可能来自客流或客单价下降，与退款无关
+      change_condition: 若下滑门店的退款额占比无明显上升，则该假设不成立，需转向客流因素排查
+      verified: false
+    - id: h_repeat_stable
+      statement: 整体复购率保持稳定，说明客户基础未受本周异常影响
+      judgment: 待验证假设
+      support: 近期周度复购率波动幅度较小
+      counter: 复购率统计口径或数据完整性问题可能掩盖真实下滑
+      change_condition: 若分 cohort 复核后复购率出现持续下滑，则该假设需推翻
+      verified: false
+  evidence_plan:
+    - id: ev_weekly_pos_data
+      name: 门店周度交易与退款明细数据
+      kind: 交易系统原始数据
+      source: POS/订单系统按门店、按周导出的成交与退款记录
+      check: 核对退款记录与原订单可关联、周度汇总与日报累计一致
+      insufficiency: 若退款未关联原单，则退款额仅做总量监控，不做原因归因
+      status: 待获取
+    - id: ev_cohort_repeat_data
+      name: 客户复购队列数据
+      kind: 客户行为数据
+      source: 会员/小程序订单系统按注册或首购 cohort 导出的复购记录
+      check: 确认复购判定口径（同周复购或窗口期内复购）一致，剔除测试账号与员工账号
+      insufficiency: 若缺少稳定客户标识，则以周度回头客订单占比替代并标注口径差异
+      status: 待获取
+  options: []
+  provenance:
+    origin: llm
+    model: xiaomi-token-plan-cn/mimo-v2.6-flash
+    prompt_version: v1.0.0
+  review:
+    confirmed_by: 黄博（业务复核 2026-10-19）
+    confirmed_at: 2026-10-19T03:44:27.228Z
+    design_fingerprint: sha256:b52e5b933767a832484baed0c6f88f199886327e90c466f286bb99f76cea9331

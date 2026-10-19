@@ -1,0 +1,126 @@
+bindings: []
+blueprint:
+  boundary: "覆盖连锁咖啡门店周度口径的净销售、退款额与复购率；不含成本费用与利润归因、门店选址与新店拓展评估、营销活动增量效果验证"
+  contexts:
+    - "经营改善"
+  decision: "本周各门店经营表现是否正常，哪些门店或哪些环节需要进一步排查与干预"
+  deliverable: "每周输出一份复盘简报：三项核心指标的当周值与环比/同比变化、异常门店清单、待确认问题与下一步排查建议"
+  evidence_plan:
+    - check: "核对退款记录与原订单可关联、周度汇总与日报累计一致"
+      id: ev_weekly_pos_data
+      insufficiency: "若退款未关联原单，则退款额仅做总量监控，不做原因归因"
+      kind: "交易系统原始数据"
+      name: "门店周度交易与退款明细数据"
+      source: "POS/订单系统按门店、按周导出的成交与退款记录"
+      status: "待获取"
+    - check: "确认复购判定口径（同周复购或窗口期内复购）一致，剔除测试账号与员工账号"
+      id: ev_cohort_repeat_data
+      insufficiency: "若缺少稳定客户标识，则以周度回头客订单占比替代并标注口径差异"
+      kind: "客户行为数据"
+      name: "客户复购队列数据"
+      source: "会员/小程序订单系统按注册或首购 cohort 导出的复购记录"
+      status: "待获取"
+  hypotheses:
+    - change_condition: "若下滑门店的退款额占比无明显上升，则该假设不成立，需转向客流因素排查"
+      counter: "净销售下滑也可能来自客流或客单价下降，与退款无关"
+      id: h_refund_drag
+      judgment: "待验证假设"
+      statement: "部分门店净销售下滑主要由退款额异常上升拖累"
+      support: "退款额与净销售同期反向变动的初步观察"
+      verified: false
+    - change_condition: "若分 cohort 复核后复购率出现持续下滑，则该假设需推翻"
+      counter: "复购率统计口径或数据完整性问题可能掩盖真实下滑"
+      id: h_repeat_stable
+      judgment: "待验证假设"
+      statement: "整体复购率保持稳定，说明客户基础未受本周异常影响"
+      support: "近期周度复购率波动幅度较小"
+      verified: false
+  intent: "建设可复用体系"
+  options: []
+  organizations:
+    - "假设先行"
+  provenance:
+    model: xiaomi-token-plan-cn/mimo-v2.6-flash
+    origin: llm
+    prompt_version: v1.0.0
+  purpose: "建立一套可按周重复执行的门店经营复盘框架，帮助区域与门店管理者及时发现净销售、退款与复购三方面的异常与趋势"
+  questions:
+    - detail: "对比上周与去年同期，净销售的变化来自哪些门店或品类，是否存在单店大幅下滑"
+      id: weekly_sales_health
+      metric_refs:
+        - net_sales
+        - refund_amount
+      title: "本周净销售表现是否健康"
+    - detail: "复购率是否保持稳定，退款额占比上升是否指向出品或服务问题"
+      id: customer_quality_stability
+      metric_refs:
+        - refund_amount
+        - repeat_purchase_rate
+      title: "客户质量与退款风险是否稳定"
+  title: "连锁咖啡门店周度经营复盘体系"
+concept_refs: []
+dimensions: []
+metrics:
+  - caliber_switches: {}
+    definition: "统计周期（周）内成交金额合计减去同期退款金额合计；剔除测试订单、员工内购单与未支付订单；以订单支付时间归属周次"
+    dimensions: []
+    display_name: "净销售"
+    name: net_sales
+    owner_role: "门店运营经理"
+    provenance:
+      model: xiaomi-token-plan-cn/mimo-v2.6-flash
+      origin: llm
+      prompt_version: v1.0.0
+      reviewed_by: "黄博（人工审核 2026-10-19）"
+    review:
+      required: true
+    time_grains:
+      - week
+    type: derived
+  - caliber_switches: {}
+    definition: "统计周期（周）内实际退款成功金额合计；剔除已撤销的退款申请与测试退款；以退款成功时间归属周次"
+    dimensions: []
+    display_name: "退款额"
+    name: refund_amount
+    owner_role: "门店运营经理"
+    provenance:
+      model: xiaomi-token-plan-cn/mimo-v2.6-flash
+      origin: llm
+      prompt_version: v1.0.0
+      reviewed_by: "黄博（人工审核 2026-10-19）"
+    review:
+      required: true
+    time_grains:
+      - week
+    type: cumulative
+  - caliber_switches: {}
+    definition: "分子：统计周（week）内购买≥2次的客户数；分母：该周有购买行为的去重客户数；剔除员工账号、测试账号与已注销会员"
+    dimensions: []
+    display_name: "复购率"
+    name: repeat_purchase_rate
+    owner_role: "会员运营专员"
+    provenance:
+      model: xiaomi-token-plan-cn/mimo-v2.6-flash
+      origin: llm
+      prompt_version: v1.0.0
+      reviewed_by: "黄博（人工审核 2026-10-19）"
+    review:
+      required: true
+    time_grains:
+      - week
+    type: ratio
+package:
+  created_at: "2026-10-19T03:44:27.306Z"
+  fingerprint: "sha256:fbab5d7738974669a0f5fd115a5b0cfe386d8dff160183a2aaabae1298989a50"
+  generator: "metric-factory@0.1.0+9ea2634"
+  id: coffee-weekly-review
+  kind: instance
+  namespace: mf.coffee-weekly-review
+  version: 1.0.0
+review:
+  exported_at: "2026-10-19T03:44:27.306Z"
+  gate: metric-factory-export-gate
+  unreviewed: []
+runtime_state: design_only
+sap: "0.1"
+scenarios: []

@@ -1,0 +1,80 @@
+bindings: []
+blueprint:
+  boundary: "仅覆盖门店拓展与存量盈利两条路线比较，不含选址与单店运营细节"
+  contexts:
+    - "战略选择"
+  decision: "明年应继续扩店，还是先优化存量门店盈利能力"
+  deliverable: "两条路线的取舍分析与建议，供管理层决策"
+  evidence_plan:
+    - check: "核对口径一致性与期间完整性"
+      id: ev_new_store_cohort
+      insufficiency: "不足时先用小样本定性访谈补充"
+      kind: "门店经营数据"
+      name: "新店开店队列经营数据"
+      source: "内部财务与门店台账系统"
+      status: "待获取"
+    - check: "抽查头部与尾部门店数据准确性"
+      id: ev_stock_profit_spread
+      insufficiency: "不足时按区域抽样分析并标注局限"
+      kind: "门店经营数据"
+      name: "存量门店利润分布数据"
+      source: "内部财务系统按门店汇总"
+      status: "待获取"
+  hypotheses:
+    - change_condition: "若数据显示新店短期即达盈亏平衡，则改变判断"
+      counter: "若新店回本快，则摊薄效应有限"
+      id: h_expansion_dilutive
+      judgment: "待验证假设"
+      statement: "新店盈利爬坡期长，短期摊薄整体利润率"
+      support: "新店前期投入与爬坡为常见规律，待获取本企业数据"
+      verified: false
+    - change_condition: "若数据显示门店利润高度一致且已近上限，则改变判断"
+      counter: "若存量门店已普遍接近效率上限则改善空间小"
+      id: h_stock_improvable
+      judgment: "待验证假设"
+      statement: "存量门店存在可改善的盈利空间"
+      support: "门店间利润分化为常见现象，待获取本企业数据"
+      verified: false
+  intent: "设计具体分析方案"
+  options:
+    - id: opt_expand
+      name: "继续扩店路线"
+      tradeoff: "换取规模增长，但承担资金占用与爬坡期利润摊薄"
+    - id: opt_optimize
+      name: "优化存量盈利路线"
+      tradeoff: "利润改善更可控，但增长天花板与规模扩张受限"
+  organizations:
+    - "假设先行"
+  provenance:
+    model: xiaomi-token-plan-cn/mimo-v2.6-flash
+    origin: llm
+    prompt_version: v1.0.0
+  purpose: "比较扩店与优化存量两条路线，辅助明年战略取舍"
+  questions:
+    - detail: "新开门店能带来多少增量收入与利润，需哪些前置资源"
+      id: expansion_value
+      metric_refs: []
+      title: "继续扩店的价值有多大"
+    - detail: "存量门店的利润差距主要来自哪些经营环节"
+      id: stock_profit_gap
+      metric_refs: []
+      title: "存量门店盈利差距在哪"
+  title: "扩店与存量盈利战略比较体系"
+concept_refs: []
+dimensions: []
+metrics: []
+package:
+  created_at: "2026-10-19T03:46:40.789Z"
+  fingerprint: "sha256:477a2b9e2d7f979ba57fb3f4e2a179619a2e68517d0b0358671b996e5ce718db"
+  generator: "metric-factory@0.1.0+9ea2634"
+  id: store-expansion-strategy
+  kind: instance
+  namespace: mf.store-expansion-strategy
+  version: 1.0.0
+review:
+  exported_at: "2026-10-19T03:46:40.789Z"
+  gate: metric-factory-export-gate
+  unreviewed: []
+runtime_state: design_only
+sap: "0.1"
+scenarios: []

@@ -32,6 +32,6 @@ export async function loadMappingFile(path: string): Promise<MappingFileResult> 
 }
 
 export async function writeInstanceFile(path: string, inst: Instance): Promise<void> {
-  const header = `# Metric Factory 企业实例（fork 自 ${inst.base}）\n`;
+  const header = `# Metric Factory 企业实例${inst.base ? `（fork 自 ${inst.base}）` : "（blank 基座，无行业模板）"}\n`;
   await writeFile(path, header + stringifyYaml(inst), "utf8");
 }

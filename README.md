@@ -58,6 +58,8 @@ node dist/cli.js release my-instance/instance.yaml 1.0.0 --note "首个发布"
 
 `--format sap` 产出 JuanerAI 语义资产包 `out/<实例名>.sap.yaml`（SAP = Semantic Asset Package，与 SAP 公司无关；契约 v0.2：YAML 规范序列化 + SHA-256 指纹 + concept_refs + namespace + 包级 review）。「实例名」= 实例文件名去 `.yaml` 后缀；包 id 要求 `^[a-z][a-z0-9-]*$`，故文件名中的大写 / 空格 / 下划线等会 slugify（小写、非法字符→`-`、折叠连续 `-`），下载文件名用 slug 后的名字。同一实例两次导出的 `created_at` 必然不同（契约必填时间戳），不计入指纹对账。
 
+已入库样板包（`releases/`，消费端接入开发对照物）：`net-sales-instance`（1.0.0/1.0.1/1.1.0/1.1.1，指标口径类，含口径翻转对照）· `coffee-weekly-review@1.0.0`（blueprint + 3 审核指标）· `store-expansion-strategy@1.0.0`（零指标战略包）——后两者为真实 LLM 出稿经人工审核后发布（2026-10-19）。消费指引与 Change 输入包见 `docs/sap-consumption-guide.md` §9 与 `docs/juanerai-change-input-xanthil-sap-install-v0.2.md`。
+
 微调实例：编辑 `instance.yaml` 的四个 patch 段——`caliber_switches`（口径开关取值）、`modified`（改字段）、`removed`（删指标）、`added`（增指标，必须带 provenance）。
 
 ## 分析体系：决策场景（v5）

@@ -36,3 +36,19 @@ releases:
       仅退款金额归属开关不同（refund_to_payment_period=false，按退款完成期间归属，历史订单须可关联核验）；队列退款率、订单资格与完成标准与
       1.1.0 逐字一致
     file: net-sales-instance/1.1.1.sap.yaml
+  - package: coffee-weekly-review
+    version: 1.0.0
+    content_fingerprint: sha256:f3b46a21cb5d06cdd4b730530adeb33497101c4026bfa9643d8fe56a7e84d29d
+    package_fingerprint: sha256:fbab5d7738974669a0f5fd115a5b0cfe386d8dff160183a2aaabae1298989a50
+    created_at: 2026-10-19T03:44:27.306Z
+    released_by: huangbo
+    note: 连锁咖啡门店周度经营复盘体系（真实 LLM 出稿经人工审核）：blueprint 段 + 净销售/退款额/复购率三指标
+    file: coffee-weekly-review/1.0.0.sap.yaml
+  - package: store-expansion-strategy
+    version: 1.0.0
+    content_fingerprint: sha256:6c801e451b0d3bf646347f9cdf7cdb8c8bf008ccf0ce1caf46ccc45a29ee33c3
+    package_fingerprint: sha256:477a2b9e2d7f979ba57fb3f4e2a179619a2e68517d0b0358671b996e5ce718db
+    created_at: 2026-10-19T03:46:40.789Z
+    released_by: huangbo
+    note: 扩店 vs 存量盈利战略比较（零指标定性设计包，真实 LLM 出稿经业务复核）：v0.4 零指标合法样例
+    file: store-expansion-strategy/1.0.0.sap.yaml
