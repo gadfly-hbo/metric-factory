@@ -1,72 +1,68 @@
-# JuanerAI 接入启动文档 · metric-factory 语义资产包（SAP）安装与采用
+# JuanerAI 接入启动文档 · metric-factory 产品插件接入
 
 | 项 | 值 |
 |---|---|
 | 日期 | 2026-10-19 |
-| 发起方 | metric-factory（供应侧，`/Users/huangbo/Dev/Projects/metric-factory`） |
-| 接收方 | JuanerAI（消费侧，`/Users/huangbo/JuanerAI`） |
-| 性质 | 接入启动文档（kickoff）；产品意图与行为定义的权威细节在 §3 列出的三份输入文档，本文件只做导引与边界 |
-| 交换模式 | **文件手动交付**（导出 → 交付 → 安装消费；用户裁决 2026-10-12），不做 API/MCP/服务化 |
+| 发起方 | metric-factory（插件原仓，`/Users/huangbo/Dev/Projects/metric-factory`） |
+| 接收方 | JuanerAI（宿主仓，`/Users/huangbo/JuanerAI`） |
+| 性质 | 产品级插件接入启动（kickoff）导引。**接入形态 = 整个产品作为固定插件随 JuanerAI 打包交付**，参照已发布的 Report Studio 链路；权威标准在 JuanerAI 仓，本文件只提供供应侧产品事实与对齐输入，不预设宿主内部装配 |
+| 更正 | 本文件首版误写为「Xanthil 安装 SAP 资产包」框架（那是语义资产消费路径，属另一个 Change，输入包已另备）；本版按用户裁决更正为**产品插件接入** |
 
 ## 1. 一句话任务
 
-让 Xanthil（JuanerAI 现有 local-analysis 切片）能够**安装** metric-factory 发布的 SAP 语义资产包（精确 `id@version`、fail-closed 校验），并分两类**采用**：指标口径类（口径真实参与计算）+ 分析体系类（blueprint 段作为设计语境进入 Context 组织）。
+把 metric-factory 整个产品（分析体系工作台：描述业务问题 → AI 起草 → 修正 → 复核 → 发布语义资产包）作为 **JuanerAI 固定插件**接入：业务实现在原仓维护、独立可运行；JuanerAI 随包携带固定物料与运行依赖，宿主拥有入口、授权与实例生命周期；集成用户安装 JuanerAI 即可用，不另装独立版。
 
-## 2. 背景（三十秒版）
+## 2. 权威标准（先读这些，在 JuanerAI 仓）
 
-metric-factory 是语义资产供应侧：业务人员在其工作台完成「描述业务问题 → AI 起草分析体系 → 修正 → 业务复核 → 发布」，产出不可变 SAP 资产包。供应侧接入准备已全部完成并验证（契约 v0.4 实现、六个样板包版本入库、真实 LLM 冒烟通过、校验器/指纹/回执通道齐备）。**消费侧没有任何 blueprint/SAP 消费面——本 Change 是从零建设，不是改造既有功能。**
+按 `docs/engineering/plugin-integration/README.md` 入口按需读取：
 
-## 3. 权威输入（按此顺序读，再动手）
+1. **接入标准** `docs/engineering/plugin-integration/standard.md`——共用业务实现分别装配交付、按真实形态选择承载、§3 信息项、责任层次、**五步连续接入（盘点→对齐→接线→验证→接受与固定交付）**、原仓维护与受控升级；
+2. **Report Studio 参考 Adapter** `docs/engineering/plugin-integration/report-studio-reference-adapter.md`——已发布链路的真实文件/测试/固定身份/可复用粒度（ metric-factory 的接入照此模式，但**报告专属物不照搬**）；
+3. **通用验收清单** `docs/engineering/plugin-integration/acceptance-checklist.md`——C01-C12 按适用性选择，填预期/身份/证据/未执行原因。
 
-1. **Change 输入包 v0.2**（产品意图 + 行为定义 + 验收场景 A1-A10，你的直接输入）：
-   `/Users/huangbo/Dev/Projects/metric-factory/docs/juanerai-change-input-xanthil-sap-install-v0.2.md`
-2. **消费指引**（校验表 7 条规则 / 字段消费语义 / blueprint 消费语义 / 零指标包 / 样板登记）：
-   `/Users/huangbo/Dev/Projects/metric-factory/docs/sap-consumption-guide.md`
-3. **交换契约 v0.4**（冻结面：包格式 / 身份与版本 / 指纹 / 治理不变量）：
-   `/Users/huangbo/Dev/Projects/metric-factory/docs/juanerai-semantic-asset-contract-v0.1.md`
+Report Studio 已发布链路（参照骨架，非复制对象）：
+宿主入口 → Application（业务协调）→ 业务 Port（Gateway/Store）→ Profile/composition root（显式 bundleRoot/identity/dataRoot，懒启动）→ **随包 Node 运行自有实例** → 插件共用业务 → 显式 deliver/已保存 export → 宿主稳定副本 + receipt 读回。进程通信/准入/权限/停止为 Adapter 层机制（child、IPC ready+HTTP 握手、owner token、loopback/origin 守卫、policy 合同）。
 
-## 4. 你要做什么（按 JuanerAI 工程宪法）
+## 3. 供应侧产品事实（标准 §3 信息项的供应侧输入）
 
-按宪法流程启动 Change（UI 门 → OpenSpec → Test → Worker → Validator）：
-
-1. **安装**：执行 `validate_import` 全规则（见 §5），任一命中即整体拒绝、零安装痕迹；
-2. **采用·指标口径类**：`caliber_switches` / `type_params` / `aggregation` 真实参与分析任务的口径计算与核验；`bindings` 是设计态草案，真实映射由任务 Binding 承接；
-3. **采用·分析体系类**：blueprint 段六条消费行为（输入包 §2.3）落入 Context 组织与产出校验——任务语境、语境解释纪律、问题覆盖、假设「待验证」表述纪律、证据边界（计划≠已取得）、候选道路枚举。
-
-## 5. 硬规则（fail-closed，违反即验收不通过）
-
-- validate_import 全规则：结构合法 / 指纹一致 / 未知 sap 版本 / **含未审 LLM 条目**（移植供应侧校验器时必须自行补此纵深规则，供应侧校验器有意不含）/ `runtime_state = design_only` / 重复 id@version / **blueprint 段禁带 review** / **blueprint.questions[].metric_refs 必须在包内 metrics 可解析**；
-- 把整份 YAML 塞进提示词**不构成接入**（指标口径如此，blueprint 语境亦如此）；
-- blueprint 语义边界：假设全为「待验证」语义；证据计划 ≠ 证据已取得；包内无 review = 无供应侧背书；零指标包不得补造指标；
-- 安装后产出 adoption receipt（格式冻结，契约 §6.2），交付供应侧登记对账；
-- 版本纪律：精确 `id@version` 取得，禁止 latest 跟随；同 id@version 不同字节 = 交付事故；same-content 重复发版不会出现（供应侧拒绝），收到即流程异常。
-
-## 6. 供应侧提供的对照物
-
-| 物 | 位置 |
+| 信息项 | metric-factory 现状事实 |
 |---|---|
-| 样板包 · 指标口径类 | `releases/net-sales-instance/`：`1.0.0`（基线）与 `1.0.1`（退款归属口径翻转，验收计算变化对照）；另有 1.1.x 修正版 |
-| 样板包 · 分析体系类 | `releases/coffee-weekly-review/1.0.0.sap.yaml`（blueprint + 3 审核指标）· `releases/store-expansion-strategy/1.0.0.sap.yaml`（零指标战略包）——真实 LLM 出稿经人工审核后发布 |
-| 登记簿 | `releases/index.yaml`（append-only，含双指纹与快照相对路径） |
-| 校验器参考实现 | `src/sap/validate.ts`（纯函数；blueprint 规则 7-8 已实现，可直接对照移植） |
-| 指纹算法参考 | `src/sap/canonical.ts`（五键内容指纹 + 包指纹） |
+| 产品/版本 | `metric-factory@0.1.0`，bin `metric-factory` → `dist/cli.js`；Node **>= 22.19.0**；构建 tsup（ESM，`npm run build`） |
+| 固定源 | 本仓 git，当前 HEAD `f9c08fd`（2026-10-19）；固定物料按标准 §6 从精确提交/快照产出（source tar + bytes/SHA + 依赖通知），**不打包活动源码目录、不追随 latest** |
+| 运行依赖 | 见 `package.json`：`@earendil-works/pi-ai`、`pi-agent-runtime`、`commander`、`yaml`、`zod`、`exceljs`、`@inquirer/prompts`、`@modelcontextprotocol/sdk` |
+| 主入口形态 | **同机服务**：`metric-factory ui -p <port>` 起本地 Web 工作台，**仅监听 127.0.0.1**（默认 4173）；工作区 = 启动 cwd（实例 `*.yaml` + `releases/` 落于此）；`-t <templates>` 指向只读行业模板目录。CLI 另有 validate/export/release 等非服务命令 |
+| 用户任务与成果 | 业务人员完成「描述业务问题 → AI 起草分析体系（blueprint+指标）→ 修正 → 业务复核 → 发布」；正式产物 = **releases/ 下不可变 SAP 语义资产包**（`releases/<包id>/<版本>.sap.yaml` + `index.yaml` 登记，双指纹）；显式 deliver 语义已有（交付门：复核有效+快照指纹绑定+same-content 拒发） |
+| 数据与历史 | 无数据库；全部状态 = 工作区内 YAML 文件（实例、releases 登记簿）。插件工作区与宿主数据归属按合同分离，dataRoot 宜在宿主用户空间（同 Report Studio Profile 模式） |
+| 生命周期 | 自有 Node 进程；就绪/并发复用/停止归属等按 C03 由宿主 Adapter 定义（现状：单进程 listen 后即就绪，无就绪握手协议——接线时需补，参考 Report Studio IPC ready+HTTP 握手） |
+| 权限/效果/外发 | 效果仅两类：写工作区文件、调 LLM。凭据保管见 §4 首条差异 |
+| 兼容/更新/回滚 | 供应侧发版语义：SAP 包 `id@version` 不可变、same-content 拒发；插件物料升级按标准 §6 最小差异表（原仓修复位置/回归/目标包含性分别记录） |
+| 验证基线 | lint 13 + tsc 0 + 73 文件 478 tests(+1 skip) + contract 1 全绿；真实 LLM 冒烟已跑（xiaomi mimo-v2.6-flash 全链路成功，minimax MiniMax-M3 失败挂账） |
 
-## 7. 验收场景（行为级，转写为你的测试）
+## 4. 需要对齐的已知差异（对齐步骤的直接输入）
 
-A1-A4 指标口径类（安装成功 / 指纹篡改拒绝 / 口径翻转生效 / 未审包拒绝）；A5-A9 分析体系类（含 blueprint 包装装 / 语境对照 / 零指标包 / 带 review 拒绝 / 悬空引用拒绝）；A10 回执登记对账。逐条期望行为见输入包 v0.2 §3。
+1. **LLM 凭据发现冲突（首要）**：标准 §2/C05 要求 LLM 经共享 pi-agent-runtime、**不从文件夹发现凭据**；metric-factory 现状含 `~/.pi/agent/auth.json` 自动发现回退（`src/llm/key-discovery.ts`）。供应侧已支持显式注入（`MF_LLM_*` env / 配置），自动发现仅为零配置回退。**对齐建议**：集成形态禁用文件夹发现，由宿主按合同显式注入（参考 Report Studio supplier 接点注入式 `createPiTransport`）；供应侧可加「禁用自动发现」开关，属中立修复回原仓。
+2. **就绪/停止协议缺失**：现状 listen 即就绪、无 IPC/握手/owner token；接入时按 Report Studio `process.ts/gateway.ts/local-access.ts/policy.ts` 模式由宿主 Adapter 补齐，供应侧配合暴露最小钩子（如 `/api/health` 就绪端点，若需要）。
+3. **成果回程**：现状 releases/ 落在工作区文件系统即完成；宿主「稳定副本 + receipt 读回」语义需映射（交付=显式 deliver 已有；receipt/副本归属由宿主 Store 层定义）。
+4. **第二插件触发项**：标准 §7 言明第二插件/公共抽包不在已沉淀交付内。metric-factory 作为第二真实消费者接入时，只在**第二个已获准调用点显示共同需要**的范围内决定必要提取（标准 §README），不把方向写成既有能力。
+5. **MCP/桌面形态**：metric-factory 另有 MCP server 能力（`@modelcontextprotocol/sdk` 依赖）——本次接入**不含** MCP 形态，仅同机服务形态（如需另立 Change）。
 
-## 8. 边界（不做什么）
+## 5. 验收（从 C01-C12 选择 + 业务场景，供 JuanerAI 验证步骤填写）
 
-- 不改 metric-factory 侧任何行为；不回写包内容；不拥有口径真值（发布门语义留消费方）；
-- **不预设 JuanerAI 内部架构**——安装落在哪一层、blueprint 对照在八阶段管线的哪个接点、回执产出位置与交付方式、术语定名，都是 JuanerAI Spec 的裁量（开放决策清单见输入包 §5）；
-- 涉及用户可见 UI 先过 UI 门；
-- executable 状态、本体（Semantica/Protégé）对接、跨包依赖不在本 Change 内；
-- 交互形态（CLI 旗标 / Console 页面 / 两者）由 JuanerAI 裁决。
+建议适用项：C01 固定身份/兼容、C02 双交付/资源、C03 生命周期、C05 秘密/数据归属（含 §4.1 凭据负例）、C07 状态/取消、C08 产物与来源（SAP 包稳定副本+指纹读回）、C09 持久/恢复（工作区重开）、C10 LLM/执行（**启用 LLM 才适用**：实际固定 SDK 编解码合成用例 + 业务场景，参考 `tools/report-studio/supplier-tool-admission.test.mjs` 模式）、C12 更新/回滚；C04 视是否有宿主材料输入、C06/C11 按业务场景选定。
 
-## 9. 现状基线（供应侧实测 2026-10-12，核对记录见契约 §9）
+业务正例建议（metric-factory 自有）：合成接缝下完成「创建→复核→交付」得到精确 `id@version` 包 + 双指纹可读回；重复 deliver 幂等/same-content 拒绝；指纹篡改包在消费侧拒绝。负例：未审 LLM 指标交付被 fail-closed 门拦截（供应侧引擎已内置，可直接用作反例）。
 
-JuanerAI 唯一真实分析面 = Xanthil local-analysis 切片（`apps/cli/xanthil.ts` + `packages/product-core/local-analysis.ts`：单案例受控执行、CSV 源 SHA-256 钉死、八阶段管线）。此前文档所记 Blueprint v4.2 / A-02 / N04 在本机不可定位——**以实测为准**。
+## 6. 边界（不做什么）
 
-## 10. 语义疑问
+- 业务实现与中立修复回原仓（metric-factory）；宿主入口、权限、任务/成果映射与装配留 JuanerAI；不分叉底座、不新建通用插件平台/市场；
+- 不预设宿主内部架构（Port/Adapter/Profile/进程机制由 JuanerAI 按标准与参考模式裁决）；涉及用户可见 UI 先过 UI 门；
+- 构建、封装、安装、运行采用、用户接受**分别证明**；源码有脚本 ≠ 每种分发已通过；未授权/未执行项如实保留，不标 N/A 或 PASS；
+- **本次接入 ≠ SAP 资产消费**：Xanthil 安装消费 SAP 包是另一个 Change（输入包已备：`docs/juanerai-change-input-xanthil-sap-install-v0.2.md`，含契约 v0.4/消费指引/六个样板包版本）；插件接入使其产出面可用，资产消费语义不变、互不替代；
+- executable 状态、企业隔离、动态装载/热换、统一 Session/数据库均不在本 Change（标准 §7）。
 
-回来对契约与消费指引，不要猜；供应侧事实源 = §3 三份文档（如有冲突以契约为准）。
+## 7. 供应侧事实源（本仓，macini 可同机读取）
+
+- 产品事实：`package.json`、`src/ui/server.ts`（入口/监听）、`src/llm/`（LLM 机制与凭据发现）、`src/sap/`（发布/校验/指纹）
+- 资产与语义：`releases/`（六个样板包版本 + index.yaml）、`docs/sap-consumption-guide.md`、`docs/juanerai-semantic-asset-contract-v0.1.md`（v0.4）
+- 交接与验证状态：`.flow/handoff.md`（A1/A2/接入准备批记录）
+- 语义疑问回来对这些事实源，不要猜。
